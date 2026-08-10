@@ -46,6 +46,10 @@ window.ICONS = {
   arrowRight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="12" x2="20" y2="12"></line><path d="m13 5 7 7-7 7"></path></svg>`,
 
   check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6"></path></svg>`,
+
+  eye: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>`,
+
+  eyeOff: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 5.2A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17.5 17.5 0 0 1-3.2 4.1"></path><path d="M6.5 6.6C3.9 8.3 2 12 2 12s3.5 7 10 7a10 10 0 0 0 4.2-.9"></path><path d="M9.9 14.1a3 3 0 0 0 4.2-4.2"></path><line x1="2" y1="2" x2="22" y2="22"></line></svg>`,
 };
 
 // Applies window.ICONS[name] to every element carrying data-icon="name".

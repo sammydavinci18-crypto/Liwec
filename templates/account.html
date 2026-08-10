@@ -15,19 +15,33 @@
   <form method="POST">
     <div class="field">
       <label for="current_password">Current password</label>
-      <input type="password" id="current_password" name="current_password" required autofocus>
+      <div class="password-field-wrap">
+        <input type="password" id="current_password" name="current_password" required autofocus>
+        <button type="button" class="password-toggle-btn" data-password-toggle aria-label="Show password" aria-pressed="false"></button>
+      </div>
     </div>
     <div class="field">
       <label for="new_password">New password</label>
-      <input type="password" id="new_password" name="new_password" required minlength="6">
+      <div class="password-field-wrap">
+        <input type="password" id="new_password" name="new_password" required minlength="6">
+        <button type="button" class="password-toggle-btn" data-password-toggle aria-label="Show password" aria-pressed="false"></button>
+      </div>
     </div>
     <div class="field">
       <label for="confirm_password">Confirm new password</label>
-      <input type="password" id="confirm_password" name="confirm_password" required minlength="6">
+      <div class="password-field-wrap">
+        <input type="password" id="confirm_password" name="confirm_password" required minlength="6">
+        <button type="button" class="password-toggle-btn" data-password-toggle aria-label="Show password" aria-pressed="false"></button>
+      </div>
     </div>
     <button type="submit" class="btn btn-primary btn-block">Update password</button>
   </form>
 
   <p class="auth-switch"><a href="{{ url_for('main.dashboard') }}">&larr; Back to dashboard</a></p>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/icons.js') }}"></script>
+<script src="{{ url_for('static', filename='js/password-toggle.js') }}"></script>
 {% endblock %}

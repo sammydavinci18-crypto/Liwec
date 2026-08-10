@@ -1654,3 +1654,30 @@ button, input, textarea, select { font-family: inherit; }
   .book-actions { flex-direction: column; width: 100%; }
   .book-actions .btn { width: 100%; }
 }
+
+/* =========================================================================
+   Password reveal toggle (login, register, account settings)
+   ========================================================================= */
+.password-field-wrap { position: relative; }
+.password-field-wrap input {
+  width: 100%;
+  padding-right: 44px; /* room for the toggle button so text never runs under it */
+}
+.password-toggle-btn {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: none;
+  color: var(--ink-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.password-toggle-btn:hover { color: var(--ink); background: var(--paper); }
+.password-toggle-btn svg { width: 18px; height: 18px; }
