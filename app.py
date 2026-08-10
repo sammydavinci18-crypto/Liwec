@@ -76,6 +76,39 @@ def _ensure_schema_up_to_date(app):
             print(f"[startup] Schema sync skipped/failed (non-fatal): {exc}", file=sys.stderr)
 
 
+def _seed_admin_from_env(app):
+    """Creates (or promotes) an admin account from ADMIN_EMAIL/ADMIN_PASSWORD
+    env vars, if both are set. Built for hosting plans without shell access
+    (e.g. Render's free tier) where `flask make-admin` isn't reachable.
+
+    Deliberately only sets the password when *creating* the account. If the
+    account already exists, this only makes sure its role is "admin" — it
+    never overwrites a password, so redeploying doesn't undo a password
+    you've since changed via /account.
+    """
+    email = (app.config.get("ADMIN_EMAIL") or "").strip().lower()
+    password = app.config.get("ADMIN_PASSWORD") or ""
+    if not email or not password:
+        return
+
+    with app.app_context():
+        try:
+            user = User.query.filter_by(email=email).first()
+            if user is None:
+                user = User(name="Admin", email=email, role="admin")
+                user.set_password(password)
+                db.session.add(user)
+                db.session.commit()
+                print(f"[startup] Seeded admin account for {email}.", file=sys.stderr)
+            elif user.role != "admin":
+                user.role = "admin"
+                db.session.commit()
+                print(f"[startup] Promoted existing user {email} to admin.", file=sys.stderr)
+        except Exception as exc:
+            db.session.rollback()
+            print(f"[startup] Admin seed skipped/failed (non-fatal): {exc}", file=sys.stderr)
+
+
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -122,6 +155,8 @@ def create_app():
             _ensure_schema_up_to_date(app)
         except Exception as exc:  # e.g. DB briefly unreachable during a cold start
             print(f"[startup] Schema sync failed — could not reach the database: {exc}", file=sys.stderr)
+
+    _seed_admin_from_env(app)
 
     @app.cli.command("init-db")
     def init_db():

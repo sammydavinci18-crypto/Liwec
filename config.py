@@ -100,5 +100,16 @@ class Config:
     )
     Path(VERIFICATION_DOCS_DIR).mkdir(parents=True, exist_ok=True)
 
+    # Optional: if both are set, the app creates this admin account
+    # automatically on boot (see _seed_admin_from_env in app.py). This is
+    # for hosting plans without shell/CLI access (e.g. Render's free tier),
+    # where `flask make-admin` isn't reachable. Set these in the hosting
+    # dashboard's environment variables, not in a committed .env file —
+    # and feel free to remove them again once the account exists, since
+    # they're only used the first time (never used to overwrite a password
+    # you've since changed via /account).
+    ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL")
+    ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
+
     # Recording is uploaded in ~30s chunks; keep the per-request limit generous.
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50 MB per chunk

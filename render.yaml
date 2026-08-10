@@ -29,6 +29,15 @@ services:
         value: /var/data/recordings
       - key: VERIFICATION_DOCS_DIR
         value: /var/data/verification_docs   # consultant ID/certificate uploads — sensitive, never publicly served
+      # Optional — only needed once. Set these two in the Render dashboard
+      # (not here, so the password never gets committed to the repo) to
+      # auto-create your first admin account on next deploy. Safe to leave
+      # unset entirely if you already have an admin, or delete them again
+      # after the account exists — see app.py's _seed_admin_from_env.
+      # - key: ADMIN_EMAIL
+      #   sync: false
+      # - key: ADMIN_PASSWORD
+      #   sync: false
     disk:
       name: recordings
       mountPath: /var/data
