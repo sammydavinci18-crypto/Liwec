@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Users · Admin · Liwec{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Admin</span>
+    <h1>Users</h1>
+    <p>{{ users|length }} account{{ 's' if users|length != 1 }}{% if q %} matching "{{ q }}"{% endif %}</p>
+  </div>
+</div>
+
+<form method="GET" class="user-search-form">
+  <input type="text" name="q" value="{{ q }}" placeholder="Search by name or email…">
+  <button type="submit" class="btn btn-ghost btn-sm">Search</button>
+</form>
+
+<div class="appointment-list">
+  {% for u in users %}
+  <a class="appointment-row user-row" href="{{ url_for('admin.user_detail', user_id=u.id) }}">
+    <div>
+      <strong>{{ u.name }}</strong>
+      <span class="appt-time">{{ u.email }}</span>
+    </div>
+    <div class="appt-actions">
+      {% if u.is_banned %}<span class="status-pill status-declined">Banned</span>{% endif %}
+      {% if u.is_premium %}<span class="status-pill status-approved">Premium</span>{% endif %}
+      {% if u.is_admin %}<span class="status-pill status-pending">Admin</span>{% endif %}
+      {% if u.consultant_profile %}<span class="vertical-pill vertical-both">Consultant</span>{% endif %}
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}

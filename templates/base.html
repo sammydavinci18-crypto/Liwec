@@ -26,6 +26,7 @@
       <a class="topnav-link" href="{{ url_for('appointments.my_appointments') }}">Appointments</a>
       {% if current_user.is_admin %}
       <a class="topnav-link topnav-admin" href="{{ url_for('admin.queue') }}">Admin</a>
+      <a class="topnav-link topnav-admin" href="{{ url_for('admin.users') }}">Users</a>
       {% endif %}
       <span class="topnav-user">{{ current_user.name }}</span>
       <a class="topnav-link" href="{{ url_for('auth.account') }}">Account</a>

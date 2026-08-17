@@ -15,6 +15,9 @@
   <p class="playback-note">
     This meeting has ended. You're watching a recording of the session,
     from the beginning, as it happened.
+    {% if meeting.recording.expires_at %}
+      This recording is available until {{ meeting.recording.expires_at.strftime('%b %-d, %Y') }}.
+    {% endif %}
   </p>
   <video
     class="playback-video"

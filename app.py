@@ -109,6 +109,51 @@ def _seed_admin_from_env(app):
             print(f"[startup] Admin seed skipped/failed (non-fatal): {exc}", file=sys.stderr)
 
 
+def _cleanup_expired_recordings(app):
+    import storage
+    with app.app_context():
+        now = datetime.utcnow()
+        expired = Recording.query.filter(
+            Recording.expires_at.isnot(None),
+            Recording.expires_at <= now,
+            Recording.deleted_at.is_(None),
+        ).all()
+        if not expired:
+            return
+        bucket = app.config["RECORDINGS_BUCKET"]
+        for rec in expired:
+            ok = storage.delete_object(bucket, rec.filename)
+            rec.deleted_at = datetime.utcnow()
+            print(f"[cleanup] Expired recording {rec.id} (meeting {rec.meeting_id}) removed: {ok}", file=sys.stderr)
+        db.session.commit()
+
+
+def _start_recording_cleanup_thread(app, interval_seconds=3600):
+    """Runs the retention sweep periodically in a background thread. Single
+    worker process (-w 1 in the Procfile), so this only ever runs once —
+    no risk of two workers double-processing the same recordings.
+
+    Skips starting a second copy under Flask's debug reloader, which
+    re-imports this module in a parent watcher process too.
+    """
+    import os
+    import threading
+    import time
+
+    if app.debug and os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        return
+
+    def loop():
+        while True:
+            time.sleep(interval_seconds)
+            try:
+                _cleanup_expired_recordings(app)
+            except Exception as exc:
+                print(f"[cleanup] Recording cleanup failed (non-fatal): {exc}", file=sys.stderr)
+
+    threading.Thread(target=loop, daemon=True).start()
+
+
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
@@ -120,7 +165,13 @@ def create_app():
 
     @login_manager.user_loader
     def load_user(user_id):
-        return User.query.get(int(user_id))
+        user = User.query.get(int(user_id))
+        # Returning None here is how Flask-Login treats "not logged in" —
+        # so a banned user is force-logged-out on their very next request,
+        # not just blocked from logging in again.
+        if user is not None and user.is_banned:
+            return None
+        return user
 
     @app.context_processor
     def inject_current_year():
@@ -157,6 +208,7 @@ def create_app():
             print(f"[startup] Schema sync failed — could not reach the database: {exc}", file=sys.stderr)
 
     _seed_admin_from_env(app)
+    _start_recording_cleanup_thread(app)
 
     @app.cli.command("init-db")
     def init_db():

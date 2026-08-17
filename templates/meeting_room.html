@@ -9,6 +9,9 @@
     <span class="code-pill">{{ meeting.room_code }}</span>
   </div>
   <div class="room-header-right">
+    {% if call_limit_minutes and call_limit_minutes > 0 %}
+    <span class="time-limit-notice" title="Server-enforced call length limit">{{ call_limit_minutes }} min limit</span>
+    {% endif %}
     <span class="recording-notice" id="recording-notice" style="display:none;">
       <span class="rec-dot"></span> Recording
     </span>
@@ -179,7 +182,8 @@
     roomCode: {{ meeting.room_code|tojson }},
     isHost: {{ is_host|tojson }},
     userName: {{ current_user.name|tojson }},
-    hostName: {{ meeting.host.name|tojson }}
+    hostName: {{ meeting.host.name|tojson }},
+    callLimitMinutes: {{ call_limit_minutes|tojson }}
   };
 </script>
 <script src="{{ url_for('static', filename='js/icons.js') }}"></script>

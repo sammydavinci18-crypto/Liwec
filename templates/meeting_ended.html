@@ -6,7 +6,13 @@
 <div class="auth-card">
   <span class="auth-eyebrow">Meeting ended</span>
   <h1>{{ meeting.title }}</h1>
-  <p class="sub">This consultation has ended and no recording was saved for it.</p>
+  <p class="sub">
+    {% if expired %}
+      This consultation has ended. The recording was available for a limited time and has since expired.
+    {% else %}
+      This consultation has ended and no recording was saved for it.
+    {% endif %}
+  </p>
   <a href="{{ url_for('main.dashboard') }}" class="btn btn-primary btn-block">Back to dashboard</a>
 </div>
 {% endblock %}

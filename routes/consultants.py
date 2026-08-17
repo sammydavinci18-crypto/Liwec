@@ -1,13 +1,11 @@
-import os
-import uuid
 from datetime import datetime
 
 from flask import (
     Blueprint, render_template, redirect, url_for, request, flash, abort, current_app,
 )
 from flask_login import login_required, current_user
-from werkzeug.utils import secure_filename
 
+import storage
 from extensions import db
 from models import (
     User, ConsultantProfile, VerificationDocument, AvailabilitySlot, Appointment, Conversation,
@@ -112,10 +110,17 @@ def apply():
             db.session.add(profile)
             db.session.flush()  # get profile.id for the documents below
 
-        docs_dir = current_app.config["VERIFICATION_DOCS_DIR"]
         for f in files[:MAX_DOCS_PER_APPLICATION]:
-            stored_name = f"{uuid.uuid4().hex}_{secure_filename(f.filename)}"
-            f.save(os.path.join(docs_dir, stored_name))
+            stored_name = storage.new_object_key(f.filename)
+            try:
+                storage.upload_bytes(
+                    current_app.config["VERIFICATION_BUCKET"], stored_name,
+                    f.read(), content_type=f.mimetype or "application/octet-stream",
+                )
+            except storage.StorageError as exc:
+                current_app.logger.error(f"Verification document upload failed: {exc}")
+                flash("Couldn't upload that document — please try again.", "error")
+                return render_template("consultants/apply.html", existing=existing)
             db.session.add(VerificationDocument(
                 profile_id=profile.id,
                 stored_filename=stored_name,

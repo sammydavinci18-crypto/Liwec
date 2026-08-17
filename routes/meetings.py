@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import (
     Blueprint,
@@ -15,6 +15,7 @@ from flask import (
 )
 from flask_login import login_required, current_user
 
+import storage
 from extensions import db, socketio
 from models import Meeting, MeetingParticipant, ConsultationNote, Recording, User
 
@@ -66,8 +67,10 @@ def room(room_code):
     # A meeting the host has already ended: show playback instead of a live room.
     if meeting.status == "ended":
         if meeting.recording and meeting.recording.finalized:
+            if meeting.recording.is_expired or meeting.recording.deleted_at:
+                return render_template("meeting_ended.html", meeting=meeting, expired=True)
             return render_template("playback.html", meeting=meeting)
-        return render_template("meeting_ended.html", meeting=meeting)
+        return render_template("meeting_ended.html", meeting=meeting, expired=False)
 
     # Record (or refresh) this user's participation, unless they're the host
     if meeting.host_id != current_user.id:
@@ -82,7 +85,11 @@ def room(room_code):
     db.session.commit()
 
     is_host = meeting.host_id == current_user.id
-    return render_template("meeting_room.html", meeting=meeting, is_host=is_host)
+    call_limit_minutes = current_app.config["PREMIUM_CALL_LIMIT_MINUTES"] if meeting.host.is_premium \
+        else current_app.config["FREE_CALL_LIMIT_MINUTES"]
+    return render_template(
+        "meeting_room.html", meeting=meeting, is_host=is_host, call_limit_minutes=call_limit_minutes
+    )
 
 
 @meetings_bp.route("/room/<room_code>/notes", methods=["GET", "POST"])
@@ -131,8 +138,8 @@ def notes(room_code):
     )
 
 
-def _recording_path(meeting):
-    return os.path.join(current_app.config["RECORDINGS_DIR"], f"{meeting.id}.webm")
+def _recording_key(meeting):
+    return f"{meeting.id}.webm"
 
 
 @meetings_bp.route("/room/<room_code>/recording/chunk", methods=["POST"])
@@ -140,7 +147,10 @@ def _recording_path(meeting):
 def upload_recording_chunk(room_code):
     """The host's browser POSTs the meeting recording here in ~30s chunks
     while the call is happening, so at most a few seconds are ever at risk
-    if the host's browser crashes."""
+    if the host's browser crashes. Chunks are buffered on local disk for
+    the duration of the live call only (Storage's simple upload API doesn't
+    support appending) — the complete file gets pushed to Supabase Storage
+    once, when the host ends the meeting. See end_meeting() below."""
     meeting = Meeting.query.filter_by(room_code=room_code).first_or_404()
     if meeting.host_id != current_user.id:
         abort(403)
@@ -149,13 +159,12 @@ def upload_recording_chunk(room_code):
     if not chunk:
         return jsonify(ok=True)
 
-    path = _recording_path(meeting)
-    with open(path, "ab") as f:
-        f.write(chunk)
+    key = _recording_key(meeting)
+    storage.append_bytes(current_app.config["RECORDINGS_BUCKET"], key, chunk)
 
     recording = Recording.query.filter_by(meeting_id=meeting.id).first()
     if not recording:
-        recording = Recording(meeting_id=meeting.id, filename=os.path.basename(path), finalized=False)
+        recording = Recording(meeting_id=meeting.id, filename=key, finalized=False)
         db.session.add(recording)
         db.session.commit()
 
@@ -165,17 +174,39 @@ def upload_recording_chunk(room_code):
 @meetings_bp.route("/room/<room_code>/end", methods=["POST"])
 @login_required
 def end_meeting(room_code):
-    """Host ends the meeting: locks it as 'ended' and finalizes the recording
-    (if any) so it becomes watchable via the same room code afterward."""
+    """Host ends the meeting: locks it as 'ended', uploads the completed
+    recording to Storage (if any), and sets a retention expiry based on the
+    host's plan at the time."""
     meeting = Meeting.query.filter_by(room_code=room_code).first_or_404()
     if meeting.host_id != current_user.id:
         abort(403)
 
     meeting.status = "ended"
+    meeting.ended_at = datetime.utcnow()
 
     recording = Recording.query.filter_by(meeting_id=meeting.id).first()
-    if recording and os.path.exists(_recording_path(meeting)):
-        recording.finalized = True
+    bucket = current_app.config["RECORDINGS_BUCKET"]
+    key = _recording_key(meeting)
+    local_buffer = storage.local_path_if_exists(bucket, key)
+
+    if recording and local_buffer:
+        try:
+            with open(local_buffer, "rb") as f:
+                data = f.read()
+            storage.upload_bytes(bucket, key, data, content_type="video/webm")
+            # Only in Supabase mode is there a separate local buffer to
+            # clean up — in local-fallback mode upload_bytes() just
+            # rewrote the same file in place, so this is a no-op there.
+            if current_app.config.get("SUPABASE_URL") and current_app.config.get("SUPABASE_SERVICE_KEY"):
+                os.remove(local_buffer)
+            recording.finalized = True
+            retention_days = (
+                current_app.config["PREMIUM_RECORDING_RETENTION_DAYS"] if meeting.host.is_premium
+                else current_app.config["FREE_RECORDING_RETENTION_DAYS"]
+            )
+            recording.expires_at = datetime.utcnow() + timedelta(days=retention_days)
+        except storage.StorageError as exc:
+            current_app.logger.error(f"Recording upload failed for meeting {meeting.id}: {exc}")
 
     db.session.commit()
     return jsonify(ok=True, redirect=url_for("main.dashboard"))
@@ -198,8 +229,17 @@ def stream_recording(meeting_id):
     if not (is_host or was_participant):
         abort(403)
 
-    path = _recording_path(meeting)
+    if recording.is_expired or recording.deleted_at:
+        abort(410)  # Gone — matches meeting_ended.html's "expired" messaging
+
+    bucket = current_app.config["RECORDINGS_BUCKET"]
+    url = storage.signed_url(bucket, recording.filename, expires_in=120)
+    if url:
+        return redirect(url)
+
+    # Local-fallback mode.
+    local_dir = current_app.config["RECORDINGS_DIR"]
+    path = os.path.join(local_dir, recording.filename)
     if not os.path.exists(path):
         abort(404)
-
     return send_file(path, mimetype="video/webm", conditional=True)

@@ -1681,3 +1681,34 @@ button, input, textarea, select { font-family: inherit; }
 }
 .password-toggle-btn:hover { color: var(--ink); background: var(--paper); }
 .password-toggle-btn svg { width: 18px; height: 18px; }
+
+/* =========================================================================
+   Admin: user management
+   ========================================================================= */
+.user-search-form {
+  display: flex;
+  gap: 10px;
+  margin: 24px 0 20px;
+  max-width: 420px;
+}
+.user-search-form input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  background: var(--paper-raised);
+}
+.user-row { color: var(--ink); }
+.user-row:hover { border-color: var(--teal); text-decoration: none; }
+.moderation-card { margin-top: 16px; border-color: rgba(196, 90, 74, 0.3); }
+
+/* Call time-limit badge in the room header */
+.time-limit-notice {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #B9CCC7;
+  background: rgba(255,255,255,0.06);
+  padding: 5px 12px;
+  border-radius: 20px;
+}

@@ -111,5 +111,25 @@ class Config:
     ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL")
     ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
 
+    # Supabase Storage — verification documents and recordings live here in
+    # production instead of local disk, since local disk doesn't survive a
+    # redeploy/restart on most hosting free tiers (Render's free tier has no
+    # persistent disk at all). If either is unset, the app transparently
+    # falls back to local disk under RECORDINGS_DIR/VERIFICATION_DOCS_DIR
+    # (see storage.py) — fine for local development, NOT fine for
+    # production on a free/ephemeral host.
+    SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+    VERIFICATION_BUCKET = os.environ.get("SUPABASE_VERIFICATION_BUCKET", "verification-docs")
+    RECORDINGS_BUCKET = os.environ.get("SUPABASE_RECORDINGS_BUCKET", "recordings")
+
+    # Premium tier (admin-granted — see /admin/users — no payment
+    # processing involved) — how much more a premium account gets over the
+    # free tier for call length and recording retention.
+    FREE_CALL_LIMIT_MINUTES = int(os.environ.get("FREE_CALL_LIMIT_MINUTES", 40))
+    PREMIUM_CALL_LIMIT_MINUTES = int(os.environ.get("PREMIUM_CALL_LIMIT_MINUTES", 0))  # 0 = unlimited
+    FREE_RECORDING_RETENTION_DAYS = int(os.environ.get("FREE_RECORDING_RETENTION_DAYS", 7))
+    PREMIUM_RECORDING_RETENTION_DAYS = int(os.environ.get("PREMIUM_RECORDING_RETENTION_DAYS", 30))
+
     # Recording is uploaded in ~30s chunks; keep the per-request limit generous.
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50 MB per chunk

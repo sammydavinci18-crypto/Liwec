@@ -60,6 +60,10 @@ def login():
             flash("Incorrect email or password.", "error")
             return render_template("login.html")
 
+        if user.is_banned:
+            flash("This account has been suspended. Contact support if you think this is a mistake.", "error")
+            return render_template("login.html")
+
         login_user(user, remember=True)
         next_page = request.args.get("next")
         return redirect(next_page or url_for("main.dashboard"))

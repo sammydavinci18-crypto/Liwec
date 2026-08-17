@@ -1,4 +1,4 @@
-from flask import request
+from flask import request, current_app
 from flask_login import current_user
 from flask_socketio import join_room, leave_room, emit
 from datetime import datetime
@@ -19,12 +19,46 @@ WAITING = {}
 # assuming "not recording" until the next toggle.
 RECORDING = {}
 
+# Rooms that already have a call-length timer scheduled — set stops us
+# scheduling a duplicate if the host's client re-emits "join" (e.g. a
+# reconnect) partway through a call.
+TIMED_ROOMS = set()
+
 
 def _host_sid_for_room(room_code):
     return next(
         (s for s, info in CONNECTED.items() if info["room_code"] == room_code and info["is_host"]),
         None,
     )
+
+
+def _enforce_call_time_limit(app, room_code, meeting_id, limit_minutes):
+    """Runs in a background thread (socketio.start_background_task), one
+    per call. Warns everyone 5 minutes before the limit, then force-ends
+    the call. This is a *soft* enforcement — since calls are peer-to-peer
+    (no media server in the middle), the server can tell every client to
+    hang up and can stop treating the room as live, but it can't literally
+    cut the media stream the way a server-routed call (like Zoom) can. For
+    this product's purposes (a feature, not an adversarial security
+    boundary) that's an acceptable tradeoff — worth knowing about, though.
+    """
+    warn_at = max(limit_minutes - 5, 0) * 60
+    remaining_after_warn = min(limit_minutes, 5) * 60
+
+    socketio.sleep(warn_at)
+    with app.app_context():
+        meeting = Meeting.query.get(meeting_id)
+        if not meeting or meeting.status != "live":
+            TIMED_ROOMS.discard(room_code)
+            return
+        socketio.emit("time_limit_warning", {"minutes_left": min(limit_minutes, 5)}, room=room_code)
+
+    socketio.sleep(remaining_after_warn)
+    with app.app_context():
+        meeting = Meeting.query.get(meeting_id)
+        if meeting and meeting.status == "live":
+            socketio.emit("time_limit_reached", {}, room=room_code)
+    TIMED_ROOMS.discard(room_code)
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +156,22 @@ def handle_join(data):
     }
 
     join_room(room_code)
+
+    if is_host and room_code not in TIMED_ROOMS:
+        if not meeting.call_started_at:
+            meeting.call_started_at = datetime.utcnow()
+            db.session.commit()
+
+        limit_minutes = (
+            current_app.config["PREMIUM_CALL_LIMIT_MINUTES"] if meeting.host.is_premium
+            else current_app.config["FREE_CALL_LIMIT_MINUTES"]
+        )
+        if limit_minutes and limit_minutes > 0:
+            TIMED_ROOMS.add(room_code)
+            app_obj = current_app._get_current_object()
+            socketio.start_background_task(
+                _enforce_call_time_limit, app_obj, room_code, meeting.id, limit_minutes
+            )
 
     emit("existing_peers", {"peers": existing_peers, "recording": RECORDING.get(room_code, False)})
     emit(

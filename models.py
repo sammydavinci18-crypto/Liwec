@@ -25,6 +25,16 @@ class User(UserMixin, db.Model):
     role = db.Column(db.String(20), default="client", nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # Moderation — a banned user is force-logged-out and can't log back in
+    # (see load_user in app.py and the login check in routes/auth.py).
+    is_banned = db.Column(db.Boolean, default=False, nullable=False)
+    ban_reason = db.Column(db.Text)  # admin-only note, e.g. for legal/abuse records
+    banned_at = db.Column(db.DateTime)
+
+    # Premium — admin-granted (no payment processing), gates call length and
+    # recording retention. See config.py for the actual limits.
+    is_premium = db.Column(db.Boolean, default=False, nullable=False)
+
     meetings_hosted = db.relationship(
         "Meeting", backref="host", lazy=True, foreign_keys="Meeting.host_id"
     )
@@ -54,6 +64,11 @@ class Meeting(db.Model):
     scheduled_time = db.Column(db.DateTime, nullable=True)
     status = db.Column(db.String(20), default="scheduled")  # scheduled, live, ended
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Set when the host actually joins (not when the row is created) — this
+    # is what the server-side call-length limit counts from. See sockets.py.
+    call_started_at = db.Column(db.DateTime, nullable=True)
+    ended_at = db.Column(db.DateTime, nullable=True)
 
     participants = db.relationship("MeetingParticipant", backref="meeting", lazy=True, cascade="all, delete-orphan")
     notes = db.relationship("ConsultationNote", backref="meeting", lazy=True, cascade="all, delete-orphan")
@@ -88,11 +103,22 @@ class Recording(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     meeting_id = db.Column(db.Integer, db.ForeignKey("meetings.id"), unique=True, nullable=False)
-    filename = db.Column(db.String(255), nullable=False)  # relative path under the recordings folder
+    # Object key within the recordings storage bucket (Supabase Storage in
+    # production; a local path under RECORDINGS_DIR in dev/fallback mode —
+    # see storage.py). Not a filesystem path to rely on directly.
+    filename = db.Column(db.String(255), nullable=False)
     finalized = db.Column(db.Boolean, default=False)  # True once the host has ended the meeting
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # Retention — set once finalized, based on the host's plan at that time.
+    expires_at = db.Column(db.DateTime, nullable=True)
+    deleted_at = db.Column(db.DateTime, nullable=True)  # set once the file's actually been removed
+
     meeting = db.relationship("Meeting", backref=db.backref("recording", uselist=False, cascade="all, delete-orphan"))
+
+    @property
+    def is_expired(self):
+        return self.expires_at is not None and datetime.utcnow() >= self.expires_at
 
 
 # =============================================================================

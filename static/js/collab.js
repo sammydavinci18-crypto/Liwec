@@ -276,6 +276,30 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   /* =========================================================
+     Call time limit (server-enforced — see sockets.py)
+     ========================================================= */
+  socket.on("time_limit_warning", ({ minutes_left }) => {
+    showReactionToast("Liwec", `⏳ ${minutes_left} minute${minutes_left === 1 ? "" : "s"} left in this call`);
+  });
+
+  socket.on("time_limit_reached", async () => {
+    if (isHost) {
+      alert("This call has reached its time limit and is ending now.");
+      try {
+        if (window.stopRecordingAndWait) await window.stopRecordingAndWait();
+        const res = await fetch(`/room/${roomCode}/end`, { method: "POST" });
+        const data = await res.json();
+        window.location.href = data.redirect || "/dashboard";
+      } catch (err) {
+        window.location.href = "/dashboard";
+      }
+    } else {
+      alert("This call has reached its time limit and the host is ending it now.");
+      window.location.href = "/dashboard";
+    }
+  });
+
+  /* =========================================================
      View mode toggle (speaker / gallery)
      ========================================================= */
   const btnViewMode = document.getElementById("btn-view-mode");
