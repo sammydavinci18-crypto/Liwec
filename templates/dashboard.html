@@ -29,6 +29,31 @@
   </div>
 </div>
 
+<div class="marketplace-promo">
+  <div>
+    <h3>Light-Way Virtual School</h3>
+    <p>Browse verified Cambridge-stage teachers, or apply to teach — as an official Light-Way teacher or independently.</p>
+  </div>
+  <div class="marketplace-promo-actions">
+    <a class="btn btn-ghost" href="{{ url_for('teachers.directory') }}">Browse teachers</a>
+    {% if current_user.teacher_profile %}
+    <a class="btn btn-primary" href="{{ url_for('teachers.my_profile') }}">My teacher profile</a>
+    {% else %}
+    <a class="btn btn-primary" href="{{ url_for('teachers.apply') }}">Become a teacher</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="marketplace-promo">
+  <div>
+    <h3>Parent or guardian?</h3>
+    <p>Link your account to your child's so you can keep an eye on their records once classes are live.</p>
+  </div>
+  <div class="marketplace-promo-actions">
+    <a class="btn btn-primary" href="{{ url_for('family.dashboard') }}">Manage family links</a>
+  </div>
+</div>
+
 <div class="section-label">Meetings you host</div>
 {% if hosted %}
   <div class="meeting-grid">

@@ -18,10 +18,14 @@ class User(UserMixin, db.Model):
     name = db.Column(db.String(120), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
-    # "client" (default — books consultations), "consultant" (offers them,
-    # subject to admin verification), "admin" (reviews verification requests).
-    # A user can hold a consultant profile *and* still book others as a
-    # client — role just controls which extra tools show up for them.
+    # "client" (default — regular user: books consultations, enrolls as a
+    # student, can be linked as a parent), "registrar" (school-scoped staff:
+    # manages enrollment/rosters, does NOT approve teacher applications —
+    # that stays with admin), "admin" (reviews verification requests,
+    # platform-wide). Being a consultant or teacher is NOT a role value —
+    # it's determined by holding an approved ConsultantProfile/TeacherProfile,
+    # same pattern as the existing consultant flow, so one person can hold
+    # several of these at once (e.g. teacher AND parent).
     role = db.Column(db.String(20), default="client", nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -42,6 +46,10 @@ class User(UserMixin, db.Model):
         "ConsultantProfile", backref="user", uselist=False, cascade="all, delete-orphan",
         foreign_keys="ConsultantProfile.user_id",
     )
+    teacher_profile = db.relationship(
+        "TeacherProfile", backref="user", uselist=False, cascade="all, delete-orphan",
+        foreign_keys="TeacherProfile.user_id",
+    )
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -52,6 +60,10 @@ class User(UserMixin, db.Model):
     @property
     def is_admin(self):
         return self.role == "admin"
+
+    @property
+    def is_registrar(self):
+        return self.role == "registrar"
 
 
 class Meeting(db.Model):
@@ -248,3 +260,86 @@ class DirectMessage(db.Model):
     read_at = db.Column(db.DateTime)
 
     sender = db.relationship("User")
+
+
+# =============================================================================
+# Virtual school: teacher verification, and parent-student linking
+# =============================================================================
+
+CAMBRIDGE_STAGES = [
+    ("primary", "Cambridge Primary"),
+    ("lower_secondary", "Cambridge Lower Secondary"),
+    ("igcse", "Cambridge IGCSE"),
+    ("as_a_level", "Cambridge AS & A Level"),
+]
+
+
+class TeacherProfile(db.Model):
+    __tablename__ = "teacher_profiles"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), unique=True, nullable=False)
+
+    headline = db.Column(db.String(160))
+    bio = db.Column(db.Text)
+    subjects = db.Column(db.String(255))  # comma-separated, e.g. "Mathematics, Physics"
+    stages = db.Column(db.String(255))  # comma-separated stage keys, e.g. "igcse,as_a_level"
+
+    # "independent" (default — runs their own classes on the public platform)
+    # or "official" (a Light-Way-employed teacher). Only an admin can set
+    # this to "official" — see routes/admin.py. Independent teachers go
+    # through the exact same document-verification queue as official ones;
+    # this flag is about employment status, not trust level.
+    teacher_type = db.Column(db.String(20), default="independent", nullable=False)
+
+    # "pending" | "approved" | "rejected" — same review flow as consultants.
+    status = db.Column(db.String(20), default="pending", nullable=False)
+    review_note = db.Column(db.Text)
+    submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
+    reviewed_at = db.Column(db.DateTime)
+    reviewed_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+
+    documents = db.relationship(
+        "TeacherVerificationDocument", backref="profile", lazy=True, cascade="all, delete-orphan"
+    )
+
+    def subject_list(self):
+        return [s.strip() for s in (self.subjects or "").split(",") if s.strip()]
+
+    def stage_labels(self):
+        keys = [s.strip() for s in (self.stages or "").split(",") if s.strip()]
+        lookup = dict(CAMBRIDGE_STAGES)
+        return [lookup.get(k, k) for k in keys]
+
+
+class TeacherVerificationDocument(db.Model):
+    __tablename__ = "teacher_verification_documents"
+
+    id = db.Column(db.Integer, primary_key=True)
+    profile_id = db.Column(db.Integer, db.ForeignKey("teacher_profiles.id"), nullable=False)
+    stored_filename = db.Column(db.String(255), nullable=False)
+    original_filename = db.Column(db.String(255), nullable=False)
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class ParentStudentLink(db.Model):
+    __tablename__ = "parent_student_links"
+    __table_args__ = (db.UniqueConstraint("parent_id", "student_id", name="uq_parent_student_pair"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    parent_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+
+    # "pending" | "approved" | "declined"
+    status = db.Column(db.String(20), default="pending", nullable=False)
+    # Who initiated it — a parent-initiated request needs the student (or a
+    # registrar) to approve it before the parent can see anything; a
+    # registrar-initiated link is auto-approved, since registrars are
+    # trusted school staff maintaining the official roster.
+    requested_by = db.Column(db.String(20), nullable=False)  # "parent" | "registrar"
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    approved_at = db.Column(db.DateTime)
+
+    parent = db.relationship("User", foreign_keys=[parent_id])
+    student = db.relationship("User", foreign_keys=[student_id])
+

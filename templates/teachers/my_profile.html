@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}My teacher profile · Liwec{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Teacher profile</span>
+    <h1>{{ profile.headline or "Your profile" }}</h1>
+    <p>
+      Status:
+      <span class="status-pill status-{{ profile.status }}">{{ profile.status|capitalize }}</span>
+      {% if profile.status == 'approved' %}
+      <span class="vertical-pill vertical-{{ 'business' if profile.teacher_type == 'official' else 'both' }}">
+        {{ "Official Light-Way teacher" if profile.teacher_type == 'official' else "Independent teacher" }}
+      </span>
+      {% endif %}
+    </p>
+  </div>
+  <div class="dash-actions">
+    <a class="btn btn-primary" href="{{ url_for('teachers.edit_profile') }}">Edit profile</a>
+  </div>
+</div>
+
+{% if profile.status == 'pending' %}
+<div class="flash flash-info">Your application is with an admin for review — this updates to "Approved" once it's checked.</div>
+{% elif profile.status == 'rejected' %}
+<div class="flash flash-error">
+  This application wasn't approved{% if profile.review_note %}: "{{ profile.review_note }}"{% endif %}.
+  <a href="{{ url_for('teachers.apply') }}">Update and re-submit</a>.
+</div>
+{% elif profile.status == 'approved' %}
+<div class="flash flash-success">You're live in the teacher directory.</div>
+{% endif %}
+
+<div class="profile-summary-card">
+  <p><strong>Subjects:</strong> {{ profile.subjects or "—" }}</p>
+  <p><strong>Stages:</strong> {{ profile.stage_labels()|join(', ') if profile.stage_labels() else "—" }}</p>
+  <p><strong>Bio:</strong> {{ profile.bio or "—" }}</p>
+  <p><strong>Documents on file:</strong> {{ profile.documents|length }}</p>
+  {% if profile.status == 'approved' %}
+  <p><a href="{{ url_for('teachers.profile', user_id=profile.user_id) }}">View your public profile &rarr;</a></p>
+  {% endif %}
+</div>
+{% endblock %}

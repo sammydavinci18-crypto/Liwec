@@ -9,6 +9,7 @@ from flask_login import login_required, current_user
 import storage
 from extensions import db
 from models import ConsultantProfile, VerificationDocument, User, Meeting, Appointment
+from models import TeacherProfile, TeacherVerificationDocument
 from permissions import admin_required
 
 admin_bp = Blueprint("admin", __name__)
@@ -91,6 +92,91 @@ def view_document(document_id):
 
 
 # ---------------------------------------------------------------------------
+# Teacher verification queue — same flow as consultants, admin-only approval
+# ---------------------------------------------------------------------------
+
+@admin_bp.route("/admin/teachers")
+@login_required
+@admin_required
+def teacher_queue():
+    pending = (
+        TeacherProfile.query.filter_by(status="pending")
+        .order_by(TeacherProfile.submitted_at.asc()).all()
+    )
+    reviewed = (
+        TeacherProfile.query.filter(TeacherProfile.status.in_(["approved", "rejected"]))
+        .order_by(TeacherProfile.reviewed_at.desc()).limit(30).all()
+    )
+    return render_template("admin/teacher_queue.html", pending=pending, reviewed=reviewed)
+
+
+@admin_bp.route("/admin/teachers/<int:profile_id>")
+@login_required
+@admin_required
+def teacher_review(profile_id):
+    profile = TeacherProfile.query.get_or_404(profile_id)
+    return render_template("admin/teacher_review.html", profile=profile)
+
+
+@admin_bp.route("/admin/teachers/<int:profile_id>/approve", methods=["POST"])
+@login_required
+@admin_required
+def teacher_approve(profile_id):
+    profile = TeacherProfile.query.get_or_404(profile_id)
+    profile.status = "approved"
+    profile.review_note = None
+    profile.reviewed_at = datetime.utcnow()
+    profile.reviewed_by_id = current_user.id
+    db.session.commit()
+    flash(f"{profile.user.name} is now a verified teacher.", "success")
+    return redirect(url_for("admin.teacher_queue"))
+
+
+@admin_bp.route("/admin/teachers/<int:profile_id>/reject", methods=["POST"])
+@login_required
+@admin_required
+def teacher_reject(profile_id):
+    profile = TeacherProfile.query.get_or_404(profile_id)
+    profile.status = "rejected"
+    profile.review_note = request.form.get("review_note", "").strip()
+    profile.reviewed_at = datetime.utcnow()
+    profile.reviewed_by_id = current_user.id
+    db.session.commit()
+    flash(f"{profile.user.name}'s application was rejected.", "info")
+    return redirect(url_for("admin.teacher_queue"))
+
+
+@admin_bp.route("/admin/teachers/<int:profile_id>/set-type", methods=["POST"])
+@login_required
+@admin_required
+def teacher_set_type(profile_id):
+    profile = TeacherProfile.query.get_or_404(profile_id)
+    new_type = request.form.get("teacher_type")
+    if new_type in ("official", "independent"):
+        profile.teacher_type = new_type
+        db.session.commit()
+        flash(f"{profile.user.name} is now marked as an {new_type} teacher.", "success")
+    return redirect(url_for("admin.teacher_review", profile_id=profile_id))
+
+
+@admin_bp.route("/admin/teacher-documents/<int:document_id>")
+@login_required
+def view_teacher_document(document_id):
+    doc = TeacherVerificationDocument.query.get_or_404(document_id)
+    profile = doc.profile
+    if not (current_user.is_admin or profile.user_id == current_user.id):
+        abort(403)
+
+    bucket = current_app.config["VERIFICATION_BUCKET"]
+    url = storage.signed_url(bucket, doc.stored_filename, expires_in=60)
+    if url:
+        return redirect(url)
+
+    local_dir = current_app.config["VERIFICATION_DOCS_DIR"]
+    return send_from_directory(local_dir, doc.stored_filename, as_attachment=False)
+
+
+# ---------------------------------------------------------------------------
 # User management / moderation
 # ---------------------------------------------------------------------------
 
@@ -165,4 +251,22 @@ def toggle_premium(user_id):
     user.is_premium = not user.is_premium
     db.session.commit()
     flash(f"{user.name} is now {'premium' if user.is_premium else 'on the free tier'}.", "success")
+    return redirect(url_for("admin.user_detail", user_id=user_id))
+
+
+@admin_bp.route("/admin/users/<int:user_id>/toggle-registrar", methods=["POST"])
+@login_required
+@admin_required
+def toggle_registrar(user_id):
+    user = User.query.get_or_404(user_id)
+    if user.id == current_user.id:
+        flash("You can't change your own role from here.", "error")
+        return redirect(url_for("admin.user_detail", user_id=user_id))
+    if user.is_admin:
+        flash("Can't demote an admin to registrar from here.", "error")
+        return redirect(url_for("admin.user_detail", user_id=user_id))
+
+    user.role = "client" if user.is_registrar else "registrar"
+    db.session.commit()
+    flash(f"{user.name} is now {'a registrar' if user.is_registrar else 'a regular user'}.", "success")
     return redirect(url_for("admin.user_detail", user_id=user_id))

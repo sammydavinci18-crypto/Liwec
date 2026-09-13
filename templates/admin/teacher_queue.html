@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Teacher verification · Admin · Liwec{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Admin</span>
+    <h1>Teacher verification</h1>
+  </div>
+</div>
+
+<h3 class="section-heading">Awaiting review ({{ pending|length }})</h3>
+{% if pending %}
+<div class="appointment-list">
+  {% for profile in pending %}
+  <div class="appointment-row">
+    <div>
+      <strong>{{ profile.user.name }}</strong>
+      <span class="appt-time">{{ profile.headline or "No headline" }} · {{ profile.subjects or "No subjects listed" }}</span>
+      <p class="appt-note">{{ profile.documents|length }} document(s) attached · applied {{ profile.submitted_at.strftime('%b %-d, %Y') }}</p>
+    </div>
+    <div class="appt-actions">
+      <a class="btn btn-primary btn-sm" href="{{ url_for('admin.teacher_review', profile_id=profile.id) }}">Review</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">Nothing waiting on review.</div>
+{% endif %}
+
+<h3 class="section-heading">Recently reviewed</h3>
+{% if reviewed %}
+<div class="appointment-list">
+  {% for profile in reviewed %}
+  <div class="appointment-row">
+    <div>
+      <strong>{{ profile.user.name }}</strong>
+      <span class="appt-time">{{ profile.reviewed_at.strftime('%b %-d, %Y') if profile.reviewed_at else '' }}</span>
+    </div>
+    <div class="appt-actions">
+      <span class="status-pill status-{{ profile.status }}">{{ profile.status|capitalize }}</span>
+      {% if profile.status == 'approved' %}
+      <span class="vertical-pill vertical-{{ 'business' if profile.teacher_type == 'official' else 'both' }}">
+        {{ "Official" if profile.teacher_type == 'official' else "Independent" }}
+      </span>
+      {% endif %}
+      <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.teacher_review', profile_id=profile.id) }}">View</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">No reviews yet.</div>
+{% endif %}
+{% endblock %}

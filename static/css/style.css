@@ -1712,3 +1712,23 @@ button, input, textarea, select { font-family: inherit; }
   padding: 5px 12px;
   border-radius: 20px;
 }
+
+/* =========================================================================
+   Virtual school: checkbox pills (Cambridge stage selection)
+   ========================================================================= */
+.checkbox-group { display: flex; flex-wrap: wrap; gap: 8px; }
+.checkbox-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--paper-raised);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.checkbox-pill input { accent-color: var(--teal); }
+.checkbox-pill:has(input:checked) { border-color: var(--teal); background: var(--teal-tint); color: var(--teal-deep); }

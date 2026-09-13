@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Family · Liwec{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Family</span>
+    <h1>Parent &amp; student links</h1>
+    <p>Link your account to your child's so you can see their records once classes are live.</p>
+  </div>
+</div>
+
+{% if incoming_requests %}
+<h3 class="section-heading">Requests waiting on you</h3>
+<div class="appointment-list">
+  {% for link in incoming_requests %}
+  <div class="appointment-row">
+    <div>
+      <strong>{{ link.parent.name }}</strong>
+      <span class="appt-time">{{ link.parent.email }} wants to be linked as your parent/guardian</span>
+    </div>
+    <div class="appt-actions">
+      <form method="POST" action="{{ url_for('family.approve_link', link_id=link.id) }}">
+        <button type="submit" class="btn btn-primary btn-sm">Approve</button>
+      </form>
+      <form method="POST" action="{{ url_for('family.decline_link', link_id=link.id) }}">
+        <button type="submit" class="btn btn-ghost btn-sm">Decline</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<h3 class="section-heading">Your linked children</h3>
+{% if approved_children %}
+<div class="appointment-list">
+  {% for link in approved_children %}
+  <div class="appointment-row">
+    <div>
+      <strong>{{ link.student.name }}</strong>
+      <span class="appt-time">{{ link.student.email }}</span>
+    </div>
+    <div class="appt-actions">
+      <span class="status-pill status-approved">Linked</span>
+      <form method="POST" action="{{ url_for('family.unlink', link_id=link.id) }}">
+        <button type="submit" class="btn btn-ghost btn-sm">Remove link</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">No linked children yet — send a request below.</div>
+{% endif %}
+
+{% set pending_sent = as_parent|selectattr('status', 'equalto', 'pending')|list %}
+{% if pending_sent %}
+<h3 class="section-heading">Requests you've sent</h3>
+<div class="appointment-list">
+  {% for link in pending_sent %}
+  <div class="appointment-row">
+    <div>
+      <strong>{{ link.student.name }}</strong>
+      <span class="appt-time">{{ link.student.email }}</span>
+    </div>
+    <div class="appt-actions">
+      <span class="status-pill status-pending">Waiting for their approval</span>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<h3 class="section-heading">Link a child</h3>
+<div class="booking-card" style="max-width: 420px;">
+  <form method="POST" action="{{ url_for('family.request_link') }}">
+    <div class="field">
+      <label for="student_email">Your child's account email</label>
+      <input type="email" id="student_email" name="student_email" required placeholder="child@example.com">
+    </div>
+    <button type="submit" class="btn btn-primary btn-block">Send request</button>
+  </form>
+  <p class="doc-list-note">They'll need to approve this from their own account before you can see anything of theirs.</p>
+</div>
+{% endblock %}

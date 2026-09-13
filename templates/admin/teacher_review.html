@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Review {{ profile.user.name }} · Admin · Liwec{% endblock %}
+
+{% block content %}
+<a class="back-link" href="{{ url_for('admin.teacher_queue') }}">&larr; Teacher verification queue</a>
+
+<div class="profile-layout">
+  <div class="profile-main">
+    <div class="profile-header">
+      <div class="avatar-circle avatar-circle-lg">{{ profile.user.name[0]|upper }}</div>
+      <div>
+        <h1>{{ profile.user.name }}</h1>
+        <p class="sub">{{ profile.user.email }}</p>
+        <span class="status-pill status-{{ profile.status }}">{{ profile.status|capitalize }}</span>
+      </div>
+    </div>
+
+    <h3>Application</h3>
+    <p><strong>Headline:</strong> {{ profile.headline or "—" }}</p>
+    <p><strong>Subjects:</strong> {{ profile.subjects or "—" }}</p>
+    <p><strong>Stages:</strong> {{ profile.stage_labels()|join(', ') if profile.stage_labels() else "—" }}</p>
+    <p><strong>Bio:</strong> {{ profile.bio or "—" }}</p>
+
+    <h3>Verification documents</h3>
+    {% if profile.documents %}
+    <ul class="doc-list">
+      {% for doc in profile.documents %}
+      <li><a href="{{ url_for('admin.view_teacher_document', document_id=doc.id) }}" target="_blank" rel="noopener">{{ doc.original_filename }}</a></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty-state">No documents attached.</p>
+    {% endif %}
+
+    {% if profile.status == 'rejected' and profile.review_note %}
+    <div class="flash flash-error">Previously rejected: "{{ profile.review_note }}"</div>
+    {% endif %}
+  </div>
+
+  <div class="profile-side">
+    {% if profile.status == 'pending' %}
+    <div class="booking-card">
+      <h3>Decision</h3>
+      <form method="POST" action="{{ url_for('admin.teacher_approve', profile_id=profile.id) }}">
+        <button type="submit" class="btn btn-primary btn-block">Approve</button>
+      </form>
+      <form method="POST" action="{{ url_for('admin.teacher_reject', profile_id=profile.id) }}" class="reject-form">
+        <div class="field">
+          <label for="review_note">Rejection reason (shown to the teacher)</label>
+          <textarea id="review_note" name="review_note" rows="3"></textarea>
+        </div>
+        <button type="submit" class="btn btn-ghost btn-block">Reject</button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% if profile.status == 'approved' %}
+    <div class="booking-card moderation-card">
+      <h3>Employment status</h3>
+      <p class="sub">Currently: <strong>{{ "Official Light-Way teacher" if profile.teacher_type == 'official' else "Independent teacher" }}</strong></p>
+      <form method="POST" action="{{ url_for('admin.teacher_set_type', profile_id=profile.id) }}">
+        <input type="hidden" name="teacher_type" value="{{ 'independent' if profile.teacher_type == 'official' else 'official' }}">
+        <button type="submit" class="btn btn-ghost btn-block">
+          Mark as {{ "independent" if profile.teacher_type == 'official' else "official Light-Way teacher" }}
+        </button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

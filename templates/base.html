@@ -22,11 +22,18 @@
     </a>
     <nav class="topnav">
       <a class="topnav-link" href="{{ url_for('consultants.directory') }}">Find a consultant</a>
+      <a class="topnav-link" href="{{ url_for('teachers.directory') }}">Find a teacher</a>
       <a class="topnav-link" href="{{ url_for('messages.inbox') }}">Messages</a>
       <a class="topnav-link" href="{{ url_for('appointments.my_appointments') }}">Appointments</a>
+      <a class="topnav-link" href="{{ url_for('family.dashboard') }}">Family</a>
+      {% if current_user.is_registrar %}
+      <a class="topnav-link topnav-admin" href="{{ url_for('family.registrar_dashboard') }}">Registrar</a>
+      {% endif %}
       {% if current_user.is_admin %}
       <a class="topnav-link topnav-admin" href="{{ url_for('admin.queue') }}">Admin</a>
+      <a class="topnav-link topnav-admin" href="{{ url_for('admin.teacher_queue') }}">Teacher review</a>
       <a class="topnav-link topnav-admin" href="{{ url_for('admin.users') }}">Users</a>
+      <a class="topnav-link topnav-admin" href="{{ url_for('family.registrar_dashboard') }}">Registrar</a>
       {% endif %}
       <span class="topnav-user">{{ current_user.name }}</span>
       <a class="topnav-link" href="{{ url_for('auth.account') }}">Account</a>

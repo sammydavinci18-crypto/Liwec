@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Edit teacher profile · Liwec{% endblock %}
+{% block page_class %}auth-page{% endblock %}
+
+{% block content %}
+<div class="auth-card auth-card-wide">
+  <span class="auth-eyebrow">Liwec</span>
+  <h1>Edit your profile</h1>
+  <p class="sub">Changes go live immediately — this doesn't require re-verification.</p>
+
+  <form method="POST">
+    <div class="field">
+      <label for="headline">Headline</label>
+      <input type="text" id="headline" name="headline" value="{{ profile.headline or '' }}" required>
+    </div>
+    <div class="field">
+      <label for="bio">Bio</label>
+      <textarea id="bio" name="bio" rows="4" required>{{ profile.bio or '' }}</textarea>
+    </div>
+    <div class="field">
+      <label for="subjects">Subjects (comma-separated)</label>
+      <input type="text" id="subjects" name="subjects" value="{{ profile.subjects or '' }}" required>
+    </div>
+    <div class="field">
+      <label>Cambridge stage(s) you teach</label>
+      <div class="checkbox-group">
+        {% for key, label in stages %}
+        <label class="checkbox-pill">
+          <input type="checkbox" name="stages" value="{{ key }}" {{ 'checked' if key in (profile.stages or '').split(',') }}>
+          {{ label }}
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary btn-block">Save changes</button>
+  </form>
+  <p class="auth-switch"><a href="{{ url_for('teachers.my_profile') }}">&larr; Back to your profile</a></p>
+</div>
+{% endblock %}

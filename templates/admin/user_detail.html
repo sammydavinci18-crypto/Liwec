@@ -15,6 +15,7 @@
           {% if user.is_banned %}<span class="status-pill status-declined">Banned</span>{% endif %}
           {% if user.is_premium %}<span class="status-pill status-approved">Premium</span>{% endif %}
           {% if user.is_admin %}<span class="status-pill status-pending">Admin</span>{% endif %}
+          {% if user.is_registrar %}<span class="status-pill status-confirmed">Registrar</span>{% endif %}
           {% if not user.is_banned and not user.is_premium and not user.is_admin %}<span class="status-pill status-confirmed">Free tier</span>{% endif %}
         </div>
       </div>
@@ -32,6 +33,12 @@
     <p><a href="{{ url_for('admin.review', profile_id=user.consultant_profile.id) }}">Review consultant application &rarr;</a></p>
     {% endif %}
 
+    {% if user.teacher_profile %}
+    <h3>Teacher profile</h3>
+    <p><strong>Status:</strong> <span class="status-pill status-{{ user.teacher_profile.status }}">{{ user.teacher_profile.status|capitalize }}</span></p>
+    <p><a href="{{ url_for('admin.teacher_review', profile_id=user.teacher_profile.id) }}">Review teacher application &rarr;</a></p>
+    {% endif %}
+
     {% if user.is_banned and user.ban_reason %}
     <h3>Ban reason (admin-only)</h3>
     <p class="flash flash-error">{{ user.ban_reason }}</p>
@@ -40,6 +47,18 @@
   </div>
 
   <div class="profile-side">
+    {% if user.id != current_user.id and not user.is_admin %}
+    <div class="booking-card">
+      <h3>Registrar</h3>
+      <p class="sub">Registrars manage enrollment and parent-student links. They don't approve teacher applications — that stays with admins.</p>
+      <form method="POST" action="{{ url_for('admin.toggle_registrar', user_id=user.id) }}">
+        <button type="submit" class="btn {{ 'btn-ghost' if user.is_registrar else 'btn-primary' }} btn-block">
+          {{ "Remove registrar" if user.is_registrar else "Make registrar" }}
+        </button>
+      </form>
+    </div>
+    {% endif %}
+
     <div class="booking-card">
       <h3>Premium</h3>
       <p class="sub">Grants a higher/no call-length limit and longer recording retention. No payment is processed — this is a manual admin flag.</p>

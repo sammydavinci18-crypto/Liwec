@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}{{ profile.user.name }} · Liwec{% endblock %}
+
+{% block content %}
+<a class="back-link" href="{{ url_for('teachers.directory') }}">&larr; Back to teachers</a>
+
+<div class="profile-layout">
+  <div class="profile-main">
+    <div class="profile-header">
+      <div class="avatar-circle avatar-circle-lg">{{ profile.user.name[0]|upper }}</div>
+      <div>
+        <h1>{{ profile.user.name }}</h1>
+        <p class="consultant-headline">{{ profile.headline or "Teacher" }}</p>
+        <div class="profile-badges">
+          {% if profile.status == 'approved' %}
+          <span class="verified-badge"><span class="icon" data-icon="check"></span> Verified</span>
+          {% endif %}
+          <span class="vertical-pill vertical-{{ 'business' if profile.teacher_type == 'official' else 'both' }}">
+            {{ "Official Light-Way teacher" if profile.teacher_type == 'official' else "Independent teacher" }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <h3>About</h3>
+    <p class="profile-bio">{{ profile.bio or "This teacher hasn't added a bio yet." }}</p>
+
+    <h3>Subjects</h3>
+    <p>{{ profile.subjects or "—" }}</p>
+
+    <h3>Cambridge stages</h3>
+    <p>{{ profile.stage_labels()|join(', ') if profile.stage_labels() else "—" }}</p>
+  </div>
+
+  <div class="profile-side">
+    <div class="booking-card">
+      <h3>Get in touch</h3>
+      <p class="sub">Class scheduling and enrollment are coming in the next phase of the platform — for now, reach out via Messages from your dashboard.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/icons.js') }}"></script>
+{% endblock %}

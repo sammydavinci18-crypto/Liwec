@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Find a teacher · Liwec{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Browse verified teachers</span>
+    <h1>Find a teacher</h1>
+    <p>Official Light-Way teachers and independent teachers, all document-verified.</p>
+  </div>
+  <div class="dash-actions">
+    <a class="btn btn-ghost" href="{{ url_for('teachers.apply') }}">Become a teacher</a>
+  </div>
+</div>
+
+<div class="track-switch" role="tablist" aria-label="Filter by Cambridge stage">
+  <a class="track-tab {{ 'is-active' if stage == 'all' }}" href="{{ url_for('teachers.directory') }}">All stages</a>
+  {% for key, label in stages %}
+  <a class="track-tab {{ 'is-active' if stage == key }}" href="{{ url_for('teachers.directory', stage=key) }}">{{ label }}</a>
+  {% endfor %}
+</div>
+
+{% if profiles %}
+<div class="consultant-grid">
+  {% for profile in profiles %}
+  <a class="consultant-card" href="{{ url_for('teachers.profile', user_id=profile.user_id) }}">
+    <div class="consultant-card-top">
+      <div class="avatar-circle">{{ profile.user.name[0]|upper }}</div>
+      <span class="verified-badge" title="Verified by Liwec">
+        <span class="icon" data-icon="check"></span> Verified
+      </span>
+    </div>
+    <h3>{{ profile.user.name }}</h3>
+    <p class="consultant-headline">{{ profile.headline or "Teacher" }}</p>
+    <span class="vertical-pill vertical-{{ 'business' if profile.teacher_type == 'official' else 'both' }}">
+      {{ "Official Light-Way teacher" if profile.teacher_type == 'official' else "Independent teacher" }}
+    </span>
+    <div class="consultant-card-price">{{ profile.subjects or "" }}</div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">No verified teachers in this category yet.</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/icons.js') }}"></script>
+{% endblock %}
