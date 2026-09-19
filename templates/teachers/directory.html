@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Find a teacher · Liwec{% endblock %}
+{% block title %}Find a teacher · Light-Way{% endblock %}
 
 {% block content %}
 <div class="dash-head">
@@ -26,7 +26,7 @@
   <a class="consultant-card" href="{{ url_for('teachers.profile', user_id=profile.user_id) }}">
     <div class="consultant-card-top">
       <div class="avatar-circle">{{ profile.user.name[0]|upper }}</div>
-      <span class="verified-badge" title="Verified by Liwec">
+      <span class="verified-badge" title="Verified by Light-Way">
         <span class="icon" data-icon="check"></span> Verified
       </span>
     </div>

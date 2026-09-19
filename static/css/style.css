@@ -85,6 +85,12 @@ button, input, textarea, select { font-family: inherit; }
   display: inline-block;
 }
 
+.brand-crest {
+  height: 38px;
+  width: auto;
+  display: block;
+}
+
 .brand-block {
   display: flex;
   flex-direction: column;
@@ -96,7 +102,7 @@ button, input, textarea, select { font-family: inherit; }
   font-weight: 600;
   letter-spacing: 0.03em;
   color: var(--ink-soft);
-  padding-left: 30px; /* aligns under the wordmark, past the brand-mark square */
+  padding-left: 48px; /* aligns under the wordmark, past the crest image */
 }
 
 .topnav { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; row-gap: 8px; }
@@ -1014,6 +1020,7 @@ button, input, textarea, select { font-family: inherit; }
   pointer-events: none;
 }
 .hero-inner { position: relative; max-width: 760px; margin: 0 auto; }
+.hero-crest { height: 130px; width: auto; margin: 0 auto 20px; display: block; }
 .eyebrow {
   display: inline-block;
   font-size: 0.78rem;

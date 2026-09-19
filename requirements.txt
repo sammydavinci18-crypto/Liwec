@@ -14,4 +14,3 @@ gunicorn==22.0.0
 
 # Only needed if you switch DB_ENGINE=mysql in .env later (SQLite needs no driver)
 PyMySQL==1.1.1
-requests

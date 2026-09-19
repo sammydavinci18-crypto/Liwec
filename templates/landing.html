@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Liwec · Light-way Education Consultancy{% endblock %}
+{% block title %}Light-Way International Virtual Academy{% endblock %}
 {% block page_class %}landing-page{% endblock %}
 
 {% block topheader %}
 <header class="landing-nav">
   <a class="brand brand-on-dark" href="{{ url_for('main.index') }}">
-    <span class="brand-mark"></span>
-    Liwec
+    <img src="{{ url_for('static', filename='img/logo-crest-small.png') }}" alt="Light-Way crest" class="brand-crest">
+    Light-Way
   </a>
   <nav class="landing-nav-links">
     <a href="#tracks">What we cover</a>
@@ -25,12 +25,14 @@
 <section class="hero">
   <div class="hero-glow" aria-hidden="true"></div>
   <div class="hero-inner">
-    <span class="eyebrow">Light-way Education Consultancy</span>
-    <h1>Find your way.<br>We'll help you see it.</h1>
+    <img src="{{ url_for('static', filename='img/logo-crest-large.png') }}" alt="Light-Way International Virtual Academy crest" class="hero-crest">
+    <span class="eyebrow">Light-Way International Virtual Academy</span>
+    <h1>Lighting paths.<br>Empowering futures.</h1>
     <p class="hero-sub">
-      Liwec puts you face-to-face with an expert consultant over live video —
-      for education administration guidance or business consulting. Book a
-      session, talk it through, and leave with a clear next step.
+      A Cambridge-structured virtual school and a consultancy, under one roof.
+      Enroll in classes taught by verified teachers, or book a live video
+      session with an education administration or business consultant —
+      whichever path you need.
     </p>
     <div class="hero-actions">
       <a class="btn btn-amber btn-lg" href="{{ url_for('auth.register') }}">Get started free</a>
@@ -88,7 +90,7 @@
       <span class="eyebrow eyebrow-dark">Already know who you need?</span>
       <h2>Browse verified consultants and book them directly.</h2>
       <p class="book-lead">
-        Every consultant on Liwec has been through document verification before
+        Every consultant on Light-Way has been through document verification before
         their profile goes live. See their focus, their price, and pick how you
         want to start — no back-and-forth over email.
       </p>
@@ -103,7 +105,7 @@
         </li>
         <li>
           <span class="icon" data-icon="check"></span>
-          <span><strong>Meet over video the moment it's confirmed.</strong> A booked consultation hands straight into the same video room, screen sharing, and notes as any other Liwec call.</span>
+          <span><strong>Meet over video the moment it's confirmed.</strong> A booked consultation hands straight into the same video room, screen sharing, and notes as any other Light-Way call.</span>
         </li>
       </ul>
       <div class="book-actions">
@@ -185,7 +187,7 @@
       <div class="step">
         <span class="step-num">1</span>
         <h3>Book the session</h3>
-        <p>Create a consultation and set a time — Liwec gives you a room code to share.</p>
+        <p>Create a consultation and set a time — Light-Way gives you a room code to share.</p>
       </div>
       <div class="step">
         <span class="step-num">2</span>
@@ -212,10 +214,10 @@
 <footer class="landing-footer">
   <div class="section-inner footer-inner">
     <a class="brand brand-on-dark" href="{{ url_for('main.index') }}">
-      <span class="brand-mark"></span>
-      Liwec
+      <img src="{{ url_for('static', filename='img/logo-crest-small.png') }}" alt="Light-Way crest" class="brand-crest">
+      Light-Way
     </a>
-    <p>Light-way Education Consultancy · Education administration &amp; business consultations · © {{ current_year }} Liwec</p>
+    <p>Light-Way International Virtual Academy · Lighting paths. Empowering futures. · © {{ current_year }} Light-Way</p>
   </div>
 </footer>
 {% endblock %}

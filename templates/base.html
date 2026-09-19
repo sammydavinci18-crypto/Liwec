@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}Liwec{% endblock %}</title>
+  <title>{% block title %}Light-Way{% endblock %}</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/favicon.png') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
@@ -15,10 +16,10 @@
   <header class="topbar">
     <a class="brand-block" href="{{ url_for('main.dashboard') }}">
       <span class="brand">
-        <span class="brand-mark"></span>
-        Liwec
+        <img src="{{ url_for('static', filename='img/logo-crest-small.png') }}" alt="Light-Way crest" class="brand-crest">
+        Light-Way
       </span>
-      <span class="brand-tagline">Education administration &amp; business consultations</span>
+      <span class="brand-tagline">Lighting paths. Empowering futures.</span>
     </a>
     <nav class="topnav">
       <a class="topnav-link" href="{{ url_for('consultants.directory') }}">Find a consultant</a>

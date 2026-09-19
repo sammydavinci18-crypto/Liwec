@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ profile.user.name }} · Liwec{% endblock %}
+{% block title %}{{ profile.user.name }} · Light-Way{% endblock %}
 
 {% block content %}
 <a class="back-link" href="{{ url_for('consultants.directory') }}">&larr; Back to consultants</a>
@@ -39,7 +39,7 @@
   <div class="profile-side">
     <div class="price-card">
       <span class="price-amount">{{ profile.price_display() }}</span>
-      <p class="price-note">Payment is arranged directly with the consultant — Liwec doesn't process payments.</p>
+      <p class="price-note">Payment is arranged directly with the consultant — Light-Way doesn't process payments.</p>
     </div>
 
     {% if current_user.id != profile.user_id %}
