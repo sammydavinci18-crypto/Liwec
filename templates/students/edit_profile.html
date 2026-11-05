@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Edit application · Light-Way{% endblock %}
+{% block page_class %}auth-page{% endblock %}
+
+{% block content %}
+<div class="auth-card auth-card-wide">
+  <span class="auth-eyebrow">Light-Way</span>
+  <h1>Edit your details</h1>
+  <form method="POST">
+    <div class="field-row field-row-2">
+      <div class="field">
+        <label for="date_of_birth">Date of birth</label>
+        <input type="date" id="date_of_birth" name="date_of_birth" value="{{ profile.date_of_birth.isoformat() if profile.date_of_birth else '' }}">
+      </div>
+      <div class="field">
+        <label for="desired_stage">Cambridge stage</label>
+        <select id="desired_stage" name="desired_stage">
+          {% for key, label in stages %}
+          <option value="{{ key }}" {{ 'selected' if profile.desired_stage == key }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label for="subjects_of_interest">Subjects (comma-separated)</label>
+      <input type="text" id="subjects_of_interest" name="subjects_of_interest" value="{{ profile.subjects_of_interest or '' }}">
+    </div>
+    <div class="field">
+      <label for="notes">Notes for the admissions team</label>
+      <textarea id="notes" name="notes" rows="3">{{ profile.notes or '' }}</textarea>
+    </div>
+    <button type="submit" class="btn btn-primary btn-block">Save changes</button>
+  </form>
+  <p class="auth-switch"><a href="{{ url_for('students.my_profile') }}">&larr; Back</a></p>
+</div>
+{% endblock %}

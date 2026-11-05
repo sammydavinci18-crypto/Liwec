@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Apply as a student · Light-Way{% endblock %}
+{% block page_class %}auth-page{% endblock %}
+
+{% block content %}
+<div class="auth-card auth-card-wide">
+  <span class="auth-eyebrow">Light-Way</span>
+  <h1>{{ "Update your application" if existing else "Student admission application" }}</h1>
+  <p class="sub">
+    {% if existing and existing.status == 'pending' %}
+      Your application is under review. You can update it below while you wait.
+    {% elif existing and existing.status == 'rejected' %}
+      Your last application wasn't approved{% if existing.review_note %} — reviewer note: "{{ existing.review_note }}"{% endif %}. Update your details and documents and re-submit.
+    {% else %}
+      An admin reviews every student application. Once you're approved, an admin will place you with a teacher — you don't pick one yourself.
+    {% endif %}
+  </p>
+
+  <form method="POST" enctype="multipart/form-data">
+    <div class="field-row field-row-2">
+      <div class="field">
+        <label for="date_of_birth">Date of birth</label>
+        <input type="date" id="date_of_birth" name="date_of_birth" value="{{ existing.date_of_birth.isoformat() if existing and existing.date_of_birth else '' }}" required>
+      </div>
+      <div class="field">
+        <label for="desired_stage">Cambridge stage</label>
+        <select id="desired_stage" name="desired_stage" required>
+          <option value="">— Choose —</option>
+          {% for key, label in stages %}
+          <option value="{{ key }}" {{ 'selected' if existing and existing.desired_stage == key }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label for="subjects_of_interest">Subjects you want to study (comma-separated)</label>
+      <input type="text" id="subjects_of_interest" name="subjects_of_interest" placeholder="e.g. Mathematics, Physics, English" value="{{ existing.subjects_of_interest if existing else '' }}">
+    </div>
+    <div class="field">
+      <label for="notes">Anything the admissions team should know</label>
+      <textarea id="notes" name="notes" rows="3" placeholder="Previous schooling, learning needs, goals…">{{ existing.notes if existing else '' }}</textarea>
+    </div>
+    <div class="field">
+      <label for="documents">Supporting documents (ID, birth certificate, or previous school record — PDF, PNG, or JPG)</label>
+      <input type="file" id="documents" name="documents" multiple accept=".pdf,.png,.jpg,.jpeg">
+      {% if existing and existing.documents %}
+      <p class="doc-list-note">Already on file: {{ existing.documents|length }} document(s). Uploading new ones adds to that — it won't remove what's there.</p>
+      {% endif %}
+    </div>
+    <button type="submit" class="btn btn-primary btn-block">{{ "Update application" if existing else "Submit application" }}</button>
+  </form>
+</div>
+{% endblock %}

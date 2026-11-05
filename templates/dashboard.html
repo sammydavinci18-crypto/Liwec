@@ -37,9 +37,24 @@
   <div class="marketplace-promo-actions">
     <a class="btn btn-ghost" href="{{ url_for('teachers.directory') }}">Browse teachers</a>
     {% if current_user.teacher_profile %}
+    <a class="btn btn-ghost" href="{{ url_for('teachers.my_students') }}">My students</a>
     <a class="btn btn-primary" href="{{ url_for('teachers.my_profile') }}">My teacher profile</a>
     {% else %}
     <a class="btn btn-primary" href="{{ url_for('teachers.apply') }}">Become a teacher</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="marketplace-promo">
+  <div>
+    <h3>Student admissions</h3>
+    <p>Apply to enroll in Light-Way's Cambridge-structured classes. An admin reviews every application and places you with a teacher.</p>
+  </div>
+  <div class="marketplace-promo-actions">
+    {% if current_user.student_profile %}
+    <a class="btn btn-primary" href="{{ url_for('students.my_profile') }}">My admission</a>
+    {% else %}
+    <a class="btn btn-primary" href="{{ url_for('students.apply') }}">Apply as a student</a>
     {% endif %}
   </div>
 </div>

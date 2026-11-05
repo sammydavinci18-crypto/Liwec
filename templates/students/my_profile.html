@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}My student application · Light-Way{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Student</span>
+    <h1>My admission</h1>
+    <p>Status: <span class="status-pill status-{{ profile.status }}">{{ profile.status|capitalize }}</span></p>
+  </div>
+  <div class="dash-actions">
+    <a class="btn btn-ghost" href="{{ url_for('students.edit_profile') }}">Edit details</a>
+  </div>
+</div>
+
+{% if profile.status == 'pending' %}
+<div class="flash flash-info">An admin is reviewing your application. You'll be enrolled once it's approved, then placed with a teacher.</div>
+{% elif profile.status == 'rejected' %}
+<div class="flash flash-error">
+  This application wasn't approved{% if profile.review_note %}: "{{ profile.review_note }}"{% endif %}.
+  <a href="{{ url_for('students.apply') }}">Update and re-submit</a>.
+</div>
+{% elif profile.status == 'approved' %}
+<div class="flash flash-success">You're an enrolled student.</div>
+{% endif %}
+
+<div class="profile-summary-card">
+  <p><strong>Cambridge stage:</strong> {{ profile.stage_label() }}</p>
+  <p><strong>Subjects:</strong> {{ profile.subjects_of_interest or "—" }}</p>
+  <p><strong>Date of birth:</strong> {{ profile.date_of_birth.strftime('%b %-d, %Y') if profile.date_of_birth else "—" }}</p>
+  <p><strong>Documents on file:</strong> {{ profile.documents|length }}</p>
+</div>
+
+{% if profile.status == 'approved' %}
+<h3 class="section-heading">My teacher</h3>
+{% if assignments %}
+<div class="appointment-list">
+  {% for a in assignments %}
+  <div class="appointment-row">
+    <div>
+      <strong>{{ a.teacher.name }}</strong>
+      <span class="appt-time">{{ a.teacher.teacher_profile.subjects if a.teacher.teacher_profile else "" }}</span>
+      {% if a.notes %}<p class="appt-note">"{{ a.notes }}"</p>{% endif %}
+    </div>
+    <div class="appt-actions"><span class="status-pill status-approved">Placed</span></div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">You haven't been placed with a teacher yet. An admin will do this — you'll see it here once they have.</div>
+{% endif %}
+{% endif %}
+{% endblock %}

@@ -33,6 +33,8 @@
       {% if current_user.is_admin %}
       <a class="topnav-link topnav-admin" href="{{ url_for('admin.queue') }}">Admin</a>
       <a class="topnav-link topnav-admin" href="{{ url_for('admin.teacher_queue') }}">Teacher review</a>
+      <a class="topnav-link topnav-admin" href="{{ url_for('admin.student_queue') }}">Student review</a>
+      <a class="topnav-link topnav-admin" href="{{ url_for('admin.placements') }}">Placements</a>
       <a class="topnav-link topnav-admin" href="{{ url_for('admin.users') }}">Users</a>
       <a class="topnav-link topnav-admin" href="{{ url_for('family.registrar_dashboard') }}">Registrar</a>
       {% endif %}

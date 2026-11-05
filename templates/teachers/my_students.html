@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}My students · Light-Way{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Teacher</span>
+    <h1>My students</h1>
+    <p>Students an admin has placed with you.</p>
+  </div>
+</div>
+
+{% if profile.status != 'approved' %}
+<div class="flash flash-info">Your teacher application is still being reviewed — students can only be placed with approved teachers.</div>
+{% endif %}
+
+{% if assignments %}
+<div class="appointment-list">
+  {% for a in assignments %}
+  <div class="appointment-row">
+    <div>
+      <strong>{{ a.student.name }}</strong>
+      <span class="appt-time">
+        {% if a.student.student_profile %}{{ a.student.student_profile.stage_label() }} · {{ a.student.student_profile.subjects_of_interest or "no subjects listed" }}{% endif %}
+      </span>
+      {% if a.notes %}<p class="appt-note">Admin note: "{{ a.notes }}"</p>{% endif %}
+    </div>
+    <div class="appt-actions"><span class="status-pill status-approved">Placed {{ a.created_at.strftime('%b %-d') }}</span></div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">No students placed with you yet.</div>
+{% endif %}
+{% endblock %}

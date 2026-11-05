@@ -10,6 +10,7 @@ import storage
 from extensions import db
 from models import ConsultantProfile, VerificationDocument, User, Meeting, Appointment
 from models import TeacherProfile, TeacherVerificationDocument
+from models import StudentProfile, StudentVerificationDocument, StudentTeacherAssignment
 from permissions import admin_required
 
 admin_bp = Blueprint("admin", __name__)
@@ -174,6 +175,140 @@ def view_teacher_document(document_id):
 
     local_dir = current_app.config["VERIFICATION_DOCS_DIR"]
     return send_from_directory(local_dir, doc.stored_filename, as_attachment=False)
+
+
+# ---------------------------------------------------------------------------
+# Student admission queue — same review flow as teachers/consultants
+# ---------------------------------------------------------------------------
+
+@admin_bp.route("/admin/students")
+@login_required
+@admin_required
+def student_queue():
+    pending = (
+        StudentProfile.query.filter_by(status="pending")
+        .order_by(StudentProfile.submitted_at.asc()).all()
+    )
+    reviewed = (
+        StudentProfile.query.filter(StudentProfile.status.in_(["approved", "rejected"]))
+        .order_by(StudentProfile.reviewed_at.desc()).limit(30).all()
+    )
+    return render_template("admin/student_queue.html", pending=pending, reviewed=reviewed)
+
+
+@admin_bp.route("/admin/students/<int:profile_id>")
+@login_required
+@admin_required
+def student_review(profile_id):
+    profile = StudentProfile.query.get_or_404(profile_id)
+    return render_template("admin/student_review.html", profile=profile)
+
+
+@admin_bp.route("/admin/students/<int:profile_id>/approve", methods=["POST"])
+@login_required
+@admin_required
+def student_approve(profile_id):
+    profile = StudentProfile.query.get_or_404(profile_id)
+    profile.status = "approved"
+    profile.review_note = None
+    profile.reviewed_at = datetime.utcnow()
+    profile.reviewed_by_id = current_user.id
+    db.session.commit()
+    flash(f"{profile.user.name} is now an enrolled student.", "success")
+    return redirect(url_for("admin.student_queue"))
+
+
+@admin_bp.route("/admin/students/<int:profile_id>/reject", methods=["POST"])
+@login_required
+@admin_required
+def student_reject(profile_id):
+    profile = StudentProfile.query.get_or_404(profile_id)
+    profile.status = "rejected"
+    profile.review_note = request.form.get("review_note", "").strip()
+    profile.reviewed_at = datetime.utcnow()
+    profile.reviewed_by_id = current_user.id
+    db.session.commit()
+    flash(f"{profile.user.name}'s application was rejected.", "info")
+    return redirect(url_for("admin.student_queue"))
+
+
+@admin_bp.route("/admin/student-documents/<int:document_id>")
+@login_required
+def view_student_document(document_id):
+    doc = StudentVerificationDocument.query.get_or_404(document_id)
+    profile = doc.profile
+    if not (current_user.is_admin or profile.user_id == current_user.id):
+        abort(403)
+
+    bucket = current_app.config["VERIFICATION_BUCKET"]
+    url = storage.signed_url(bucket, doc.stored_filename, expires_in=60)
+    if url:
+        return redirect(url)
+
+    local_dir = current_app.config["VERIFICATION_DOCS_DIR"]
+    return send_from_directory(local_dir, doc.stored_filename, as_attachment=False)
+
+
+# ---------------------------------------------------------------------------
+# Placements — admin-only. This is the ONLY way a student gets connected to
+# a teacher; students can't browse-and-book a teacher for school purposes.
+# ---------------------------------------------------------------------------
+
+@admin_bp.route("/admin/placements")
+@login_required
+@admin_required
+def placements():
+    approved_students = (
+        StudentProfile.query.filter_by(status="approved")
+        .join(User, StudentProfile.user_id == User.id).order_by(User.name).all()
+    )
+    approved_teachers = (
+        TeacherProfile.query.filter_by(status="approved")
+        .join(User, TeacherProfile.user_id == User.id).order_by(User.name).all()
+    )
+    existing = StudentTeacherAssignment.query.order_by(StudentTeacherAssignment.created_at.desc()).all()
+    return render_template(
+        "admin/placements.html",
+        students=approved_students, teachers=approved_teachers, assignments=existing,
+    )
+
+
+@admin_bp.route("/admin/placements/create", methods=["POST"])
+@login_required
+@admin_required
+def create_placement():
+    student_id = request.form.get("student_id", type=int)
+    teacher_id = request.form.get("teacher_id", type=int)
+    notes = request.form.get("notes", "").strip()
+
+    student_profile = StudentProfile.query.filter_by(user_id=student_id, status="approved").first()
+    teacher_profile = TeacherProfile.query.filter_by(user_id=teacher_id, status="approved").first()
+    if not student_profile or not teacher_profile:
+        flash("Pick an approved student and an approved teacher.", "error")
+        return redirect(url_for("admin.placements"))
+
+    existing = StudentTeacherAssignment.query.filter_by(student_id=student_id, teacher_id=teacher_id).first()
+    if existing:
+        flash("That student is already placed with that teacher.", "info")
+        return redirect(url_for("admin.placements"))
+
+    db.session.add(StudentTeacherAssignment(
+        student_id=student_id, teacher_id=teacher_id, assigned_by_id=current_user.id, notes=notes,
+    ))
+    db.session.commit()
+    flash("Student placed with teacher.", "success")
+    return redirect(url_for("admin.placements"))
+
+
+@admin_bp.route("/admin/placements/<int:assignment_id>/remove", methods=["POST"])
+@login_required
+@admin_required
+def remove_placement(assignment_id):
+    assignment = StudentTeacherAssignment.query.get_or_404(assignment_id)
+    db.session.delete(assignment)
+    db.session.commit()
+    flash("Placement removed.", "info")
+    return redirect(url_for("admin.placements"))
 
 
 # ---------------------------------------------------------------------------

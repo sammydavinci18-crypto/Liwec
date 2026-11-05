@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Placements · Admin · Light-Way{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Admin</span>
+    <h1>Student placements</h1>
+    <p>Only an admin can connect a student to a teacher. Students and teachers can see their placement, but can't change it.</p>
+  </div>
+</div>
+
+<div class="profile-layout">
+  <div class="profile-main">
+    <h3>Current placements ({{ assignments|length }})</h3>
+    {% if assignments %}
+    <div class="appointment-list">
+      {% for a in assignments %}
+      <div class="appointment-row">
+        <div>
+          <strong>{{ a.student.name }}</strong> &rarr; <strong>{{ a.teacher.name }}</strong>
+          <span class="appt-time">placed {{ a.created_at.strftime('%b %-d, %Y') }} by {{ a.assigned_by.name }}</span>
+          {% if a.notes %}<p class="appt-note">"{{ a.notes }}"</p>{% endif %}
+        </div>
+        <div class="appt-actions">
+          <form method="POST" action="{{ url_for('admin.remove_placement', assignment_id=a.id) }}">
+            <button type="submit" class="btn btn-ghost btn-sm">Remove</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">No placements yet.</div>
+    {% endif %}
+  </div>
+
+  <div class="profile-side">
+    <div class="booking-card">
+      <h3>Place a student</h3>
+      {% if students and teachers %}
+      <form method="POST" action="{{ url_for('admin.create_placement') }}">
+        <div class="field">
+          <label for="student_id">Student (approved)</label>
+          <select id="student_id" name="student_id" required>
+            <option value="">— Choose —</option>
+            {% for s in students %}
+            <option value="{{ s.user_id }}">{{ s.user.name }} — {{ s.stage_label() }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="teacher_id">Teacher (approved)</label>
+          <select id="teacher_id" name="teacher_id" required>
+            <option value="">— Choose —</option>
+            {% for t in teachers %}
+            <option value="{{ t.user_id }}">{{ t.user.name }} — {{ t.subjects or "no subjects" }}{{ " (official)" if t.teacher_type == 'official' }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="notes">Note (optional)</label>
+          <textarea id="notes" name="notes" rows="2" placeholder="Why this pairing?"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Place student</button>
+      </form>
+      {% else %}
+      <p class="sub">You need at least one <strong>approved student</strong> and one <strong>approved teacher</strong> before you can place anyone. Currently: {{ students|length }} approved student(s), {{ teachers|length }} approved teacher(s).</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

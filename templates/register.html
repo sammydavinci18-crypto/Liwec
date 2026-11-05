@@ -23,9 +23,30 @@
     <div class="auth-card">
       <span class="auth-eyebrow">Light-Way</span>
       <h1>Create your account</h1>
-      <p class="sub">Set up consultations and invite the people you meet with.</p>
+      <p class="sub">Tell us how you'll be using Light-Way. Students and teachers are reviewed by an admin before they're enrolled or approved to teach.</p>
 
       <form method="POST">
+        <div class="field">
+          <label>I'm signing up as…</label>
+          <div class="role-options">
+            <label class="role-option">
+              <input type="radio" name="signup_role" value="student" {{ 'checked' if signup_role == 'student' }}>
+              <span class="role-option-body"><strong>A student</strong><span>Apply to enroll in classes</span></span>
+            </label>
+            <label class="role-option">
+              <input type="radio" name="signup_role" value="teacher" {{ 'checked' if signup_role == 'teacher' }}>
+              <span class="role-option-body"><strong>A teacher</strong><span>Apply to teach</span></span>
+            </label>
+            <label class="role-option">
+              <input type="radio" name="signup_role" value="parent" {{ 'checked' if signup_role == 'parent' }}>
+              <span class="role-option-body"><strong>A parent / guardian</strong><span>Link to my child's account</span></span>
+            </label>
+            <label class="role-option">
+              <input type="radio" name="signup_role" value="general" {{ 'checked' if signup_role == 'general' or not signup_role }}>
+              <span class="role-option-body"><strong>Something else</strong><span>Book consultants, etc.</span></span>
+            </label>
+          </div>
+        </div>
         <div class="field">
           <label for="name">Full name</label>
           <input type="text" id="name" name="name" required autofocus>

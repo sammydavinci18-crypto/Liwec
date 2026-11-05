@@ -50,6 +50,10 @@ class User(UserMixin, db.Model):
         "TeacherProfile", backref="user", uselist=False, cascade="all, delete-orphan",
         foreign_keys="TeacherProfile.user_id",
     )
+    student_profile = db.relationship(
+        "StudentProfile", backref="user", uselist=False, cascade="all, delete-orphan",
+        foreign_keys="StudentProfile.user_id",
+    )
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -343,3 +347,62 @@ class ParentStudentLink(db.Model):
     parent = db.relationship("User", foreign_keys=[parent_id])
     student = db.relationship("User", foreign_keys=[student_id])
 
+
+
+class StudentProfile(db.Model):
+    """A student's admission application to the virtual school. Goes through
+    the same admin document-review flow as teachers/consultants — nobody is
+    an enrolled student until an admin approves this."""
+    __tablename__ = "student_profiles"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), unique=True, nullable=False)
+
+    date_of_birth = db.Column(db.Date)
+    desired_stage = db.Column(db.String(30))  # one of the CAMBRIDGE_STAGES keys
+    subjects_of_interest = db.Column(db.String(255))
+    notes = db.Column(db.Text)  # anything the admin should know (prior schooling, needs, etc.)
+
+    # "pending" | "approved" | "rejected" — same review flow as teachers.
+    status = db.Column(db.String(20), default="pending", nullable=False)
+    review_note = db.Column(db.Text)
+    submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
+    reviewed_at = db.Column(db.DateTime)
+    reviewed_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+
+    documents = db.relationship(
+        "StudentVerificationDocument", backref="profile", lazy=True, cascade="all, delete-orphan"
+    )
+
+    def stage_label(self):
+        return dict(CAMBRIDGE_STAGES).get(self.desired_stage, self.desired_stage or "—")
+
+
+class StudentVerificationDocument(db.Model):
+    __tablename__ = "student_verification_documents"
+
+    id = db.Column(db.Integer, primary_key=True)
+    profile_id = db.Column(db.Integer, db.ForeignKey("student_profiles.id"), nullable=False)
+    stored_filename = db.Column(db.String(255), nullable=False)
+    original_filename = db.Column(db.String(255), nullable=False)
+    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class StudentTeacherAssignment(db.Model):
+    """An admin placing an approved student with an approved teacher. This
+    is the ONLY way a student gets connected to a teacher — students can't
+    pick their own teacher, by design. Only an admin creates/removes these.
+    Later phases (classes/enrollment) will build on this."""
+    __tablename__ = "student_teacher_assignments"
+    __table_args__ = (db.UniqueConstraint("student_id", "teacher_id", name="uq_student_teacher_pair"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    student_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    teacher_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    assigned_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    student = db.relationship("User", foreign_keys=[student_id])
+    teacher = db.relationship("User", foreign_keys=[teacher_id])
+    assigned_by = db.relationship("User", foreign_keys=[assigned_by_id])

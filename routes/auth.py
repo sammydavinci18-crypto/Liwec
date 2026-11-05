@@ -12,27 +12,38 @@ def register():
     if current_user.is_authenticated:
         return redirect(url_for("main.dashboard"))
 
+    # What the person is signing up *for*. This only decides where they land
+    # right after creating the account — the account itself is created
+    # immediately (they need to log in to upload their documents), but a
+    # student or teacher isn't actually enrolled/verified until an admin
+    # approves the application they're sent to next. See routes/students.py
+    # and routes/teachers.py.
+    valid_signup_roles = {"student", "teacher", "parent", "general"}
+
     if request.method == "POST":
         name = request.form.get("name", "").strip()
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
         confirm = request.form.get("confirm_password", "")
+        signup_role = request.form.get("signup_role", "general")
+        if signup_role not in valid_signup_roles:
+            signup_role = "general"
 
         if not name or not email or not password:
             flash("Please fill in every field.", "error")
-            return render_template("register.html")
+            return render_template("register.html", signup_role=signup_role)
 
         if password != confirm:
             flash("Passwords don't match.", "error")
-            return render_template("register.html")
+            return render_template("register.html", signup_role=signup_role)
 
         if len(password) < 6:
             flash("Password should be at least 6 characters.", "error")
-            return render_template("register.html")
+            return render_template("register.html", signup_role=signup_role)
 
         if User.query.filter_by(email=email).first():
             flash("An account with that email already exists.", "error")
-            return render_template("register.html")
+            return render_template("register.html", signup_role=signup_role)
 
         user = User(name=name, email=email)
         user.set_password(password)
@@ -40,10 +51,25 @@ def register():
         db.session.commit()
 
         login_user(user)
+
+        if signup_role == "student":
+            flash("Account created. Next, complete your admission application — an admin reviews it before you're enrolled.", "success")
+            return redirect(url_for("students.apply"))
+        if signup_role == "teacher":
+            flash("Account created. Next, complete your teacher application — an admin reviews it before you can teach.", "success")
+            return redirect(url_for("teachers.apply"))
+        if signup_role == "parent":
+            flash("Account created. Link your child's account below — they'll need to approve it.", "success")
+            return redirect(url_for("family.dashboard"))
+
         flash("Welcome! Your account is ready.", "success")
         return redirect(url_for("main.dashboard"))
 
-    return render_template("register.html")
+    # Allow deep links like /register?as=teacher from marketing pages.
+    preselected = request.args.get("as", "general")
+    if preselected not in valid_signup_roles:
+        preselected = "general"
+    return render_template("register.html", signup_role=preselected)
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])

@@ -1739,3 +1739,48 @@ button, input, textarea, select { font-family: inherit; }
 }
 .checkbox-pill input { accent-color: var(--teal); }
 .checkbox-pill:has(input:checked) { border-color: var(--teal); background: var(--teal-tint); color: var(--teal-deep); }
+
+/* =========================================================================
+   Sign-up role selector (student / teacher / parent / other)
+   ========================================================================= */
+.role-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.role-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  cursor: pointer;
+}
+.role-option input { margin-top: 3px; accent-color: var(--teal); }
+.role-option-body { display: flex; flex-direction: column; gap: 2px; font-size: 0.84rem; }
+.role-option-body strong { color: var(--ink); font-size: 0.9rem; }
+.role-option-body span { color: var(--ink-soft); font-size: 0.78rem; }
+.role-option:has(input:checked) { border-color: var(--teal); background: var(--teal-tint); }
+@media (max-width: 520px) { .role-options { grid-template-columns: 1fr; } }
+
+.field-row-2 { grid-template-columns: 1fr 1fr; }
+@media (max-width: 900px) { .field-row-2 { grid-template-columns: 1fr; } }
+
+/* Fix: the global `.field label { display:block }` rule was beating the
+   flex layout on option pills nested inside a .field. Raising specificity. */
+.field .role-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 0;
+  font-size: inherit;
+  color: inherit;
+}
+.field .checkbox-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 0;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+.field .checkbox-pill:has(input:checked) { color: var(--teal-deep); }
+.field .role-option input, .field .checkbox-pill input { width: auto; flex-shrink: 0; }

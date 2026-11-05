@@ -5,7 +5,7 @@ from flask_login import login_required, current_user
 
 import storage
 from extensions import db
-from models import TeacherProfile, TeacherVerificationDocument, CAMBRIDGE_STAGES
+from models import TeacherProfile, TeacherVerificationDocument, CAMBRIDGE_STAGES, StudentTeacherAssignment
 
 teachers_bp = Blueprint("teachers", __name__)
 
@@ -142,3 +142,14 @@ def edit_profile():
         return redirect(url_for("teachers.my_profile"))
 
     return render_template("teachers/edit_profile.html", profile=profile, stages=CAMBRIDGE_STAGES)
+
+
+@teachers_bp.route("/teachers/me/students")
+@login_required
+def my_students():
+    profile = current_user.teacher_profile
+    if not profile:
+        return redirect(url_for("teachers.apply"))
+
+    assignments = StudentTeacherAssignment.query.filter_by(teacher_id=current_user.id).all()
+    return render_template("teachers/my_students.html", profile=profile, assignments=assignments)

@@ -6,6 +6,9 @@ Flask-Migrate==4.0.7
 python-socketio==5.11.2
 python-dotenv==1.0.1
 
+# Used by storage.py for Supabase Storage's REST API (uploads, signed URLs)
+requests==2.32.3
+
 # Postgres driver — used when DB_ENGINE=postgres (Supabase, Render, etc.)
 psycopg2-binary==2.9.9
 
@@ -14,4 +17,3 @@ gunicorn==22.0.0
 
 # Only needed if you switch DB_ENGINE=mysql in .env later (SQLite needs no driver)
 PyMySQL==1.1.1
-requests

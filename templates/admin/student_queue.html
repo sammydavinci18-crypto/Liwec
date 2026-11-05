@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Student admissions · Admin · Light-Way{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Admin</span>
+    <h1>Student admissions</h1>
+  </div>
+  <div class="dash-actions">
+    <a class="btn btn-primary" href="{{ url_for('admin.placements') }}">Place students with teachers</a>
+  </div>
+</div>
+
+<h3 class="section-heading">Awaiting review ({{ pending|length }})</h3>
+{% if pending %}
+<div class="appointment-list">
+  {% for profile in pending %}
+  <div class="appointment-row">
+    <div>
+      <strong>{{ profile.user.name }}</strong>
+      <span class="appt-time">{{ profile.stage_label() }} · {{ profile.subjects_of_interest or "No subjects listed" }}</span>
+      <p class="appt-note">{{ profile.documents|length }} document(s) attached · applied {{ profile.submitted_at.strftime('%b %-d, %Y') }}</p>
+    </div>
+    <div class="appt-actions">
+      <a class="btn btn-primary btn-sm" href="{{ url_for('admin.student_review', profile_id=profile.id) }}">Review</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">Nothing waiting on review.</div>
+{% endif %}
+
+<h3 class="section-heading">Recently reviewed</h3>
+{% if reviewed %}
+<div class="appointment-list">
+  {% for profile in reviewed %}
+  <div class="appointment-row">
+    <div>
+      <strong>{{ profile.user.name }}</strong>
+      <span class="appt-time">{{ profile.reviewed_at.strftime('%b %-d, %Y') if profile.reviewed_at else '' }}</span>
+    </div>
+    <div class="appt-actions">
+      <span class="status-pill status-{{ profile.status }}">{{ profile.status|capitalize }}</span>
+      <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.student_review', profile_id=profile.id) }}">View</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">No reviews yet.</div>
+{% endif %}
+{% endblock %}
