@@ -110,6 +110,10 @@ class Config:
     # you've since changed via /account).
     ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL")
     ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
+    # Set to "true" for ONE deploy to overwrite the password of the account
+    # matching ADMIN_EMAIL with ADMIN_PASSWORD (forgotten-password recovery).
+    # Remove it again afterwards.
+    ADMIN_RESET = os.environ.get("ADMIN_RESET", "").strip().lower() in ("1", "true", "yes")
 
     # Supabase Storage — verification documents and recordings live here in
     # production instead of local disk, since local disk doesn't survive a

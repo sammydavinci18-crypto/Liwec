@@ -52,30 +52,70 @@ def _ensure_schema_up_to_date(app):
         return
 
     with app.app_context():
+        # Step 1: let Alembic do its normal job (fresh DB, or pending
+        # migrations on a DB it already manages). Failure here must not stop
+        # step 2 — that was the cause of a "relation teacher_profiles does
+        # not exist" outage: a migration failed quietly, the app booted
+        # anyway, and the new tables never got created.
         try:
-            inspector = inspect(db.engine)
-            table_names = set(inspector.get_table_names())
-
-            if "alembic_version" in table_names:
+            table_names = set(inspect(db.engine).get_table_names())
+            if "alembic_version" in table_names or "users" not in table_names:
                 migrate_upgrade()
-                return
-
-            if "users" in table_names:
-                existing_columns = {c["name"] for c in inspector.get_columns("users")}
-                if "role" not in existing_columns:
-                    db.session.execute(text(
-                        "ALTER TABLE users ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'client'"
-                    ))
-                    db.session.commit()
-                    print("[startup] Patched missing users.role column.", file=sys.stderr)
-                db.create_all()
-                migrate_stamp()
-                print("[startup] Adopted Flask-Migrate on an existing database (stamped at head).", file=sys.stderr)
-            else:
-                migrate_upgrade()
-        except Exception as exc:
+        except BaseException as exc:  # Alembic can raise SystemExit
             db.session.rollback()
-            print(f"[startup] Schema sync skipped/failed (non-fatal): {exc}", file=sys.stderr)
+            print(f"[startup] Alembic upgrade failed, falling back to repair: {exc}", file=sys.stderr)
+
+        # Step 2: repair any drift between the models and the real database.
+        try:
+            _repair_schema_drift()
+            migrate_stamp()  # schema now matches the models == latest migration
+            print("[startup] Schema verified against models.", file=sys.stderr)
+        except BaseException as exc:
+            db.session.rollback()
+            print(f"[startup] Schema repair failed (non-fatal): {exc}", file=sys.stderr)
+
+
+def _repair_schema_drift():
+    """Additive only: creates any missing table and adds any missing column
+    for every model. Never drops or alters existing data."""
+    from sqlalchemy import inspect, text
+
+    engine = db.engine
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+
+    # Legacy column that older databases may lack.
+    if "users" in existing_tables:
+        user_cols = {c["name"] for c in inspector.get_columns("users")}
+        if "role" not in user_cols:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "ALTER TABLE users ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'client'"
+                ))
+            print("[startup] Patched missing users.role column.", file=sys.stderr)
+
+    # 1) Missing tables
+    db.create_all()
+
+    # 2) Missing columns on tables that already existed
+    dialect = engine.dialect
+    quote = dialect.identifier_preparer.quote
+    for table in db.metadata.sorted_tables:
+        if table.name not in existing_tables:
+            continue  # just created in full by create_all()
+        have = {c["name"] for c in inspect(engine).get_columns(table.name)}
+        for col in table.columns:
+            if col.name in have:
+                continue
+            ddl = f"ALTER TABLE {quote(table.name)} ADD COLUMN {quote(col.name)} {col.type.compile(dialect=dialect)}"
+            if col.server_default is not None and hasattr(col.server_default, "arg"):
+                arg = col.server_default.arg
+                ddl += f" DEFAULT {arg if not isinstance(arg, str) else repr(arg)}"
+                if not col.nullable:
+                    ddl += " NOT NULL"
+            with engine.begin() as conn:
+                conn.execute(text(ddl))
+            print(f"[startup] Added missing column {table.name}.{col.name}.", file=sys.stderr)
 
 
 def _seed_admin_from_env(app):
@@ -102,10 +142,19 @@ def _seed_admin_from_env(app):
                 db.session.add(user)
                 db.session.commit()
                 print(f"[startup] Seeded admin account for {email}.", file=sys.stderr)
-            elif user.role != "admin":
-                user.role = "admin"
-                db.session.commit()
-                print(f"[startup] Promoted existing user {email} to admin.", file=sys.stderr)
+            else:
+                changed = False
+                if user.role != "admin":
+                    user.role = "admin"
+                    changed = True
+                    print(f"[startup] Promoted existing user {email} to admin.", file=sys.stderr)
+                # Recovery switch: only when ADMIN_RESET=true is set.
+                if app.config.get("ADMIN_RESET"):
+                    user.set_password(password)
+                    changed = True
+                    print(f"[startup] Reset password for admin {email} (ADMIN_RESET is on — remove it now).", file=sys.stderr)
+                if changed:
+                    db.session.commit()
         except Exception as exc:
             db.session.rollback()
             print(f"[startup] Admin seed skipped/failed (non-fatal): {exc}", file=sys.stderr)
@@ -243,6 +292,20 @@ def create_app():
         user.role = "admin"
         db.session.commit()
         print(f"{user.name} ({user.email}) is now an admin.")
+
+    @app.cli.command("reset-admin-password")
+    def reset_admin_password():
+        """Set a new password: flask --app app reset-admin-password"""
+        import click
+        email = click.prompt("Email of the account")
+        user = User.query.filter_by(email=email.strip().lower()).first()
+        if not user:
+            print(f"No user found with email {email}")
+            return
+        user.set_password(click.prompt("New password", hide_input=True, confirmation_prompt=True))
+        user.role = "admin"
+        db.session.commit()
+        print(f"Password reset; {user.email} is an admin.")
 
     return app
 
