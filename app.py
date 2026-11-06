@@ -102,10 +102,19 @@ def _seed_admin_from_env(app):
                 db.session.add(user)
                 db.session.commit()
                 print(f"[startup] Seeded admin account for {email}.", file=sys.stderr)
-            elif user.role != "admin":
-                user.role = "admin"
-                db.session.commit()
-                print(f"[startup] Promoted existing user {email} to admin.", file=sys.stderr)
+            else:
+                changed = False
+                if user.role != "admin":
+                    user.role = "admin"
+                    changed = True
+                    print(f"[startup] Promoted existing user {email} to admin.", file=sys.stderr)
+                # Recovery switch: only when ADMIN_RESET=true is set.
+                if app.config.get("ADMIN_RESET"):
+                    user.set_password(password)
+                    changed = True
+                    print(f"[startup] Reset password for admin {email} (ADMIN_RESET is on — remove it now).", file=sys.stderr)
+                if changed:
+                    db.session.commit()
         except Exception as exc:
             db.session.rollback()
             print(f"[startup] Admin seed skipped/failed (non-fatal): {exc}", file=sys.stderr)
@@ -243,6 +252,20 @@ def create_app():
         user.role = "admin"
         db.session.commit()
         print(f"{user.name} ({user.email}) is now an admin.")
+
+    @app.cli.command("reset-admin-password")
+    def reset_admin_password():
+        """Set a new password: flask --app app reset-admin-password"""
+        import click
+        email = click.prompt("Email of the account")
+        user = User.query.filter_by(email=email.strip().lower()).first()
+        if not user:
+            print(f"No user found with email {email}")
+            return
+        user.set_password(click.prompt("New password", hide_input=True, confirmation_prompt=True))
+        user.role = "admin"
+        db.session.commit()
+        print(f"Password reset; {user.email} is an admin.")
 
     return app
 

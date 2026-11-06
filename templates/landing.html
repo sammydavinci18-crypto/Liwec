@@ -9,6 +9,7 @@
     Light-Way
   </a>
   <nav class="landing-nav-links">
+    <a href="#join">Join as student or teacher</a>
     <a href="#tracks">What we cover</a>
     <a href="#book">Book a consultant</a>
     <a href="#features">Features</a>
@@ -16,7 +17,7 @@
   </nav>
   <div class="landing-nav-actions">
     <a class="btn btn-ghost-dark btn-sm" href="{{ url_for('auth.login') }}">Log in</a>
-    <a class="btn btn-amber btn-sm" href="{{ url_for('auth.register') }}">Get started</a>
+    <a class="btn btn-amber btn-sm" href="{{ url_for('auth.register') }}">Sign up</a>
   </div>
 </header>
 {% endblock %}
@@ -35,9 +36,42 @@
       whichever path you need.
     </p>
     <div class="hero-actions">
-      <a class="btn btn-amber btn-lg" href="{{ url_for('auth.register') }}">Get started free</a>
+      <a class="btn btn-amber btn-lg" href="{{ url_for('auth.register', **{'as': 'student'}) }}">Apply as a student</a>
+      <a class="btn btn-ghost-dark btn-lg" href="{{ url_for('auth.register', **{'as': 'teacher'}) }}">Apply as a teacher</a>
       <a class="btn btn-ghost-dark btn-lg" href="{{ url_for('meetings.join_meeting') }}">I have a room code</a>
     </div>
+  </div>
+</section>
+
+<!-- Join: the three ways into the school -->
+<section class="section-band section-join" id="join">
+  <div class="section-inner">
+    <span class="eyebrow eyebrow-dark">Join Light-Way</span>
+    <h2>Choose how you want to join.</h2>
+    <div class="join-grid">
+      <div class="join-card">
+        <div class="feature-icon" data-icon="graduationCap"></div>
+        <h3>I'm a student</h3>
+        <p>Apply to enroll in our Cambridge-structured classes. Our admin team reviews your application and places you with a verified teacher.</p>
+        <a class="btn btn-primary" href="{{ url_for('auth.register', **{'as': 'student'}) }}">Apply as a student</a>
+      </div>
+      <div class="join-card">
+        <div class="feature-icon" data-icon="users"></div>
+        <h3>I'm a teacher</h3>
+        <p>Apply to teach Cambridge stages and subjects, as an official Light-Way teacher or independently. Every teacher is verified before going live.</p>
+        <a class="btn btn-primary" href="{{ url_for('auth.register', **{'as': 'teacher'}) }}">Apply as a teacher</a>
+      </div>
+      <div class="join-card">
+        <div class="feature-icon" data-icon="check"></div>
+        <h3>I'm a parent or guardian</h3>
+        <p>Create an account and link your child's account to follow their progress. Your child approves the link.</p>
+        <a class="btn btn-ghost" href="{{ url_for('auth.register', **{'as': 'parent'}) }}">Sign up as a parent</a>
+      </div>
+    </div>
+    <p class="join-note">
+      Already have an account? <a href="{{ url_for('auth.login') }}">Log in</a>.
+      Looking for a consultant instead? <a href="{{ url_for('consultants.directory') }}">Browse consultants</a>.
+    </p>
   </div>
 </section>
 
@@ -206,8 +240,11 @@
 <section class="cta-band">
   <div class="section-inner cta-inner">
     <h2>Ready to find your way forward?</h2>
-    <p>Set up your first consultation in under a minute.</p>
-    <a class="btn btn-amber btn-lg" href="{{ url_for('auth.register') }}">Create your free account</a>
+    <p>Join as a student or teacher, or book your first consultation.</p>
+    <div class="hero-actions">
+      <a class="btn btn-amber btn-lg" href="{{ url_for('auth.register', **{'as': 'student'}) }}">Apply as a student</a>
+      <a class="btn btn-ghost-dark btn-lg" href="{{ url_for('auth.register', **{'as': 'teacher'}) }}">Apply as a teacher</a>
+    </div>
   </div>
 </section>
 
