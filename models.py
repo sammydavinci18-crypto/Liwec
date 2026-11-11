@@ -129,6 +129,11 @@ class Meeting(db.Model):
         been invited by the admin."""
         if self.is_hosted_by(user):
             return "cancelled" if self.status == "cancelled" else "host"
+        # Any admin may look back at a finished or cancelled session (recording,
+        # notes, details) even if a different admin account originally hosted it.
+        # Without this, an admin who isn't the recorded host got a bare 404.
+        if user and user.is_authenticated and user.is_admin and self.status in ("ended", "cancelled"):
+            return "cancelled" if self.status == "cancelled" else "ok"
         if not self.is_invited(user):
             return "forbidden"
         if self.status == "cancelled":
