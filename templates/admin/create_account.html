@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Add a teacher or student · Admin · Light-Way{% endblock %}
+
+{% block content %}
+<a class="back-link" href="{{ url_for('admin.users') }}">&larr; All users</a>
+
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Admin</span>
+    <h1>Add a teacher or student</h1>
+    <p>Create the account yourself. They're approved straight away, and you'll get their login details to share with them.</p>
+  </div>
+</div>
+
+<div class="booking-card" style="max-width: 560px;">
+  <form method="POST">
+    <div class="field">
+      <label for="account_type">This person is a</label>
+      <select id="account_type" name="account_type" onchange="toggleType()">
+        <option value="teacher" {{ 'selected' if form.get('account_type') == 'teacher' }}>Teacher</option>
+        <option value="student" {{ 'selected' if form.get('account_type', 'student') == 'student' }}>Student</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="name">Full name</label>
+      <input id="name" name="name" type="text" value="{{ form.get('name', '') }}" required>
+    </div>
+    <div class="field">
+      <label for="email">Email address (this is their login)</label>
+      <input id="email" name="email" type="email" value="{{ form.get('email', '') }}" required>
+    </div>
+    <div class="field">
+      <label for="password">Password <span class="sub">(leave blank to generate one)</span></label>
+      <input id="password" name="password" type="text" autocomplete="off" value="{{ form.get('password', '') }}">
+    </div>
+
+    <div id="teacher-fields">
+      <div class="field">
+        <label for="teacher_type">Teacher type</label>
+        <select id="teacher_type" name="teacher_type">
+          <option value="official" {{ 'selected' if form.get('teacher_type', 'official') == 'official' }}>Official (Light-Way staff)</option>
+          <option value="independent" {{ 'selected' if form.get('teacher_type') == 'independent' }}>Independent</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="headline">Headline <span class="sub">(optional)</span></label>
+        <input id="headline" name="headline" type="text" value="{{ form.get('headline', '') }}">
+      </div>
+      <div class="field">
+        <label>Stages taught <span class="sub">(optional)</span></label>
+        {% for key, label in stages %}
+        <label style="display:block; font-weight:400;"><input type="checkbox" name="stages" value="{{ key }}" {{ 'checked' if key in form.getlist('stages') }}> {{ label }}</label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div id="student-fields">
+      <div class="field">
+        <label for="desired_stage">Programme <span class="sub">(optional)</span></label>
+        <select id="desired_stage" name="desired_stage">
+          <option value="">— Not set —</option>
+          {% for key, label in programs %}
+          <option value="{{ key }}" {{ 'selected' if form.get('desired_stage') == key }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="subjects">Subjects <span class="sub">(optional, comma-separated)</span></label>
+      <input id="subjects" name="subjects" type="text" value="{{ form.get('subjects', '') }}">
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-block">Create account</button>
+  </form>
+</div>
+
+<script>
+function toggleType() {
+  var t = document.getElementById('account_type').value;
+  document.getElementById('teacher-fields').style.display = t === 'teacher' ? '' : 'none';
+  document.getElementById('student-fields').style.display = t === 'student' ? '' : 'none';
+}
+toggleType();
+</script>
+{% endblock %}

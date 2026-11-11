@@ -24,6 +24,12 @@
     <p><strong>Sessions invited to:</strong> {{ sessions_invited_count }}</p>
     <p><strong>Requests made to the administrator:</strong> {{ requests_made_count }}</p>
 
+    {% if user.student_profile %}
+    <h3>Student profile</h3>
+    <p><strong>Status:</strong> <span class="status-pill status-{{ user.student_profile.status }}">{{ user.student_profile.status|capitalize }}</span></p>
+    <p><a href="{{ url_for('admin.student_review', profile_id=user.student_profile.id) }}">View student application &rarr;</a></p>
+    {% endif %}
+
     {% if user.teacher_profile %}
     <h3>Teacher profile</h3>
     <p><strong>Status:</strong> <span class="status-pill status-{{ user.teacher_profile.status }}">{{ user.teacher_profile.status|capitalize }}</span></p>
@@ -38,6 +44,16 @@
   </div>
 
   <div class="profile-side">
+    {% if not user.is_admin %}
+    <div class="booking-card">
+      <h3>Login details</h3>
+      <p class="sub">Passwords are stored securely and can't be viewed. To give {{ user.name }} login details, set a new temporary password and share it with them.</p>
+      <form method="POST" action="{{ url_for('admin.reset_password', user_id=user.id) }}" onsubmit="return confirm('Set a new password for {{ user.name|replace("'", "") }}? Their old password will stop working.');">
+        <button type="submit" class="btn btn-ghost btn-block">Set new password &amp; show details</button>
+      </form>
+    </div>
+    {% endif %}
+
     {% if user.id != current_user.id and not user.is_admin %}
     <div class="booking-card">
       <h3>Registrar</h3>

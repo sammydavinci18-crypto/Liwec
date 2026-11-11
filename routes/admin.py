@@ -1,3 +1,4 @@
+import secrets
 from datetime import datetime
 
 from flask import (
@@ -5,12 +6,13 @@ from flask import (
     send_from_directory,
 )
 from flask_login import login_required, current_user
+from werkzeug.datastructures import MultiDict
 
 import storage
 from extensions import db
 from models import User, Meeting, MeetingInvite, MeetingRequest, MEETING_TYPES
 from models import Announcement, ANNOUNCEMENT_AUDIENCES
-from models import TeacherProfile, TeacherVerificationDocument
+from models import TeacherProfile, TeacherVerificationDocument, CAMBRIDGE_STAGES, STUDENT_PROGRAMS
 from models import StudentProfile, StudentVerificationDocument, StudentTeacherAssignment
 from permissions import admin_required
 
@@ -592,3 +594,107 @@ def toggle_registrar(user_id):
     db.session.commit()
     flash(f"{user.name} is now {'a registrar' if user.is_registrar else 'a regular user'}.", "success")
     return redirect(url_for("admin.user_detail", user_id=user_id))
+
+
+# ---------------------------------------------------------------------------
+# Admin-created accounts — the Director can enrol a teacher or student himself,
+# even if they never signed up, then hand them their login details later.
+# Accounts made here are approved straight away (the admin is vouching for
+# them), so no document review is needed.
+# ---------------------------------------------------------------------------
+
+_PASSWORD_ALPHABET = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no look-alikes (0/O, 1/l/I)
+
+
+def _generate_password(length=10):
+    return "".join(secrets.choice(_PASSWORD_ALPHABET) for _ in range(length))
+
+
+@admin_bp.route("/admin/users/new", methods=["GET", "POST"])
+@login_required
+@admin_required
+def create_account():
+    form = MultiDict()
+    if request.method == "POST":
+        form = request.form
+        name = form.get("name", "").strip()
+        email = form.get("email", "").strip().lower()
+        account_type = form.get("account_type", "student")
+        password = form.get("password", "").strip() or _generate_password()
+
+        def fail(msg):
+            flash(msg, "error")
+            return render_template("admin/create_account.html", form=form,
+                                   stages=CAMBRIDGE_STAGES, programs=STUDENT_PROGRAMS)
+
+        if account_type not in ("teacher", "student"):
+            return fail("Choose whether this is a teacher or a student.")
+        if not name or not email or "@" not in email:
+            return fail("Enter a name and a valid email address.")
+        if len(password) < 6:
+            return fail("Password should be at least 6 characters.")
+        if User.query.filter_by(email=email).first():
+            return fail("An account with that email already exists.")
+
+        user = User(name=name, email=email)
+        user.set_password(password)
+        db.session.add(user)
+        db.session.flush()
+
+        now = datetime.utcnow()
+        if account_type == "teacher":
+            valid_stage_keys = {k for k, _ in CAMBRIDGE_STAGES}
+            stages = [x for x in form.getlist("stages") if x in valid_stage_keys]
+            teacher_type = form.get("teacher_type", "official")
+            if teacher_type not in ("official", "independent"):
+                teacher_type = "official"
+            db.session.add(TeacherProfile(
+                user_id=user.id,
+                headline=form.get("headline", "").strip() or None,
+                subjects=form.get("subjects", "").strip() or None,
+                stages=",".join(stages),
+                teacher_type=teacher_type,
+                status="approved", reviewed_at=now, reviewed_by_id=current_user.id,
+            ))
+        else:
+            valid_programs = {k for k, _ in STUDENT_PROGRAMS}
+            program = form.get("desired_stage")
+            profile = StudentProfile(
+                user_id=user.id,
+                desired_stage=program if program in valid_programs else None,
+                subjects_of_interest=form.get("subjects", "").strip() or None,
+                notes="Account created by the administrator.",
+                status="approved", reviewed_at=now, reviewed_by_id=current_user.id,
+            )
+            db.session.add(profile)
+            db.session.flush()
+            profile.ensure_reference()
+
+        db.session.commit()
+        return render_template(
+            "admin/account_credentials.html", person=user, password=password,
+            account_type=account_type, just_created=True,
+            login_url=url_for("auth.login", _external=True),
+        )
+
+    return render_template("admin/create_account.html", form=form,
+                           stages=CAMBRIDGE_STAGES, programs=STUDENT_PROGRAMS)
+
+
+@admin_bp.route("/admin/users/<int:user_id>/reset-password", methods=["POST"])
+@login_required
+@admin_required
+def reset_password(user_id):
+    """Set a fresh temporary password so the admin can (re)share login details."""
+    user = User.query.get_or_404(user_id)
+    if user.is_admin and user.id != current_user.id:
+        flash("Can't reset another admin's password from here.", "error")
+        return redirect(url_for("admin.user_detail", user_id=user.id))
+    password = _generate_password()
+    user.set_password(password)
+    db.session.commit()
+    return render_template(
+        "admin/account_credentials.html", person=user, password=password,
+        account_type=None, just_created=False,
+        login_url=url_for("auth.login", _external=True),
+    )
