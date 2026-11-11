@@ -254,7 +254,11 @@ def create_app():
         """Portable date/time display (the platform stores and shows UTC)."""
         if not value:
             return "—"
-        return value.strftime("%a %d %b %Y, %H:%M") + " UTC"
+        from markupsafe import Markup
+        # Server-rendered fallback is UTC; static/js/localtime.js rewrites it
+        # into the viewer's own timezone (the stored value is always UTC).
+        return Markup('<time class="local-time" datetime="%s">%s UTC</time>') % (
+            value.strftime("%Y-%m-%dT%H:%M:00Z"), value.strftime("%a %d %b %Y, %H:%M"))
 
     from routes.auth import auth_bp
     from routes.main import main_bp

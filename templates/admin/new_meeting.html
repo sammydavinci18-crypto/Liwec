@@ -23,8 +23,8 @@
         </select>
       </div>
       <div class="field">
-        <label for="scheduled_time">Date &amp; time (UTC)</label>
-        <input type="datetime-local" id="scheduled_time" name="scheduled_time" required value="{{ form.get('scheduled_time', '') }}">
+        <label for="scheduled_time">Date &amp; time (your local time)</label>
+        <input type="datetime-local" data-utc id="scheduled_time" name="scheduled_time" required value="{{ form.get('scheduled_time', '') }}">
       </div>
     </div>
     <div class="field">

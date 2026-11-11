@@ -38,8 +38,8 @@
       <textarea id="details" name="details" rows="4" placeholder="Anything we should know beforehand.">{{ form.get('details', '') }}</textarea>
     </div>
     <div class="field">
-      <label for="preferred_time">Preferred date &amp; time (optional, UTC)</label>
-      <input type="datetime-local" id="preferred_time" name="preferred_time" value="{{ form.get('preferred_time', '') }}">
+      <label for="preferred_time">Preferred date &amp; time (optional, your local time)</label>
+      <input type="datetime-local" data-utc id="preferred_time" name="preferred_time" value="{{ form.get('preferred_time', '') }}">
       <p class="doc-list-note">We'll confirm the final time with you.</p>
     </div>
     <button type="submit" class="btn btn-primary btn-block">Send request</button>

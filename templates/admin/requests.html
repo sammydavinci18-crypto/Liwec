@@ -28,8 +28,8 @@
     <div class="request-actions">
       <form method="POST" action="{{ url_for('admin.request_approve', request_id=r.id) }}" class="request-approve">
         <div class="field">
-          <label for="when-{{ r.id }}">Session date &amp; time (UTC)</label>
-          <input type="datetime-local" id="when-{{ r.id }}" name="scheduled_time" required
+          <label for="when-{{ r.id }}">Session date &amp; time (your local time)</label>
+          <input type="datetime-local" data-utc id="when-{{ r.id }}" name="scheduled_time" required
                  value="{{ r.preferred_time.strftime('%Y-%m-%dT%H:%M') if r.preferred_time else '' }}">
         </div>
         <div class="field">

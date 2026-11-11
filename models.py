@@ -140,6 +140,11 @@ class Meeting(db.Model):
             return "cancelled"
         if self.status == "ended":
             return "ok"  # may view the recording
+        # The admin has already opened the room, so invited guests may come in
+        # whatever the schedule says (the waiting-room window only matters
+        # before the host has started the session).
+        if self.status == "live":
+            return "ok"
         opens = self.lobby_opens_at()
         if opens and datetime.utcnow() < opens:
             return "not_open"

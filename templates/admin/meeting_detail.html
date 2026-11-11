@@ -67,7 +67,7 @@
       <h3>Reschedule</h3>
       <form method="POST" action="{{ url_for('admin.meeting_reschedule', meeting_id=meeting.id) }}">
         <div class="field">
-          <input type="datetime-local" name="scheduled_time" required value="{{ meeting.scheduled_time.strftime('%Y-%m-%dT%H:%M') if meeting.scheduled_time else '' }}">
+          <input type="datetime-local" data-utc name="scheduled_time" required value="{{ meeting.scheduled_time.strftime('%Y-%m-%dT%H:%M') if meeting.scheduled_time else '' }}">
         </div>
         <button type="submit" class="btn btn-ghost btn-block">Save new time</button>
       </form>
