@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Announcements · Admin · Light-Way{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Admin</span>
+    <h1>Announcements &amp; calendar</h1>
+    <p>Post a notice for everyone or for one group. Add a date and it also appears on the school calendar.</p>
+  </div>
+</div>
+
+<div class="profile-summary-card">
+  <form method="POST">
+    <div class="field">
+      <label for="title">Title</label>
+      <input type="text" id="title" name="title" maxlength="200" required placeholder="e.g. Term 2 begins">
+    </div>
+    <div class="field">
+      <label for="body">Details (optional)</label>
+      <textarea id="body" name="body" rows="3"></textarea>
+    </div>
+    <div class="field-row field-row-2">
+      <div class="field">
+        <label for="audience">Who should see it?</label>
+        <select id="audience" name="audience">
+          {% for key, label in audiences %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="event_date">Calendar date (optional, UTC)</label>
+        <input type="datetime-local" id="event_date" name="event_date">
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary">Post announcement</button>
+  </form>
+</div>
+
+<h3 class="section-heading">Posted</h3>
+{% if items %}
+<div class="appointment-list">
+  {% for a in items %}
+  <div class="appointment-row">
+    <div>
+      <strong>{{ a.title }}</strong>
+      <span class="appt-time">{{ a.audience_label() }} · {{ a.created_at|dt }}{% if a.event_date %} · Calendar: {{ a.event_date|dt }}{% endif %}</span>
+      {% if a.body %}<p class="appt-note">{{ a.body }}</p>{% endif %}
+    </div>
+    <form method="POST" action="{{ url_for('admin.announcement_delete', announcement_id=a.id) }}">
+      <button type="submit" class="btn btn-ghost btn-sm">Remove</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">Nothing posted yet.</div>
+{% endif %}
+{% endblock %}

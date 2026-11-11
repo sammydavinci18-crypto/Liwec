@@ -1,0 +1,8 @@
+<ol class="tracker" aria-label="Application progress">
+  {% for s in stages %}
+  <li class="tracker-step tracker-{{ s.state }}">
+    <span class="tracker-dot">{% if s.state == 'done' %}&#10003;{% elif s.state == 'failed' %}!{% else %}{{ loop.index }}{% endif %}</span>
+    <span class="tracker-label">{{ s.label }}</span>
+  </li>
+  {% endfor %}
+</ol>

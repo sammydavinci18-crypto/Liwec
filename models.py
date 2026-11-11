@@ -344,8 +344,12 @@ class StudentProfile(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), unique=True, nullable=False)
 
+    # Shown to the applicant and their family, e.g. "LW-2026-0007". Assigned on
+    # application (or lazily for older rows) — see ensure_reference().
+    reference_number = db.Column(db.String(20), index=True)
+
     date_of_birth = db.Column(db.Date)
-    desired_stage = db.Column(db.String(30))  # one of the CAMBRIDGE_STAGES keys
+    desired_stage = db.Column(db.String(30))  # a STUDENT_PROGRAMS key (older rows may hold a Cambridge stage)
     subjects_of_interest = db.Column(db.String(255))
     notes = db.Column(db.Text)  # anything the admin should know (prior schooling, needs, etc.)
 
@@ -362,6 +366,29 @@ class StudentProfile(db.Model):
 
     def stage_label(self):
         return dict(STUDENT_PROGRAMS + CAMBRIDGE_STAGES).get(self.desired_stage, self.desired_stage or "—")
+
+    def ensure_reference(self):
+        """Give this application its reference number if it has none yet.
+        Returns True if it changed (caller should commit)."""
+        if self.reference_number or not self.id:
+            return False
+        year = (self.submitted_at or datetime.utcnow()).year
+        self.reference_number = f"LW-{year}-{self.id:04d}"
+        return True
+
+    def tracker_stages(self, has_teacher):
+        """The four-step admission timeline: a list of
+        {"label", "state"} where state is done | current | todo | failed."""
+        approved = self.status == "approved"
+        rejected = self.status == "rejected"
+        return [
+            {"label": "Application received", "state": "done"},
+            {"label": "Under review", "state": "done" if (approved or rejected) else "current"},
+            {"label": "Not approved" if rejected else "Place confirmed",
+             "state": "failed" if rejected else ("done" if approved else "todo")},
+            {"label": "Placed with a teacher",
+             "state": "done" if (approved and has_teacher) else ("current" if approved else "todo")},
+        ]
 
 
 class StudentVerificationDocument(db.Model):
@@ -392,3 +419,54 @@ class StudentTeacherAssignment(db.Model):
     student = db.relationship("User", foreign_keys=[student_id])
     teacher = db.relationship("User", foreign_keys=[teacher_id])
     assigned_by = db.relationship("User", foreign_keys=[assigned_by_id])
+
+
+# =============================================================================
+# School communication & reporting
+# =============================================================================
+
+ANNOUNCEMENT_AUDIENCES = [
+    ("all", "Everyone"),
+    ("students", "Students"),
+    ("teachers", "Teachers"),
+    ("parents", "Parents & guardians"),
+]
+
+
+class Announcement(db.Model):
+    """A notice posted by the admin. With an event_date it also appears on the
+    school calendar (term dates, open days, exam weeks...)."""
+    __tablename__ = "announcements"
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    body = db.Column(db.Text)
+    audience = db.Column(db.String(20), default="all", nullable=False)  # see ANNOUNCEMENT_AUDIENCES
+    event_date = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+    def audience_label(self):
+        return dict(ANNOUNCEMENT_AUDIENCES).get(self.audience, "Everyone")
+
+
+class ProgressReport(db.Model):
+    """A teacher's written report on one of their placed students. Visible to
+    the student, their linked parents, the teacher and the admin."""
+    __tablename__ = "progress_reports"
+
+    id = db.Column(db.Integer, primary_key=True)
+    student_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    teacher_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    term = db.Column(db.String(60), nullable=False)       # e.g. "Term 1 2026"
+    subject = db.Column(db.String(120), nullable=False)
+    grade = db.Column(db.String(30))                       # e.g. "B+", "Meeting expectations"
+    summary = db.Column(db.Text, nullable=False)
+    strengths = db.Column(db.Text)
+    next_steps = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    student = db.relationship("User", foreign_keys=[student_id])
+    teacher = db.relationship("User", foreign_keys=[teacher_id])

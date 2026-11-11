@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}{{ report.subject }} report · Light-Way{% endblock %}
+
+{% block content %}
+<div class="report-sheet">
+  <div class="report-head">
+    <img src="{{ url_for('static', filename='img/logo-crest-small.png') }}" alt="Light-Way crest" class="report-crest">
+    <div>
+      <span class="eyebrow eyebrow-dark">Light-Way International Virtual Academy</span>
+      <h1>Progress report</h1>
+      <p class="report-tagline">Lighting Paths. Empowering Futures.</p>
+    </div>
+  </div>
+
+  <div class="report-meta">
+    <p><strong>Student</strong>{{ report.student.name }}</p>
+    <p><strong>Subject</strong>{{ report.subject }}</p>
+    <p><strong>Term</strong>{{ report.term }}</p>
+    <p><strong>Teacher</strong>{{ report.teacher.name }}</p>
+    {% if report.grade %}<p><strong>Grade</strong>{{ report.grade }}</p>{% endif %}
+    <p><strong>Date</strong>{{ report.created_at|dt }}</p>
+  </div>
+
+  <h3>Progress</h3>
+  <p class="report-text">{{ report.summary }}</p>
+  {% if report.strengths %}<h3>Strengths</h3><p class="report-text">{{ report.strengths }}</p>{% endif %}
+  {% if report.next_steps %}<h3>Next steps</h3><p class="report-text">{{ report.next_steps }}</p>{% endif %}
+
+  <div class="report-actions no-print">
+    <button class="btn btn-primary" onclick="window.print()">Print / save as PDF</button>
+    <a class="btn btn-ghost" href="{{ url_for('portal.student_reports', student_id=report.student_id) }}">All reports</a>
+  </div>
+</div>
+{% endblock %}

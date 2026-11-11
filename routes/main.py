@@ -4,6 +4,7 @@ from flask import Blueprint, render_template, redirect, url_for
 from flask_login import login_required, current_user
 
 from models import Meeting, MeetingInvite, MeetingRequest
+from school import visible_announcements
 
 main_bp = Blueprint("main", __name__)
 
@@ -27,7 +28,7 @@ def dashboard():
         upcoming.sort(key=lambda m: m.scheduled_time or m.created_at)
         pending_count = MeetingRequest.query.filter_by(status="pending").count()
         return render_template("dashboard.html", upcoming=upcoming, pending_count=pending_count,
-                               past=[], my_requests=[])
+                               past=[], my_requests=[], announcements=visible_announcements(current_user, limit=3))
 
     invited = (
         Meeting.query.join(MeetingInvite, MeetingInvite.meeting_id == Meeting.id)
@@ -41,4 +42,4 @@ def dashboard():
         .order_by(MeetingRequest.created_at.desc()).limit(5).all()
     )
     return render_template("dashboard.html", upcoming=upcoming, past=past, my_requests=my_requests,
-                           pending_count=0)
+                           pending_count=0, announcements=visible_announcements(current_user, limit=3))

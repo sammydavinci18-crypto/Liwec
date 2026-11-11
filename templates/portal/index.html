@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}My school · Light-Way{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Light-Way International Virtual Academy</span>
+    <h1>My school</h1>
+    <p>Applications, teachers, classes and progress reports in one place.</p>
+  </div>
+  <div class="dash-actions">
+    <a class="btn btn-ghost" href="{{ url_for('portal.timetable') }}">Timetable</a>
+    <a class="btn btn-ghost" href="{{ url_for('family.dashboard') }}">Family links</a>
+  </div>
+</div>
+
+{% if announcements %}
+<div class="section-label">Announcements</div>
+<div class="notice-list">
+  {% for a in announcements %}
+  <div class="notice">
+    <strong>{{ a.title }}</strong>
+    {% if a.event_date %}<span class="notice-date">{{ a.event_date|dt }}</span>{% endif %}
+    {% if a.body %}<p>{{ a.body }}</p>{% endif %}
+  </div>
+  {% endfor %}
+  <a href="{{ url_for('portal.announcements') }}">All announcements &rarr;</a>
+</div>
+{% endif %}
+
+{% for s in summaries %}
+<section class="student-panel">
+  <div class="student-panel-head">
+    <div>
+      <h2>{{ s.student.name }}{% if s.is_self %} <span class="status-pill status-confirmed">You</span>{% endif %}</h2>
+      {% if s.profile %}
+        <span class="appt-time">{{ s.profile.stage_label() }}</span>
+      {% endif %}
+    </div>
+    {% if s.profile %}
+    <div class="ref-card">
+      <span class="ref-label">Reference</span>
+      <strong class="ref-number">{{ s.profile.reference_number or '—' }}</strong>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if s.profile %}
+    {% with stages=s.stages %}{% include "_tracker.html" %}{% endwith %}
+  {% else %}
+    <p class="sub">This student hasn't applied yet.</p>
+  {% endif %}
+
+  <div class="student-panel-grid">
+    <div>
+      <h3>Teachers</h3>
+      {% if s.teachers %}
+        {% for t in s.teachers %}<p>{{ t.name }}{% if t.teacher_profile and t.teacher_profile.subjects %} <span class="appt-time">· {{ t.teacher_profile.subjects }}</span>{% endif %}</p>{% endfor %}
+      {% else %}<p class="sub">Not placed yet.</p>{% endif %}
+    </div>
+    <div>
+      <h3>Upcoming sessions</h3>
+      {% if s.sessions %}
+        {% for m in s.sessions[:3] %}
+          <p><strong>{{ m.title }}</strong><br><span class="appt-time">{{ m.scheduled_time|dt }}</span>
+          {% if s.is_self %}<br><a href="{{ url_for('meetings.room', room_code=m.room_code) }}">Enter waiting room</a>{% endif %}</p>
+        {% endfor %}
+      {% else %}<p class="sub">Nothing scheduled.</p>{% endif %}
+    </div>
+    <div>
+      <h3>Progress reports</h3>
+      {% if s.reports %}
+        {% for r in s.reports[:3] %}<p><a href="{{ url_for('portal.view_report', report_id=r.id) }}">{{ r.subject }} · {{ r.term }}</a></p>{% endfor %}
+        <a href="{{ url_for('portal.student_reports', student_id=s.student.id) }}">All reports &rarr;</a>
+      {% else %}<p class="sub">No reports yet.</p>{% endif %}
+    </div>
+  </div>
+</section>
+{% else %}
+<div class="empty-state">
+  Nothing to show yet. <a href="{{ url_for('students.apply') }}">Apply as a student</a>, or
+  <a href="{{ url_for('family.dashboard') }}">link your child's account</a> if you're a parent or guardian.
+</div>
+{% endfor %}
+{% endblock %}

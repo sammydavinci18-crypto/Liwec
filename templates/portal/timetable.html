@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Timetable · Light-Way{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Timetable &amp; calendar</span>
+    <h1>What's coming up</h1>
+    <p>Your live sessions, and key dates in the school calendar. Times are shown in UTC.</p>
+  </div>
+</div>
+
+<div class="timetable-layout">
+  <div>
+    <div class="section-label">Live sessions</div>
+    {% if days %}
+      {% for day, items in days.items() %}
+      <div class="tt-day">
+        <div class="tt-date"><strong>{{ day.strftime('%d') }}</strong><span>{{ day.strftime('%a %b') }}</span></div>
+        <div class="tt-items">
+          {% for m, child in items %}
+          <div class="tt-item">
+            <div>
+              <strong>{{ m.title }}</strong>
+              <span class="appt-time">{{ m.scheduled_time.strftime('%H:%M') + ' UTC' if m.scheduled_time else '' }} · {{ m.type_label() }}{% if child %} · for {{ child.name }}{% endif %}</span>
+            </div>
+            {% if not child %}
+            <a class="btn btn-ghost btn-sm" href="{{ url_for('meetings.room', room_code=m.room_code) }}">{{ 'Open room' if current_user.is_admin else 'Waiting room' }}</a>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state">No upcoming sessions.</div>
+    {% endif %}
+  </div>
+
+  <aside>
+    <div class="section-label">School calendar</div>
+    {% if events %}
+      <div class="notice-list">
+        {% for e in events %}
+        <div class="notice">
+          <span class="notice-date">{{ e.event_date|dt }}</span>
+          <strong>{{ e.title }}</strong>
+          {% if e.body %}<p>{{ e.body }}</p>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty-state">No dates posted yet.</div>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

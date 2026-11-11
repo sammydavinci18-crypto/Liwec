@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Announcements · Light-Way{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">News</span>
+    <h1>Announcements</h1>
+  </div>
+</div>
+{% if items %}
+<div class="notice-list">
+  {% for a in items %}
+  <div class="notice">
+    <strong>{{ a.title }}</strong>
+    <span class="notice-date">Posted {{ a.created_at|dt }}{% if a.event_date %} · Date: {{ a.event_date|dt }}{% endif %}</span>
+    {% if a.body %}<p>{{ a.body }}</p>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">No announcements yet.</div>
+{% endif %}
+{% endblock %}

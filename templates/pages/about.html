@@ -1,0 +1,53 @@
+{% extends "base_public.html" %}
+{% block title %}Our crest · Light-Way International Virtual Academy{% endblock %}
+{% block head %}<meta name="description" content="The meaning behind the Light-Way crest: shield, crown, open book, globe, graduation cap, torch and laurel wreath, in navy and gold.">{% endblock %}
+{% block page_class %}landing-page{% endblock %}
+
+{% block content %}
+<section class="public-hero">
+  <img src="{{ url_for('static', filename='img/logo-crest-large.png') }}" alt="Light-Way crest" class="hero-crest">
+  <span class="eyebrow">Our identity</span>
+  <h1>Every symbol stands for something.</h1>
+  <p>Our crest tells the story of the academy: a place that lights the educational path, guides learners with purpose, and empowers them toward excellence.</p>
+</section>
+
+<section class="section-band">
+  <div class="section-inner">
+    <span class="eyebrow eyebrow-dark">Reading the crest</span>
+    <h2>Eight symbols, one story.</h2>
+    <div class="crest-grid">
+      <div class="crest-card"><span class="crest-num">1</span><h3>The Shield</h3><p>Protection, strength, integrity and excellence. Learners enter a structured and secure environment where their development is valued and protected.</p></div>
+      <div class="crest-card"><span class="crest-num">2</span><h3>The Crown</h3><p>Excellence, leadership, achievement and high standards. We aim to develop learners who aspire to outstanding academic and personal achievement.</p></div>
+      <div class="crest-card"><span class="crest-num">3</span><h3>The Open Book</h3><p>Knowledge, learning, discovery and continuous education, the foundation of everything the academy offers.</p></div>
+      <div class="crest-card"><span class="crest-num">4</span><h3>The Globe</h3><p>International outlook, global citizenship and worldwide opportunity. Learners are prepared for an increasingly global world, not only local opportunities.</p></div>
+      <div class="crest-card"><span class="crest-num">5</span><h3>The Graduation Cap</h3><p>Academic achievement, progression and the successful completion of milestones, from foundational learning toward higher goals.</p></div>
+      <div class="crest-card"><span class="crest-num">6</span><h3>The Torch</h3><p>Guidance, enlightenment, inspiration and wisdom. It carries the idea in our name: a light along each learner's journey.</p></div>
+      <div class="crest-card"><span class="crest-num">7</span><h3>The Laurel Wreath</h3><p>Victory, honour, accomplishment and excellence. Around the shield, it celebrates every learner's progress.</p></div>
+      <div class="crest-card"><span class="crest-num">8</span><h3>Navy &amp; Gold</h3><p>Navy for trust, professionalism, stability and academic seriousness. Gold for excellence, prestige, achievement and opportunity.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section-band section-join">
+  <div class="section-inner">
+    <span class="eyebrow eyebrow-dark">Our name</span>
+    <h2>Light-Way International Virtual Academy</h2>
+    <div class="mission-grid">
+      <div class="mission-card"><h3>Light-Way</h3><p>Guidance and direction.</p></div>
+      <div class="mission-card"><h3>International</h3><p>A global educational perspective.</p></div>
+      <div class="mission-card"><h3>Virtual Academy</h3><p>Modern, flexible, technology-enabled learning.</p></div>
+    </div>
+    <div class="laurel-rule" aria-hidden="true">&#10086;</div>
+    <div class="mission-grid">
+      <div class="mission-card"><h3>Lighting Paths</h3><p>Providing learners with direction and educational opportunities.</p></div>
+      <div class="mission-card"><h3>Empowering Futures</h3><p>Equipping learners with the knowledge, confidence and skills they need for future success.</p></div>
+    </div>
+    <p class="crest-quote">A prestigious, globally minded academy that lights the educational path, guides learners with purpose, and empowers them toward excellence.</p>
+    <div class="hero-actions" style="margin-top:32px;">
+      <a class="btn btn-primary btn-lg" href="{{ url_for('pages.admissions') }}">How to apply</a>
+      <a class="btn btn-ghost btn-lg" href="{{ url_for('main.index') }}#programs">Our programmes</a>
+    </div>
+  </div>
+</section>
+{% include "_public_footer.html" %}
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block topheader %}
+<header class="landing-nav">
+  <a class="brand brand-on-dark" href="{{ url_for('main.index') }}">
+    <img src="{{ url_for('static', filename='img/logo-crest-small.png') }}" alt="Light-Way crest" class="brand-crest">
+    Light-Way
+  </a>
+  <nav class="landing-nav-links">
+    <a href="{{ url_for('main.index') }}">Home</a>
+    <a href="{{ url_for('pages.about') }}">Our crest</a>
+    <a href="{{ url_for('pages.admissions') }}">Admissions</a>
+    <a href="{{ url_for('pages.safeguarding') }}">Safeguarding</a>
+    <a href="{{ url_for('main.index') }}#consultancy">Consultancy</a>
+  </nav>
+  <div class="landing-nav-actions">
+    {% if current_user.is_authenticated %}
+    <a class="btn btn-amber btn-sm" href="{{ url_for('main.dashboard') }}">My account</a>
+    {% else %}
+    <a class="btn btn-ghost-dark btn-sm" href="{{ url_for('auth.login') }}">Log in</a>
+    <a class="btn btn-amber btn-sm" href="{{ url_for('auth.register') }}">Sign up</a>
+    {% endif %}
+  </div>
+</header>
+{% endblock %}
+

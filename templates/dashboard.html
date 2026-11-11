@@ -32,15 +32,38 @@
   </div>
 </div>
 
-{% if pending_count %}
-<div class="marketplace-promo">
-  <div>
-    <h3>{{ pending_count }} request{{ '' if pending_count == 1 else 's' }} waiting for your decision</h3>
-    <p>People have asked for a consultation or a meeting. Approve with a date and time, or decline.</p>
+<div class="section-label">Needs your attention</div>
+<div class="attention-grid">
+  <a class="attention-card {{ 'is-hot' if pending_requests_count else 'is-clear' }}" href="{{ url_for('admin.requests_queue') }}">
+    <span class="attention-num">{{ pending_requests_count }}</span>
+    <span class="attention-label">Consultation &amp; meeting requests</span>
+  </a>
+  <a class="attention-card {{ 'is-hot' if pending_students_count else 'is-clear' }}" href="{{ url_for('admin.student_queue') }}">
+    <span class="attention-num">{{ pending_students_count }}</span>
+    <span class="attention-label">Student applications to review</span>
+  </a>
+  <a class="attention-card {{ 'is-hot' if pending_teachers_count else 'is-clear' }}" href="{{ url_for('admin.teacher_queue') }}">
+    <span class="attention-num">{{ pending_teachers_count }}</span>
+    <span class="attention-label">Teacher applications to review</span>
+  </a>
+  <a class="attention-card {{ 'is-hot' if unplaced_count else 'is-clear' }}" href="{{ url_for('admin.placements') }}">
+    <span class="attention-num">{{ unplaced_count }}</span>
+    <span class="attention-label">Approved students awaiting a teacher</span>
+  </a>
+</div>
+{% if not attention_total %}<p class="meta">All caught up. Nothing is waiting for you.</p>{% endif %}
+
+{% if announcements %}
+<div class="section-label">Announcements</div>
+<div class="notice-list">
+  {% for a in announcements %}
+  <div class="notice">
+    <strong>{{ a.title }}</strong>
+    {% if a.event_date %}<span class="notice-date">{{ a.event_date|dt }}</span>{% endif %}
+    {% if a.body %}<p>{{ a.body }}</p>{% endif %}
   </div>
-  <div class="marketplace-promo-actions">
-    <a class="btn btn-primary" href="{{ url_for('admin.requests_queue') }}">Review requests</a>
-  </div>
+  {% endfor %}
+  <a href="{{ url_for('portal.announcements') }}">All announcements &rarr;</a>
 </div>
 {% endif %}
 
@@ -68,17 +91,13 @@
   <div class="empty-state">Nothing scheduled. Approve a request or schedule a session to get started.</div>
 {% endif %}
 
-<div class="section-label">The school</div>
-<div class="marketplace-promo">
-  <div>
-    <h3>Admissions, teachers and placements</h3>
-    <p>Review student and teacher applications, place students with teachers, and schedule live classes for them.</p>
-  </div>
-  <div class="marketplace-promo-actions">
-    <a class="btn btn-ghost" href="{{ url_for('admin.student_queue') }}">Student review</a>
-    <a class="btn btn-ghost" href="{{ url_for('admin.teacher_queue') }}">Teacher review</a>
-    <a class="btn btn-ghost" href="{{ url_for('admin.placements') }}">Placements</a>
-  </div>
+<div class="section-label">Quick actions</div>
+<div class="quick-actions">
+  <a class="quick-action" href="{{ url_for('admin.new_meeting') }}">Schedule a session<small>Class, consultation or meeting</small></a>
+  <a class="quick-action" href="{{ url_for('admin.announcements') }}">Post an announcement<small>Notices and calendar dates</small></a>
+  <a class="quick-action" href="{{ url_for('admin.placements') }}">Place a student<small>Match with a teacher</small></a>
+  <a class="quick-action" href="{{ url_for('admin.users') }}">All users<small>Accounts and roles</small></a>
+  <a class="quick-action" href="{{ url_for('family.registrar_dashboard') }}">Parent links<small>Confirm family links</small></a>
 </div>
 
 {% else %}
@@ -86,12 +105,26 @@
   <div>
     <span class="eyebrow eyebrow-dark">Light-Way International Virtual Academy</span>
     <h1>My sessions</h1>
-    <p>Sessions are scheduled by the administrator. You'll see here every session you've been invited to.</p>
+    <p>Your upcoming classes, consultations and meetings.</p>
   </div>
   <div class="dash-actions">
     <a href="{{ url_for('consult.new') }}" class="btn btn-primary">Request a consultation</a>
   </div>
 </div>
+
+{% if announcements %}
+<div class="section-label">Announcements</div>
+<div class="notice-list">
+  {% for a in announcements %}
+  <div class="notice">
+    <strong>{{ a.title }}</strong>
+    {% if a.event_date %}<span class="notice-date">{{ a.event_date|dt }}</span>{% endif %}
+    {% if a.body %}<p>{{ a.body }}</p>{% endif %}
+  </div>
+  {% endfor %}
+  <a href="{{ url_for('portal.announcements') }}">All announcements &rarr;</a>
+</div>
+{% endif %}
 
 <div class="section-label">Upcoming sessions</div>
 {% if upcoming %}
@@ -140,10 +173,11 @@
 <div class="marketplace-promo">
   <div>
     <h3>Student admissions</h3>
-    <p>Apply to one of our programmes. The administrator reviews every application and places you with a teacher.</p>
+    <p>Apply to one of our programmes. We'll place you with a teacher once you're approved.</p>
   </div>
   <div class="marketplace-promo-actions">
     {% if current_user.student_profile %}
+    <a class="btn btn-ghost" href="{{ url_for('portal.index') }}">My school</a>
     <a class="btn btn-primary" href="{{ url_for('students.my_profile') }}">My admission</a>
     {% else %}
     <a class="btn btn-primary" href="{{ url_for('students.apply') }}">Apply as a student</a>
@@ -154,7 +188,7 @@
 <div class="marketplace-promo">
   <div>
     <h3>Teach with Light-Way</h3>
-    <p>Apply to teach Cambridge stages and subjects. Every teacher is verified by the administrator before going live.</p>
+    <p>Apply to teach Cambridge stages and subjects. Every teacher is verified before going live.</p>
   </div>
   <div class="marketplace-promo-actions">
     {% if current_user.teacher_profile %}
@@ -172,6 +206,7 @@
     <p>Link your account to your child's so you can follow their records once classes are live.</p>
   </div>
   <div class="marketplace-promo-actions">
+    <a class="btn btn-ghost" href="{{ url_for('portal.index') }}">My school</a>
     <a class="btn btn-primary" href="{{ url_for('family.dashboard') }}">Manage family links</a>
   </div>
 </div>

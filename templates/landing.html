@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Light-Way International Virtual Academy{% endblock %}
+{% block head %}
+<meta name="description" content="Light-Way International Virtual Academy: Elite Cambridge Pathways From Home. Year 6–8 Bridging, Cambridge Transition and Home Schooling, plus education and business consultancy.">
+<meta property="og:title" content="Light-Way International Virtual Academy">
+<meta property="og:description" content="Lighting Paths. Empowering Futures.">
+<meta property="og:image" content="{{ url_for('static', filename='img/logo-crest-large.png', _external=True) }}">
+<meta name="theme-color" content="#14284B">
+{% endblock %}
 {% block page_class %}landing-page{% endblock %}
 
 {% block topheader %}
@@ -9,12 +16,13 @@
     Light-Way
   </a>
   <nav class="landing-nav-links">
-    <a href="#about">Mission</a>
+    <a href="#about">About</a>
+    <a href="#director">Director</a>
     <a href="#programs">Programmes</a>
-    <a href="#values">Values</a>
+    <a href="{{ url_for('pages.admissions') }}">Admissions</a>
     <a href="#consultancy">Consultancy</a>
-    <a href="#features">Platform</a>
-    <a href="#how-it-works">How it works</a>
+    <a href="#features">Experience</a>
+    <a href="{{ url_for('pages.safeguarding') }}">Safeguarding</a>
   </nav>
   <div class="landing-nav-actions">
     <a class="btn btn-ghost-dark btn-sm" href="{{ url_for('auth.login') }}">Log in</a>
@@ -32,14 +40,17 @@
     <h1>Elite Cambridge Pathways<br>From Home</h1>
     <p class="hero-sub">
       <strong>Lighting Paths. Empowering Futures.</strong>
-      A virtual academy offering flexible, internationally oriented education, together with
-      education and business consultancy led personally by our Director.
+      A virtual academy with an international outlook, and a consultancy that helps schools
+      and businesses find their direction.
     </p>
     <div class="hero-actions">
       <a class="btn btn-amber btn-lg" href="{{ url_for('auth.register', **{'as': 'student'}) }}">Apply as a student</a>
       <a class="btn btn-ghost-dark btn-lg" href="{{ url_for('auth.register', **{'as': 'teacher'}) }}">Apply as a teacher</a>
       <a class="btn btn-ghost-dark btn-lg" href="{{ url_for('consult.new') }}">Request a consultation</a>
     </div>
+    <ul class="hero-pills" aria-label="Highlights">
+      <li>Cambridge pathways</li><li>Live online classes</li><li>Learn from home</li><li>Education &amp; business consultancy</li>
+    </ul>
   </div>
 </section>
 
@@ -58,6 +69,26 @@
         <p>To be a leading virtual academy that lights the way to academic excellence, global opportunity and lifelong success for every learner, wherever they are.</p>
       </div>
     </div>
+    <p style="margin-top:22px;"><a href="{{ url_for('pages.about') }}">Discover the meaning behind our crest &rarr;</a></p>
+  </div>
+</section>
+
+<!-- Director's welcome.
+     DRAFT TEXT — the Director is still writing his own message. To update it, edit the
+     name/title line and the paragraphs below. Replace static/img/director.jpg to change the photo. -->
+<section class="section-band section-join" id="director">
+  <div class="section-inner director">
+    <div class="director-photo">
+      <img src="{{ url_for('static', filename='img/director.jpg') }}" alt="The Director of Light-Way International Virtual Academy">
+    </div>
+    <div class="director-text">
+      <span class="eyebrow eyebrow-dark">A welcome from our Director</span>
+      <h2>Every learner deserves a light to follow.</h2>
+      <p>At Light-Way, we believe a great education should not depend on where a child lives. Whether your child is bridging from Year 6 to Year 8, moving from a national curriculum to Cambridge, or learning at home, we walk the path beside them.</p>
+      <p>Our aim is simple: to build knowledge, character, confidence and resilience, so that every learner can step into the world with direction and purpose.</p>
+      <p>I warmly invite you to join our community.</p>
+      <p class="director-sign"><strong>The Director</strong><span>Light-Way International Virtual Academy</span></p>
+    </div>
   </div>
 </section>
 
@@ -68,29 +99,44 @@
     <h2>Three pathways into a Cambridge education.</h2>
     <div class="program-grid">
       <div class="program-card">
-        <div class="feature-icon" data-icon="graduationCap"></div>
+        <span class="program-num">01</span>
         <h3>Year 6–Year 8 Bridging</h3>
-        <p>Builds the strong foundations learners need before moving on to the Cambridge pathway.</p>
+        <p>Strong foundations before the Cambridge journey begins.</p>
+        <ul class="program-points"><li>Core literacy &amp; numeracy</li><li>Study skills &amp; confidence</li><li>Ready for lower secondary</li></ul>
       </div>
       <div class="program-card">
-        <div class="feature-icon" data-icon="check"></div>
+        <span class="program-num">02</span>
         <h3>National Curriculum to Cambridge Transition</h3>
-        <p>A guided move from a national curriculum into Cambridge, with support at each step.</p>
+        <p>A guided, supported move from your current curriculum into Cambridge.</p>
+        <ul class="program-points"><li>Gap analysis &amp; catch-up</li><li>Cambridge-style assessment</li><li>Personalised pacing</li></ul>
       </div>
       <div class="program-card">
-        <div class="feature-icon" data-icon="users"></div>
+        <span class="program-num">03</span>
         <h3>Home Schooling</h3>
-        <p>Structured, teacher-led learning that families can follow from home.</p>
+        <p>Structured, teacher-led learning that fits family life.</p>
+        <ul class="program-points"><li>Live lessons with real teachers</li><li>Flexible weekly rhythm</li><li>Progress families can follow</li></ul>
       </div>
     </div>
     <div class="hero-actions" style="margin-top:28px;">
       <a class="btn btn-primary btn-lg" href="{{ url_for('auth.register', **{'as': 'student'}) }}">Apply as a student</a>
       <a class="btn btn-ghost btn-lg" href="{{ url_for('auth.register', **{'as': 'parent'}) }}">Sign up as a parent</a>
+      <a class="btn btn-ghost btn-lg" href="{{ url_for('pages.admissions') }}">How admissions work</a>
     </div>
-    <p class="join-note">
-      Every application is reviewed by the administrator, who also places each approved student with a teacher.
-      Already have an account? <a href="{{ url_for('auth.login') }}">Log in</a>.
-    </p>
+    <p class="join-note">Already have an account? <a href="{{ url_for('auth.login') }}">Log in</a>.</p>
+  </div>
+</section>
+
+<!-- Pathway -->
+<section class="section-band section-join" id="pathway">
+  <div class="section-inner">
+    <span class="eyebrow eyebrow-dark">The learner's journey</span>
+    <h2>From first steps to a global future.</h2>
+    <ol class="pathway">
+      <li><span class="pathway-dot"></span><strong>Bridge</strong><span>Year 6–8 foundations</span></li>
+      <li><span class="pathway-dot"></span><strong>Transition</strong><span>Into the Cambridge curriculum</span></li>
+      <li><span class="pathway-dot"></span><strong>Excel</strong><span>Cambridge learning, from home</span></li>
+      <li><span class="pathway-dot"></span><strong>Go global</strong><span>Further study &amp; opportunity</span></li>
+    </ol>
   </div>
 </section>
 
@@ -136,15 +182,13 @@
   </div>
 </section>
 
-<!-- Consultancy — run by the admin only -->
+<!-- Consultancy -->
 <section class="section-band" id="consultancy">
   <div class="section-inner">
     <span class="eyebrow eyebrow-dark">Consultancy</span>
-    <h2>Consult the Director, personally.</h2>
+    <h2>Expert guidance for schools and businesses.</h2>
     <p class="book-lead">
-      Light-Way's consultancy is led by our Director. There is no directory of consultants to browse:
-      you send a request, the Director reviews it, and — if approved — invites you to a private session
-      at a time they set.
+      Private one-to-one video consultations in education and business, so that your next big decision is a confident one.
     </p>
 
     <div class="track-switch" role="tablist" aria-label="Consultation type">
@@ -182,80 +226,65 @@
       </ul>
     </div>
 
+    <div class="service-grid">
+      <div class="service-card"><h3>School start-up</h3><p>From concept to a compliant, well-run school.</p></div>
+      <div class="service-card"><h3>Curriculum design</h3><p>Programmes that fit your learners and goals.</p></div>
+      <div class="service-card"><h3>Quality &amp; accreditation</h3><p>Policies and evidence that stand up to review.</p></div>
+      <div class="service-card"><h3>Business strategy</h3><p>Clear plans for growth and positioning.</p></div>
+      <div class="service-card"><h3>Operations</h3><p>Process reviews that save time and cost.</p></div>
+      <div class="service-card"><h3>Leadership coaching</h3><p>Develop confident leaders and teams.</p></div>
+    </div>
+
     <div class="hero-actions" style="margin-top:28px;">
       <a class="btn btn-primary btn-lg" href="{{ url_for('consult.new') }}">Request a consultation</a>
     </div>
   </div>
 </section>
 
-<!-- Platform features — all built in, all free -->
+<!-- Platform features -->
 <section class="section-band section-features" id="features">
   <div class="section-inner">
-    <span class="eyebrow eyebrow-dark">The Light-Way platform</span>
-    <h2>Everything is built in, and everything is free.</h2>
+    <span class="eyebrow eyebrow-dark">The Light-Way experience</span>
+    <h2>A classroom that comes to you.</h2>
     <div class="feature-grid">
-      <div class="feature-card">
-        <div class="feature-icon" data-icon="video"></div>
-        <h3>Live video, in the browser</h3>
-        <p>Our own live classroom and consultation room. Nothing to install, and no outside meeting service to sign up for.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon" data-icon="users"></div>
-        <h3>Admin-approved, always</h3>
-        <p>Every session is scheduled by the administrator. Only invited guests can enter, and only when the administrator lets them in.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon" data-icon="screenShare"></div>
-        <h3>Share your screen</h3>
-        <p>Go through lessons, documents and plans together in real time.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon" data-icon="notes"></div>
-        <h3>Notes that stay with the session</h3>
-        <p>Written during the session, saved with it, and ready to revisit.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon" data-icon="record"></div>
-        <h3>Recordings for review</h3>
-        <p>When the administrator chooses to record, everyone sees it, and invited guests can watch it back.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon" data-icon="grid"></div>
-        <h3>Works on any device</h3>
-        <p>Phone, tablet or laptop, so learners can join from home.</p>
-      </div>
+      <div class="feature-card"><div class="feature-icon" data-icon="video"></div><h3>Live video classes</h3><p>Face-to-face lessons in the browser. Nothing to install.</p></div>
+      <div class="feature-card"><div class="feature-icon" data-icon="screenShare"></div><h3>Share your screen</h3><p>Work through lessons, documents and plans together.</p></div>
+      <div class="feature-card"><div class="feature-icon" data-icon="notes"></div><h3>Session notes</h3><p>Key points saved with each session, ready to revisit.</p></div>
+      <div class="feature-card"><div class="feature-icon" data-icon="record"></div><h3>Watch it back</h3><p>Recorded sessions can be replayed to revise or review.</p></div>
+      <div class="feature-card"><div class="feature-icon" data-icon="users"></div><h3>Private &amp; secure</h3><p>Every session is by invitation, so classes and consultations stay private.</p></div>
+      <div class="feature-card"><div class="feature-icon" data-icon="grid"></div><h3>Any device</h3><p>Phone, tablet or laptop, wherever you are.</p></div>
     </div>
   </div>
 </section>
 
 <section class="section-band section-steps" id="how-it-works">
   <div class="section-inner">
-    <span class="eyebrow eyebrow-dark">How it works</span>
-    <h2>Three steps. The administrator is in charge of each.</h2>
+    <span class="eyebrow eyebrow-dark">Getting started</span>
+    <h2>Three simple steps.</h2>
     <div class="steps-path">
-      <div class="step">
-        <span class="step-num">1</span>
-        <h3>Ask or apply</h3>
-        <p>Students and teachers submit an application. Anyone else sends a consultation or meeting request.</p>
-      </div>
-      <div class="step">
-        <span class="step-num">2</span>
-        <h3>The administrator decides</h3>
-        <p>The administrator reviews each one, approves it, sets the time, and builds the guest list. Students are placed with a teacher.</p>
-      </div>
-      <div class="step">
-        <span class="step-num">3</span>
-        <h3>Meet and learn</h3>
-        <p>Invited guests wait in the lobby until the administrator admits them. Notes and recordings stay with the session.</p>
-      </div>
+      <div class="step"><span class="step-num">1</span><h3>Apply or enquire</h3><p>Students and teachers apply online. Schools and businesses send a consultation request.</p></div>
+      <div class="step"><span class="step-num">2</span><h3>We confirm</h3><p>We review, confirm your place or session time, and invite you in.</p></div>
+      <div class="step"><span class="step-num">3</span><h3>Learn or consult, live</h3><p>Join your session from anywhere and get straight to work.</p></div>
     </div>
+  </div>
+</section>
+
+<section class="section-band" id="faq">
+  <div class="section-inner faq">
+    <span class="eyebrow eyebrow-dark">Questions</span>
+    <h2>Good to know.</h2>
+    <details><summary>Who are the programmes for?</summary><p>Learners moving from Year 6 to Year 8, learners switching from a national curriculum to Cambridge, and families who school at home.</p></details>
+    <details><summary>Do I need special software?</summary><p>No. Classes and consultations run in your web browser on a phone, tablet or computer.</p></details>
+    <details><summary>Can parents follow progress?</summary><p>Yes. Parents and guardians can link their account to their child's.</p></details>
+    <details><summary>What can I get consultancy on?</summary><p>Education (school set-up, curriculum, quality) and business (strategy, operations, leadership).</p></details>
+    <details><summary>How do I book a consultation?</summary><p>Send a request describing what you need. We'll confirm a time and invite you to your private session.</p></details>
   </div>
 </section>
 
 <section class="cta-band">
   <div class="section-inner cta-inner">
     <h2>Lighting Paths. Empowering Futures.</h2>
-    <p>Join as a student or teacher, or ask to consult the Director.</p>
+    <p>Join as a student or teacher, or request a consultation.</p>
     <div class="hero-actions">
       <a class="btn btn-amber btn-lg" href="{{ url_for('auth.register', **{'as': 'student'}) }}">Apply as a student</a>
       <a class="btn btn-ghost-dark btn-lg" href="{{ url_for('auth.register', **{'as': 'teacher'}) }}">Apply as a teacher</a>
@@ -263,15 +292,7 @@
   </div>
 </section>
 
-<footer class="landing-footer">
-  <div class="section-inner footer-inner">
-    <a class="brand brand-on-dark" href="{{ url_for('main.index') }}">
-      <img src="{{ url_for('static', filename='img/logo-crest-small.png') }}" alt="Light-Way crest" class="brand-crest">
-      Light-Way
-    </a>
-    <p>Light-Way International Virtual Academy · Lighting Paths. Empowering Futures. · © {{ current_year }} Light-Way</p>
-  </div>
-</footer>
+{% include "_public_footer.html" %}
 {% endblock %}
 
 {% block scripts %}

@@ -8,6 +8,7 @@ from config import Config
 from extensions import db, login_manager, socketio, migrate
 from models import (
     User, Meeting, MeetingParticipant, MeetingInvite, MeetingRequest, ConsultationNote, Recording,
+    Announcement, ProgressReport,
     TeacherProfile, TeacherVerificationDocument, ParentStudentLink,
     StudentProfile, StudentVerificationDocument, StudentTeacherAssignment,
 )  # noqa: F401
@@ -228,14 +229,25 @@ def create_app():
 
     @app.context_processor
     def inject_admin_counts():
-        """Lets the admin's nav show how many requests are waiting."""
+        """Lets the admin's nav and control room show what is waiting."""
         from flask_login import current_user
+        from models import StudentProfile, TeacherProfile, StudentTeacherAssignment
+        counts = {"pending_requests_count": 0, "pending_students_count": 0,
+                  "pending_teachers_count": 0, "unplaced_count": 0, "attention_total": 0}
         try:
             if current_user.is_authenticated and current_user.is_admin:
-                return {"pending_requests_count": MeetingRequest.query.filter_by(status="pending").count()}
+                placed = db.session.query(StudentTeacherAssignment.student_id)
+                counts["pending_requests_count"] = MeetingRequest.query.filter_by(status="pending").count()
+                counts["pending_students_count"] = StudentProfile.query.filter_by(status="pending").count()
+                counts["pending_teachers_count"] = TeacherProfile.query.filter_by(status="pending").count()
+                counts["unplaced_count"] = (
+                    StudentProfile.query.filter_by(status="approved")
+                    .filter(~StudentProfile.user_id.in_(placed)).count()
+                )
+                counts["attention_total"] = sum(counts.values())
         except Exception:
             db.session.rollback()
-        return {"pending_requests_count": 0}
+        return counts
 
     @app.template_filter("dt")
     def format_datetime(value):
@@ -248,6 +260,8 @@ def create_app():
     from routes.main import main_bp
     from routes.meetings import meetings_bp
     from routes.consultation import consult_bp
+    from routes.portal import portal_bp
+    from routes.pages import pages_bp
     from routes.admin import admin_bp
     from routes.teachers import teachers_bp
     from routes.family import family_bp
@@ -257,6 +271,8 @@ def create_app():
     app.register_blueprint(main_bp)
     app.register_blueprint(meetings_bp)
     app.register_blueprint(consult_bp)
+    app.register_blueprint(portal_bp)
+    app.register_blueprint(pages_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(teachers_bp)
     app.register_blueprint(family_bp)

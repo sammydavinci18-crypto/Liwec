@@ -4,12 +4,10 @@
 
 {% block content %}
 <div class="auth-card auth-card-wide">
-  <span class="auth-eyebrow">Consult the Director</span>
+  <span class="auth-eyebrow">Consultancy</span>
   <h1>Request a consultation</h1>
   <p class="sub">
-    All consultations at Light-Way are held personally by the administrator. Tell us what you need.
-    <strong>Nothing is scheduled until the administrator approves your request</strong> — you'll then
-    be invited to a session at the time they set.
+    Tell us what you need. We'll confirm a time and invite you to your private session.
   </p>
 
   <form method="POST">
@@ -37,14 +35,14 @@
     </div>
     <div class="field">
       <label for="details">More detail (optional)</label>
-      <textarea id="details" name="details" rows="4" placeholder="Anything the administrator should know before deciding.">{{ form.get('details', '') }}</textarea>
+      <textarea id="details" name="details" rows="4" placeholder="Anything we should know beforehand.">{{ form.get('details', '') }}</textarea>
     </div>
     <div class="field">
       <label for="preferred_time">Preferred date &amp; time (optional, UTC)</label>
       <input type="datetime-local" id="preferred_time" name="preferred_time" value="{{ form.get('preferred_time', '') }}">
-      <p class="doc-list-note">This is only a suggestion. The administrator sets the actual time.</p>
+      <p class="doc-list-note">We'll confirm the final time with you.</p>
     </div>
-    <button type="submit" class="btn btn-primary btn-block">Send request to the administrator</button>
+    <button type="submit" class="btn btn-primary btn-block">Send request</button>
   </form>
   <p class="auth-switch"><a href="{{ url_for('consult.mine') }}">See my requests</a></p>
 </div>

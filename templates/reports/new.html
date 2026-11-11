@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Write a progress report · Light-Way{% endblock %}
+{% block page_class %}auth-page{% endblock %}
+
+{% block content %}
+<div class="auth-card auth-card-wide">
+  <span class="auth-eyebrow">Teacher</span>
+  <h1>Write a progress report</h1>
+  <p class="sub">The student and their linked parents or guardians will be able to read it.</p>
+  <form method="POST">
+    <div class="field">
+      <label for="student_id">Student</label>
+      <select id="student_id" name="student_id" required>
+        <option value="">— Choose a student —</option>
+        {% for p in placements %}
+        <option value="{{ p.student_id }}" {{ 'selected' if form.get('student_id') == p.student_id|string }}>{{ p.student.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field-row field-row-2">
+      <div class="field"><label for="term">Term</label><input type="text" id="term" name="term" maxlength="60" required value="{{ form.get('term', '') }}" placeholder="e.g. Term 1 2027"></div>
+      <div class="field"><label for="subject">Subject</label><input type="text" id="subject" name="subject" maxlength="120" required value="{{ form.get('subject', '') }}" placeholder="e.g. Mathematics"></div>
+    </div>
+    <div class="field"><label for="grade">Grade / level (optional)</label><input type="text" id="grade" name="grade" maxlength="30" value="{{ form.get('grade', '') }}" placeholder="e.g. B+ or Meeting expectations"></div>
+    <div class="field"><label for="summary">Progress summary</label><textarea id="summary" name="summary" rows="4" required>{{ form.get('summary', '') }}</textarea></div>
+    <div class="field"><label for="strengths">Strengths (optional)</label><textarea id="strengths" name="strengths" rows="2">{{ form.get('strengths', '') }}</textarea></div>
+    <div class="field"><label for="next_steps">Next steps (optional)</label><textarea id="next_steps" name="next_steps" rows="2">{{ form.get('next_steps', '') }}</textarea></div>
+    <button type="submit" class="btn btn-primary btn-block">Save report</button>
+  </form>
+  <p class="auth-switch"><a href="{{ url_for('teachers.my_students') }}">&larr; My students</a></p>
+</div>
+{% endblock %}

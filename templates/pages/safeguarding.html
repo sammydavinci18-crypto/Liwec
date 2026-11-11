@@ -1,0 +1,40 @@
+{% extends "base_public.html" %}
+{% block title %}Safeguarding &amp; privacy · Light-Way International Virtual Academy{% endblock %}
+{% block head %}<meta name="description" content="How Light-Way keeps learners, parents and teachers safe online: invitation-only sessions, verified teachers, private records and recordings.">{% endblock %}
+{% block page_class %}landing-page{% endblock %}
+
+{% block content %}
+<section class="public-hero">
+  <span class="eyebrow">Safeguarding &amp; privacy</span>
+  <h1>A secure place to learn.</h1>
+  <p>Like the shield on our crest, protection is built into how Light-Way works, not added on afterwards.</p>
+</section>
+
+<section class="section-band">
+  <div class="section-inner">
+    <span class="eyebrow eyebrow-dark">How we protect learners</span>
+    <h2>Built-in safeguards.</h2>
+    <div class="promise-grid">
+      <div class="promise-card"><h3>Invitation-only sessions</h3><p>Every class and consultation is scheduled by the academy. Only invited people can enter a session, and nobody is on the call until the host lets them in from a waiting room.</p></div>
+      <div class="promise-card"><h3>Verified teachers</h3><p>Teachers submit supporting documents that are reviewed before they can teach. Students are placed with teachers by the academy, never chosen by strangers.</p></div>
+      <div class="promise-card"><h3>Private student records</h3><p>Applications, reports and documents are visible only to the student, their confirmed parents or guardians, their teachers and school staff.</p></div>
+      <div class="promise-card"><h3>Confirmed family links</h3><p>A parent or guardian can only see a child's school record once the link has been confirmed by the student or by school staff.</p></div>
+      <div class="promise-card"><h3>Open recording</h3><p>A session is recorded only when the host starts a recording, and everyone in the room can see that it is happening. Recordings can be watched back only by the people invited to that session.</p></div>
+      <div class="promise-card"><h3>Protected documents</h3><p>Uploaded IDs and certificates are stored privately and are never served as public files.</p></div>
+      <div class="promise-card"><h3>Encrypted connections</h3><p>The site is served over HTTPS, and live video uses the encryption built into the browser's WebRTC technology.</p></div>
+      <div class="promise-card"><h3>Account protection</h3><p>Passwords are stored securely using one-way hashing, and the academy can suspend any account that breaks the rules.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section-band section-join">
+  <div class="section-inner prose">
+    <h2>Our expectations</h2>
+    <p>Our values of integrity and respect apply online as they do in any classroom: be honest, be kind, and treat others as you would want to be treated. Concerns about anything that happens on Light-Way can be raised with the academy at any time.</p>
+    <div class="hero-actions" style="justify-content:flex-start; margin-top:24px;">
+      <a class="btn btn-primary btn-lg" href="{{ url_for('consult.new') }}">Raise a concern or ask a question</a>
+    </div>
+  </div>
+</section>
+{% include "_public_footer.html" %}
+{% endblock %}

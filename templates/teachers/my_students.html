@@ -25,7 +25,11 @@
       </span>
       {% if a.notes %}<p class="appt-note">Admin note: "{{ a.notes }}"</p>{% endif %}
     </div>
-    <div class="appt-actions"><span class="status-pill status-approved">Placed {{ a.created_at.strftime('%b %-d') }}</span></div>
+    <div class="appt-actions">
+      <span class="status-pill status-approved">Placed {{ a.created_at.strftime('%d %b') }}</span>
+      <a class="btn btn-primary btn-sm" href="{{ url_for('portal.new_report', student_id=a.student_id) }}">Write report</a>
+      <a class="btn btn-ghost btn-sm" href="{{ url_for('portal.student_reports', student_id=a.student_id) }}">Reports</a>
+    </div>
   </div>
   {% endfor %}
 </div>

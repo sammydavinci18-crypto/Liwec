@@ -1,0 +1,15 @@
+<footer class="landing-footer">
+  <div class="section-inner footer-inner">
+    <a class="brand brand-on-dark" href="{{ url_for('main.index') }}">
+      <img src="{{ url_for('static', filename='img/logo-crest-small.png') }}" alt="Light-Way crest" class="brand-crest">
+      Light-Way
+    </a>
+    <nav class="footer-links" aria-label="Footer">
+      <a href="{{ url_for('pages.about') }}">Our crest</a>
+      <a href="{{ url_for('pages.admissions') }}">Admissions</a>
+      <a href="{{ url_for('pages.safeguarding') }}">Safeguarding &amp; privacy</a>
+      <a href="{{ url_for('consult.new') }}">Request a consultation</a>
+    </nav>
+    <p>Light-Way International Virtual Academy · Lighting Paths. Empowering Futures. · © {{ current_year }} Light-Way</p>
+  </div>
+</footer>

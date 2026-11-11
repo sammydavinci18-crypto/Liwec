@@ -70,6 +70,7 @@ def apply():
             )
             db.session.add(profile)
             db.session.flush()
+            profile.ensure_reference()
 
         for f in files[:MAX_DOCS_PER_APPLICATION]:
             stored_name = storage.new_object_key(f.filename)
@@ -89,7 +90,7 @@ def apply():
             ))
 
         db.session.commit()
-        flash("Application submitted. An admin will review it before you're enrolled.", "success")
+        flash(f"Application received. Your reference number is {profile.reference_number or 'being generated'}. Keep it safe, you can follow progress any time.", "success")
         return redirect(url_for("students.my_profile"))
 
     return render_template("students/apply.html", existing=existing, stages=STUDENT_PROGRAMS)
@@ -102,8 +103,13 @@ def my_profile():
     if not profile:
         return redirect(url_for("students.apply"))
 
+    if profile.ensure_reference():
+        db.session.commit()
     assignments = StudentTeacherAssignment.query.filter_by(student_id=current_user.id).all()
-    return render_template("students/my_profile.html", profile=profile, assignments=assignments)
+    return render_template(
+        "students/my_profile.html", profile=profile, assignments=assignments,
+        stages=profile.tracker_stages(bool(assignments)),
+    )
 
 
 @students_bp.route("/students/me/edit", methods=["GET", "POST"])

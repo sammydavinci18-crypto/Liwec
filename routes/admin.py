@@ -9,6 +9,7 @@ from flask_login import login_required, current_user
 import storage
 from extensions import db
 from models import User, Meeting, MeetingInvite, MeetingRequest, MEETING_TYPES
+from models import Announcement, ANNOUNCEMENT_AUDIENCES
 from models import TeacherProfile, TeacherVerificationDocument
 from models import StudentProfile, StudentVerificationDocument, StudentTeacherAssignment
 from permissions import admin_required
@@ -247,6 +248,48 @@ def request_decline(request_id):
     db.session.commit()
     flash("Request declined.", "info")
     return redirect(url_for("admin.requests_queue"))
+
+
+# ---------------------------------------------------------------------------
+# Announcements & school calendar — the admin posts; audiences see them.
+# ---------------------------------------------------------------------------
+
+@admin_bp.route("/admin/announcements", methods=["GET", "POST"])
+@login_required
+@admin_required
+def announcements():
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+        audience = request.form.get("audience", "all")
+        if audience not in {k for k, _ in ANNOUNCEMENT_AUDIENCES}:
+            audience = "all"
+        if not title:
+            flash("An announcement needs a title.", "error")
+        else:
+            db.session.add(Announcement(
+                title=title[:200],
+                body=request.form.get("body", "").strip() or None,
+                audience=audience,
+                event_date=_parse_local_datetime(request.form.get("event_date")),
+                created_by_id=current_user.id,
+            ))
+            db.session.commit()
+            flash("Announcement posted.", "success")
+        return redirect(url_for("admin.announcements"))
+
+    items = Announcement.query.order_by(Announcement.created_at.desc()).limit(50).all()
+    return render_template("admin/announcements.html", items=items, audiences=ANNOUNCEMENT_AUDIENCES)
+
+
+@admin_bp.route("/admin/announcements/<int:announcement_id>/delete", methods=["POST"])
+@login_required
+@admin_required
+def announcement_delete(announcement_id):
+    item = Announcement.query.get_or_404(announcement_id)
+    db.session.delete(item)
+    db.session.commit()
+    flash("Announcement removed.", "info")
+    return redirect(url_for("admin.announcements"))
 
 
 # ---------------------------------------------------------------------------

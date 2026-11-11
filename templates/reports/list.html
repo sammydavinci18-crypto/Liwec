@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Reports · {{ student.name }} · Light-Way{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Progress reports</span>
+    <h1>{{ student.name }}</h1>
+  </div>
+  {% if current_user.teacher_profile and current_user.id != student.id %}
+  <div class="dash-actions"><a class="btn btn-primary" href="{{ url_for('portal.new_report', student_id=student.id) }}">Write a report</a></div>
+  {% endif %}
+</div>
+{% if reports %}
+<div class="appointment-list">
+  {% for r in reports %}
+  <div class="appointment-row">
+    <div>
+      <strong>{{ r.subject }} · {{ r.term }}</strong>
+      <span class="appt-time">By {{ r.teacher.name }} · {{ r.created_at|dt }}{% if r.grade %} · {{ r.grade }}{% endif %}</span>
+    </div>
+    <a class="btn btn-ghost btn-sm" href="{{ url_for('portal.view_report', report_id=r.id) }}">Open</a>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">No reports yet.</div>
+{% endif %}
+{% endblock %}

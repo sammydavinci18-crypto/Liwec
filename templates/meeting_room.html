@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ meeting.title }} · Light-Way{% endblock %}
 {% block page_class %}room-page{% endblock %}
+{% block themetoggle %}{% endblock %}
 
 {% block content %}
 <div class="room-header">
@@ -113,8 +114,8 @@
 <!-- Waiting room overlay (non-hosts, before the host admits them) -->
 <div class="waiting-overlay" id="waiting-overlay">
   <div class="waiting-box">
-    <h3>Waiting for the administrator to let you in…</h3>
-    <p>You'll join automatically as soon as {{ meeting.host.name }} admits you. Nobody enters a session without the administrator's approval.</p>
+    <h3>You're in the waiting room…</h3>
+    <p>{{ meeting.host.name }} will let you in shortly. You'll join automatically.</p>
   </div>
 </div>
 

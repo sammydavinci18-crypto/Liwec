@@ -72,3 +72,15 @@ Home Schooling) are on the landing page. Students apply to one of those three pr
 `SECRET_KEY`, `DB_ENGINE` (`sqlite`|`postgres`|`mysql`), `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`,
 `CALL_LIMIT_MINUTES`, `RECORDING_RETENTION_DAYS`, `ICE_SERVERS`, `TURN_USERNAME`, `TURN_CREDENTIAL`,
 `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`.
+
+## School portal & public pages
+
+- **My school** (`/school`): students and approved parents see the application tracker (with reference number such as `LW-2026-0001`), placed teachers, upcoming classes and progress reports.
+- **Timetable** (`/timetable`): upcoming sessions grouped by day, plus school-calendar entries.
+- **Announcements** (`/announcements`): the admin posts notices to everyone, students, teachers or parents; a dated notice also appears on the calendar.
+- **Progress reports**: teachers write reports for students placed with them; the student, approved parents, registrars and the admin can read them (printable).
+- **Public pages**: `/about` (the crest story), `/admissions`, `/safeguarding`. The Director's message on the home page is a **draft placeholder** — replace it with his own words and name in `templates/landing.html`.
+- **Theme**: navy and gold, defined as CSS tokens at the top of `static/css/style.css`.
+
+### Deploying this update
+Run `flask db upgrade` (or let your Render start command do it). Two additive migrations apply: `b7e4a91c5d20` (admin-controlled sessions) and `c3f1d8a2e611` (portal features). Nothing is dropped.

@@ -14,7 +14,7 @@
 </div>
 
 {% if profile.status == 'pending' %}
-<div class="flash flash-info">An admin is reviewing your application. You'll be enrolled once it's approved, then placed with a teacher.</div>
+<div class="flash flash-info">Your application is being reviewed. You'll be enrolled once it's approved, then placed with a teacher.</div>
 {% elif profile.status == 'rejected' %}
 <div class="flash flash-error">
   This application wasn't approved{% if profile.review_note %}: "{{ profile.review_note }}"{% endif %}.
@@ -24,10 +24,17 @@
 <div class="flash flash-success">You're an enrolled student.</div>
 {% endif %}
 
+<div class="ref-card">
+  <span class="ref-label">Application reference</span>
+  <strong class="ref-number">{{ profile.reference_number or '—' }}</strong>
+</div>
+
+{% include "_tracker.html" %}
+
 <div class="profile-summary-card">
   <p><strong>Programme:</strong> {{ profile.stage_label() }}</p>
   <p><strong>Subjects:</strong> {{ profile.subjects_of_interest or "—" }}</p>
-  <p><strong>Date of birth:</strong> {{ profile.date_of_birth.strftime('%b %-d, %Y') if profile.date_of_birth else "—" }}</p>
+  <p><strong>Date of birth:</strong> {{ profile.date_of_birth.strftime('%d %b %Y') if profile.date_of_birth else "—" }}</p>
   <p><strong>Documents on file:</strong> {{ profile.documents|length }}</p>
 </div>
 
@@ -47,7 +54,7 @@
   {% endfor %}
 </div>
 {% else %}
-<div class="empty-state">You haven't been placed with a teacher yet. An admin will do this — you'll see it here once they have.</div>
+<div class="empty-state">You haven't been placed with a teacher yet. You'll see it here once it's done.</div>
 {% endif %}
 {% endif %}
 {% endblock %}

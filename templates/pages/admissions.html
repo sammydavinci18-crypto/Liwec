@@ -1,0 +1,53 @@
+{% extends "base_public.html" %}
+{% block title %}Admissions · Light-Way International Virtual Academy{% endblock %}
+{% block head %}<meta name="description" content="How to apply to Light-Way International Virtual Academy: choose a programme, submit your application, track it with your reference number and get placed with a teacher.">{% endblock %}
+{% block page_class %}landing-page{% endblock %}
+
+{% block content %}
+<section class="public-hero">
+  <span class="eyebrow">Admissions</span>
+  <h1>Begin your Light-Way journey.</h1>
+  <p>Apply online in minutes, track your application with your own reference number, and start learning from home.</p>
+</section>
+
+<section class="section-band">
+  <div class="section-inner prose">
+    <span class="eyebrow eyebrow-dark">How it works</span>
+    <h2>From application to your first class.</h2>
+    <ol class="admit-steps">
+      <li><div><strong>Create your account</strong><span>Sign up as a student, or as a parent or guardian applying and following along on a child's behalf.</span></div></li>
+      <li><div><strong>Choose your programme</strong><span>Year 6–Year 8 Bridging, National Curriculum to Cambridge Transition, or Home Schooling.</span></div></li>
+      <li><div><strong>Submit your application</strong><span>Add a few details and upload at least one supporting document, such as an ID, birth certificate or previous school record (PDF, PNG or JPG).</span></div></li>
+      <li><div><strong>Get your reference number</strong><span>You receive a reference such as <em>LW-{{ current_year }}-0001</em> and can follow each stage in your portal: received, under review, decision, placement.</span></div></li>
+      <li><div><strong>Be placed with a teacher</strong><span>Once approved, each student is placed with a teacher and invited to live classes. Learners don't need to arrange this themselves.</span></div></li>
+      <li><div><strong>Learn, live</strong><span>Join classes from any device, see your timetable and read your teacher's progress reports.</span></div></li>
+    </ol>
+  </div>
+</section>
+
+<section class="section-band section-join">
+  <div class="section-inner">
+    <span class="eyebrow eyebrow-dark">Choose a pathway</span>
+    <h2>Which programme is right?</h2>
+    <div class="program-grid">
+      <div class="program-card"><span class="program-num">01</span><h3>Year 6–Year 8 Bridging</h3><p>For learners who need strong foundations before the Cambridge journey.</p></div>
+      <div class="program-card"><span class="program-num">02</span><h3>National Curriculum to Cambridge Transition</h3><p>For learners moving from a national curriculum into Cambridge.</p></div>
+      <div class="program-card"><span class="program-num">03</span><h3>Home Schooling</h3><p>For families who want structured, teacher-led learning at home.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section-band">
+  <div class="section-inner prose">
+    <h2>Parents &amp; guardians</h2>
+    <p>Link your account to your child's to follow their application, timetable and progress reports. Links are confirmed by the student or by school staff, so records stay private to the right people.</p>
+    <h2>Questions before you apply?</h2>
+    <p>Fees, start dates and anything else: send us a request and we'll get back to you.</p>
+    <div class="hero-actions" style="justify-content:flex-start; margin-top:24px;">
+      <a class="btn btn-primary btn-lg" href="{{ url_for('auth.register', **{'as': 'student'}) }}">Apply as a student</a>
+      <a class="btn btn-ghost btn-lg" href="{{ url_for('consult.new') }}">Ask us a question</a>
+    </div>
+  </div>
+</section>
+{% include "_public_footer.html" %}
+{% endblock %}
