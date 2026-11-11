@@ -6,14 +6,22 @@
   <div>
     <span class="eyebrow eyebrow-dark">Admin</span>
     <h1>Users</h1>
-    <p>{{ users|length }} account{{ 's' if users|length != 1 }}{% if q %} matching "{{ q }}"{% endif %}</p>
+    <p>{{ users|length }} account{{ 's' if users|length != 1 }}{% if category != 'all' %} in this category{% endif %}{% if q %} matching "{{ q }}"{% endif %}</p>
   </div>
   <div class="dash-actions">
     <a class="btn btn-primary" href="{{ url_for('admin.create_account') }}">+ Add teacher or student</a>
   </div>
 </div>
 
+<div class="filter-tabs" role="tablist" aria-label="Filter users by category">
+  {% for key, label in categories %}
+  <a class="filter-tab {{ 'is-active' if category == key }}" role="tab" aria-selected="{{ 'true' if category == key else 'false' }}"
+     href="{{ url_for('admin.users', category=key, q=q or None) }}">{{ label }} <span class="filter-count">{{ counts[key] }}</span></a>
+  {% endfor %}
+</div>
+
 <form method="GET" class="user-search-form">
+  <input type="hidden" name="category" value="{{ category }}">
   <input type="text" name="q" value="{{ q }}" placeholder="Search by name or email…">
   <button type="submit" class="btn btn-ghost btn-sm">Search</button>
 </form>
@@ -26,10 +34,12 @@
       <span class="appt-time">{{ u.email }}</span>
     </div>
     <div class="appt-actions">
+      {% for t in tags[u.id] %}<span class="status-pill cat-pill cat-{{ t|lower }}">{{ t }}</span>{% endfor %}
       {% if u.is_banned %}<span class="status-pill status-declined">Banned</span>{% endif %}
-      {% if u.is_admin %}<span class="status-pill status-pending">Admin</span>{% endif %}
     </div>
   </a>
+  {% else %}
+  <div class="empty-state">No users in this category{% if q %} matching "{{ q }}"{% endif %}.</div>
   {% endfor %}
 </div>
 {% endblock %}

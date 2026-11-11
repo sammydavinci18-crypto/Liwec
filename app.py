@@ -270,6 +270,7 @@ def create_app():
     from routes.teachers import teachers_bp
     from routes.family import family_bp
     from routes.students import students_bp
+    from routes.notifications import notifications_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
@@ -281,6 +282,7 @@ def create_app():
     app.register_blueprint(teachers_bp)
     app.register_blueprint(family_bp)
     app.register_blueprint(students_bp)
+    app.register_blueprint(notifications_bp)
 
     # Registers the Socket.IO event handlers defined in sockets.py
     import sockets  # noqa: F401

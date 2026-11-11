@@ -13,7 +13,7 @@ from extensions import db
 from models import User, Meeting, MeetingInvite, MeetingRequest, MEETING_TYPES
 from models import Announcement, ANNOUNCEMENT_AUDIENCES
 from models import TeacherProfile, TeacherVerificationDocument, CAMBRIDGE_STAGES, STUDENT_PROGRAMS
-from models import StudentProfile, StudentVerificationDocument, StudentTeacherAssignment
+from models import StudentProfile, StudentVerificationDocument, StudentTeacherAssignment, ParentStudentLink
 from permissions import admin_required
 
 admin_bp = Blueprint("admin", __name__)
@@ -469,9 +469,21 @@ def placements():
         .join(User, TeacherProfile.user_id == User.id).order_by(User.name).all()
     )
     existing = StudentTeacherAssignment.query.order_by(StudentTeacherAssignment.created_at.desc()).all()
+
+    # Who is placed with whom, so the two lists can show it at a glance.
+    teachers_of = {}   # student user_id -> [teacher User]
+    students_of = {}   # teacher user_id -> [student User]
+    for a in existing:
+        teachers_of.setdefault(a.student_id, []).append(a.teacher)
+        students_of.setdefault(a.teacher_id, []).append(a.student)
+
     return render_template(
         "admin/placements.html",
         students=approved_students, teachers=approved_teachers, assignments=existing,
+        teachers_of=teachers_of, students_of=students_of,
+        unplaced_count=sum(1 for s_ in approved_students if s_.user_id not in teachers_of),
+        preselect_student=request.args.get("student", type=int),
+        preselect_teacher=request.args.get("teacher", type=int),
     )
 
 
@@ -517,17 +529,92 @@ def remove_placement(assignment_id):
 # User management / moderation
 # ---------------------------------------------------------------------------
 
+# Categories the All-users page can be filtered by. A person can belong to
+# several at once (a teacher who is also a parent), so these are "has this
+# role/relationship" tests, not mutually exclusive buckets.
+USER_CATEGORIES = [
+    ("all", "All"),
+    ("teacher", "Teachers"),
+    ("student", "Students"),
+    ("parent", "Parents"),
+    ("consultant", "Consultants"),
+    ("staff", "Staff & admins"),
+    ("guest", "Guests"),
+]
+
+
+def _category_conditions():
+    """One SQL condition per category. "consultant" = someone who has asked
+    for, or been invited to, a consultation. "guest" = a regular account that
+    is none of the other things (e.g. someone invited to a one-off meeting)."""
+    teacher = User.id.in_(db.session.query(TeacherProfile.user_id))
+    student = User.id.in_(db.session.query(StudentProfile.user_id))
+    parent = User.id.in_(
+        db.session.query(ParentStudentLink.parent_id).filter(ParentStudentLink.status == "approved")
+    )
+    consultant = db.or_(
+        User.id.in_(
+            db.session.query(MeetingRequest.requester_id)
+            .filter(MeetingRequest.kind.in_(["education", "business"]))
+        ),
+        User.id.in_(
+            db.session.query(MeetingInvite.user_id)
+            .join(Meeting, Meeting.id == MeetingInvite.meeting_id)
+            .filter(Meeting.meeting_type == "consultation")
+        ),
+    )
+    staff = User.role.in_(["admin", "registrar"])
+    guest = db.and_(~teacher, ~student, ~parent, ~consultant, ~staff)
+    return {
+        "teacher": teacher, "student": student, "parent": parent,
+        "consultant": consultant, "staff": staff, "guest": guest,
+    }
+
+
 @admin_bp.route("/admin/users")
 @login_required
 @admin_required
 def users():
     q = request.args.get("q", "").strip()
-    query = User.query
+    category = request.args.get("category", "all")
+    conds = _category_conditions()
+    if category not in conds:
+        category = "all"
+
+    base = User.query
     if q:
         like = f"%{q}%"
-        query = query.filter(db.or_(User.name.ilike(like), User.email.ilike(like)))
+        base = base.filter(db.or_(User.name.ilike(like), User.email.ilike(like)))
+
+    # Count for each tab (respecting the search box), so the tabs show how
+    # many people are behind them.
+    counts = {"all": base.count()}
+    for key, cond in conds.items():
+        counts[key] = base.filter(cond).count()
+
+    query = base.filter(conds[category]) if category != "all" else base
     all_users = query.order_by(User.created_at.desc()).limit(200).all()
-    return render_template("admin/users.html", users=all_users, q=q)
+
+    # Work out each listed user's categories for the little badges.
+    ids = [u.id for u in all_users] or [0]
+    tags = {u.id: [] for u in all_users}
+    labels = {"teacher": "Teacher", "student": "Student", "parent": "Parent",
+              "consultant": "Consultant"}
+    for key, label in labels.items():
+        for (uid,) in db.session.query(User.id).filter(User.id.in_(ids), conds[key]).all():
+            tags[uid].append(label)
+    for u in all_users:
+        if u.is_admin:
+            tags[u.id].insert(0, "Admin")
+        elif u.is_registrar:
+            tags[u.id].insert(0, "Registrar")
+        if not tags[u.id]:
+            tags[u.id].append("Guest")
+
+    return render_template(
+        "admin/users.html", users=all_users, q=q, category=category,
+        categories=USER_CATEGORIES, counts=counts, tags=tags,
+    )
 
 
 @admin_bp.route("/admin/users/<int:user_id>")

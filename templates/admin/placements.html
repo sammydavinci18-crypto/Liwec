@@ -8,66 +8,142 @@
     <h1>Student placements</h1>
     <p>Only an admin can connect a student to a teacher. Students and teachers can see their placement, but can't change it.</p>
   </div>
+  <div class="dash-actions">
+    <button type="button" class="btn btn-primary" id="open-placement">+ New placement</button>
+  </div>
 </div>
 
-<div class="profile-layout">
-  <div class="profile-main">
-    <h3>Current placements ({{ assignments|length }})</h3>
-    {% if assignments %}
+<div class="placement-columns">
+  <section>
+    <h3>Students ({{ students|length }}){% if unplaced_count %} <span class="status-pill status-pending">{{ unplaced_count }} waiting</span>{% endif %}</h3>
+    {% if students %}
     <div class="appointment-list">
-      {% for a in assignments %}
+      {% for s in students %}
+      {% set mine = teachers_of.get(s.user_id, []) %}
       <div class="appointment-row">
         <div>
-          <strong>{{ a.student.name }}</strong> &rarr; <strong>{{ a.teacher.name }}</strong>
-          <span class="appt-time">placed {{ a.created_at.strftime('%b %-d, %Y') }} by {{ a.assigned_by.name }}</span>
-          {% if a.notes %}<p class="appt-note">"{{ a.notes }}"</p>{% endif %}
+          <strong><a href="{{ url_for('admin.user_detail', user_id=s.user_id) }}">{{ s.user.name }}</a></strong>
+          <span class="appt-time">{{ s.stage_label() }}</span>
+          {% if mine %}
+          <span class="appt-time">With: {{ mine|map(attribute='name')|join(', ') }}</span>
+          {% endif %}
         </div>
         <div class="appt-actions">
-          <form method="POST" action="{{ url_for('admin.remove_placement', assignment_id=a.id) }}">
-            <button type="submit" class="btn btn-ghost btn-sm">Remove</button>
-          </form>
+          {% if mine %}<span class="status-pill status-approved">Placed</span>
+          {% else %}<span class="status-pill status-pending">Not placed</span>{% endif %}
+          <button type="button" class="btn btn-ghost btn-sm" data-place-student="{{ s.user_id }}">Place</button>
         </div>
       </div>
       {% endfor %}
     </div>
     {% else %}
-    <div class="empty-state">No placements yet.</div>
+    <div class="empty-state">No approved students yet.</div>
     {% endif %}
-  </div>
+  </section>
 
-  <div class="profile-side">
-    <div class="booking-card">
-      <h3>Place a student</h3>
-      {% if students and teachers %}
-      <form method="POST" action="{{ url_for('admin.create_placement') }}">
-        <div class="field">
-          <label for="student_id">Student (approved)</label>
-          <select id="student_id" name="student_id" required>
-            <option value="">— Choose —</option>
-            {% for s in students %}
-            <option value="{{ s.user_id }}">{{ s.user.name }} — {{ s.stage_label() }}</option>
-            {% endfor %}
-          </select>
+  <section>
+    <h3>Teachers ({{ teachers|length }})</h3>
+    {% if teachers %}
+    <div class="appointment-list">
+      {% for t in teachers %}
+      {% set mine = students_of.get(t.user_id, []) %}
+      <div class="appointment-row">
+        <div>
+          <strong><a href="{{ url_for('admin.user_detail', user_id=t.user_id) }}">{{ t.user.name }}</a>{{ " (official)" if t.teacher_type == 'official' }}</strong>
+          <span class="appt-time">{{ t.subjects or "No subjects listed" }}</span>
+          <span class="appt-time">{{ mine|length }} student{{ 's' if mine|length != 1 }}{% if mine %}: {{ mine|map(attribute='name')|join(', ') }}{% endif %}</span>
         </div>
-        <div class="field">
-          <label for="teacher_id">Teacher (approved)</label>
-          <select id="teacher_id" name="teacher_id" required>
-            <option value="">— Choose —</option>
-            {% for t in teachers %}
-            <option value="{{ t.user_id }}">{{ t.user.name }} — {{ t.subjects or "no subjects" }}{{ " (official)" if t.teacher_type == 'official' }}</option>
-            {% endfor %}
-          </select>
+        <div class="appt-actions">
+          <button type="button" class="btn btn-ghost btn-sm" data-place-teacher="{{ t.user_id }}">Place a student</button>
         </div>
-        <div class="field">
-          <label for="notes">Note (optional)</label>
-          <textarea id="notes" name="notes" rows="2" placeholder="Why this pairing?"></textarea>
-        </div>
-        <button type="submit" class="btn btn-primary btn-block">Place student</button>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">No approved teachers yet.</div>
+    {% endif %}
+  </section>
+</div>
+
+<h3 class="placement-current-title">Current placements ({{ assignments|length }})</h3>
+{% if assignments %}
+<div class="appointment-list">
+  {% for a in assignments %}
+  <div class="appointment-row">
+    <div>
+      <strong>{{ a.student.name }} &rarr; {{ a.teacher.name }}</strong>
+      <span class="appt-time">placed {{ a.created_at.strftime('%b %-d, %Y') }} by {{ a.assigned_by.name }}</span>
+      {% if a.notes %}<p class="appt-note">"{{ a.notes }}"</p>{% endif %}
+    </div>
+    <div class="appt-actions">
+      <form method="POST" action="{{ url_for('admin.remove_placement', assignment_id=a.id) }}" onsubmit="return confirm('Remove this placement?');">
+        <button type="submit" class="btn btn-ghost btn-sm">Remove</button>
       </form>
-      {% else %}
-      <p class="sub">You need at least one <strong>approved student</strong> and one <strong>approved teacher</strong> before you can place anyone. Currently: {{ students|length }} approved student(s), {{ teachers|length }} approved teacher(s).</p>
-      {% endif %}
     </div>
   </div>
+  {% endfor %}
 </div>
+{% else %}
+<div class="empty-state">No placements yet.</div>
+{% endif %}
+
+<dialog id="placement-dialog" class="placement-dialog">
+  <form method="POST" action="{{ url_for('admin.create_placement') }}" class="placement-form">
+    <h3>New placement</h3>
+    {% if students and teachers %}
+    <div class="field">
+      <label for="student_id">Student (approved)</label>
+      <select id="student_id" name="student_id" required>
+        <option value="">— Choose —</option>
+        {% for s in students %}
+        <option value="{{ s.user_id }}" {{ 'selected' if preselect_student == s.user_id }}>{{ s.user.name }} — {{ s.stage_label() }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="teacher_id">Teacher (approved)</label>
+      <select id="teacher_id" name="teacher_id" required>
+        <option value="">— Choose —</option>
+        {% for t in teachers %}
+        <option value="{{ t.user_id }}" {{ 'selected' if preselect_teacher == t.user_id }}>{{ t.user.name }} — {{ t.subjects or "no subjects" }}{{ " (official)" if t.teacher_type == 'official' }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="notes">Note (optional)</label>
+      <textarea id="notes" name="notes" rows="2" placeholder="Why this pairing?"></textarea>
+    </div>
+    <div class="placement-form-actions">
+      <button type="button" class="btn btn-ghost" id="cancel-placement">Cancel</button>
+      <button type="submit" class="btn btn-primary">Place student</button>
+    </div>
+    {% else %}
+    <p class="sub">You need at least one <strong>approved student</strong> and one <strong>approved teacher</strong> before you can place anyone. Currently: {{ students|length }} approved student(s), {{ teachers|length }} approved teacher(s).</p>
+    <div class="placement-form-actions">
+      <button type="button" class="btn btn-ghost" id="cancel-placement">Close</button>
+    </div>
+    {% endif %}
+  </form>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var dlg = document.getElementById("placement-dialog");
+  var student = document.getElementById("student_id");
+  var teacher = document.getElementById("teacher_id");
+  function open() { if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", ""); }
+  document.getElementById("open-placement").addEventListener("click", open);
+  document.getElementById("cancel-placement").addEventListener("click", function () { dlg.close(); });
+  dlg.addEventListener("click", function (e) { if (e.target === dlg) dlg.close(); });
+  document.querySelectorAll("[data-place-student]").forEach(function (b) {
+    b.addEventListener("click", function () { if (student) student.value = b.dataset.placeStudent; open(); });
+  });
+  document.querySelectorAll("[data-place-teacher]").forEach(function (b) {
+    b.addEventListener("click", function () { if (teacher) teacher.value = b.dataset.placeTeacher; open(); });
+  });
+  {% if preselect_student or preselect_teacher %}open();{% endif %}
+})();
+</script>
 {% endblock %}
