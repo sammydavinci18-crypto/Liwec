@@ -91,10 +91,10 @@ class Config:
     RECORDINGS_DIR = os.environ.get("RECORDINGS_DIR", str(BASE_DIR / "instance" / "recordings"))
     Path(RECORDINGS_DIR).mkdir(parents=True, exist_ok=True)
 
-    # Consultant verification documents (ID, certificates). These are
+    # Verification documents (teacher/student ID, certificates). These are
     # sensitive — never served from a public /static path; always through
     # an access-controlled route (see routes/admin.py) that checks the
-    # requester is either the consultant themselves or an admin.
+    # requester is either the owner of the document or an admin.
     VERIFICATION_DOCS_DIR = os.environ.get(
         "VERIFICATION_DOCS_DIR", str(BASE_DIR / "instance" / "verification_docs")
     )
@@ -127,13 +127,21 @@ class Config:
     VERIFICATION_BUCKET = os.environ.get("SUPABASE_VERIFICATION_BUCKET", "verification-docs")
     RECORDINGS_BUCKET = os.environ.get("SUPABASE_RECORDINGS_BUCKET", "recordings")
 
-    # Premium tier (admin-granted — see /admin/users — no payment
-    # processing involved) — how much more a premium account gets over the
-    # free tier for call length and recording retention.
-    FREE_CALL_LIMIT_MINUTES = int(os.environ.get("FREE_CALL_LIMIT_MINUTES", 40))
-    PREMIUM_CALL_LIMIT_MINUTES = int(os.environ.get("PREMIUM_CALL_LIMIT_MINUTES", 0))  # 0 = unlimited
-    FREE_RECORDING_RETENTION_DAYS = int(os.environ.get("FREE_RECORDING_RETENTION_DAYS", 7))
-    PREMIUM_RECORDING_RETENTION_DAYS = int(os.environ.get("PREMIUM_RECORDING_RETENTION_DAYS", 30))
+    # Everything is free and identical for every user — there are no plans
+    # or tiers. These are just operating limits the admin can tune.
+    #   CALL_LIMIT_MINUTES = 0           -> calls have no time limit
+    #   RECORDING_RETENTION_DAYS = 0     -> recordings are kept until deleted
+    CALL_LIMIT_MINUTES = int(os.environ.get("CALL_LIMIT_MINUTES", 0))
+    RECORDING_RETENTION_DAYS = int(os.environ.get("RECORDING_RETENTION_DAYS", 90))
+
+    # NAT-traversal servers the browsers use to find each other for video.
+    # Comma-separated. The default is a free public STUN server; for a fully
+    # self-hosted setup run your own coturn and list it here, e.g.
+    #   ICE_SERVERS=stun:turn.yourschool.org:3478
+    # (TURN with credentials: set TURN_USERNAME / TURN_CREDENTIAL too.)
+    ICE_SERVERS = [u.strip() for u in os.environ.get("ICE_SERVERS", "stun:stun.l.google.com:19302").split(",") if u.strip()]
+    TURN_USERNAME = os.environ.get("TURN_USERNAME", "")
+    TURN_CREDENTIAL = os.environ.get("TURN_CREDENTIAL", "")
 
     # Recording is uploaded in ~30s chunks; keep the per-request limit generous.
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50 MB per chunk

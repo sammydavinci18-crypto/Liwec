@@ -5,7 +5,7 @@ from flask_login import login_required, current_user
 
 import storage
 from extensions import db
-from models import StudentProfile, StudentVerificationDocument, StudentTeacherAssignment, CAMBRIDGE_STAGES
+from models import StudentProfile, StudentVerificationDocument, StudentTeacherAssignment, STUDENT_PROGRAMS
 
 students_bp = Blueprint("students", __name__)
 
@@ -28,7 +28,7 @@ def apply():
         subjects = request.form.get("subjects_of_interest", "").strip()
         notes = request.form.get("notes", "").strip()
 
-        valid_stage_keys = {k for k, _ in CAMBRIDGE_STAGES}
+        valid_stage_keys = {k for k, _ in STUDENT_PROGRAMS}
         if desired_stage not in valid_stage_keys:
             desired_stage = None
 
@@ -42,12 +42,12 @@ def apply():
         files = [f for f in request.files.getlist("documents") if f and f.filename]
         if not existing and not files:
             flash("Please attach at least one document (ID, birth certificate, or previous school record) so an admin can review the application.", "error")
-            return render_template("students/apply.html", existing=existing, stages=CAMBRIDGE_STAGES)
+            return render_template("students/apply.html", existing=existing, stages=STUDENT_PROGRAMS)
 
         for f in files:
             if not _allowed_doc(f.filename):
                 flash(f"'{f.filename}' isn't a supported file type (PDF, PNG, or JPG only).", "error")
-                return render_template("students/apply.html", existing=existing, stages=CAMBRIDGE_STAGES)
+                return render_template("students/apply.html", existing=existing, stages=STUDENT_PROGRAMS)
 
         if existing:
             profile = existing
@@ -81,7 +81,7 @@ def apply():
             except storage.StorageError as exc:
                 current_app.logger.error(f"Student document upload failed: {exc}")
                 flash("Couldn't upload that document — please try again.", "error")
-                return render_template("students/apply.html", existing=existing, stages=CAMBRIDGE_STAGES)
+                return render_template("students/apply.html", existing=existing, stages=STUDENT_PROGRAMS)
             db.session.add(StudentVerificationDocument(
                 profile_id=profile.id,
                 stored_filename=stored_name,
@@ -92,7 +92,7 @@ def apply():
         flash("Application submitted. An admin will review it before you're enrolled.", "success")
         return redirect(url_for("students.my_profile"))
 
-    return render_template("students/apply.html", existing=existing, stages=CAMBRIDGE_STAGES)
+    return render_template("students/apply.html", existing=existing, stages=STUDENT_PROGRAMS)
 
 
 @students_bp.route("/students/me")
@@ -121,7 +121,7 @@ def edit_profile():
             except ValueError:
                 pass
         desired_stage = request.form.get("desired_stage", "").strip()
-        valid_stage_keys = {k for k, _ in CAMBRIDGE_STAGES}
+        valid_stage_keys = {k for k, _ in STUDENT_PROGRAMS}
         if desired_stage in valid_stage_keys:
             profile.desired_stage = desired_stage
         profile.subjects_of_interest = request.form.get("subjects_of_interest", "").strip()
@@ -130,4 +130,4 @@ def edit_profile():
         flash("Application details updated.", "success")
         return redirect(url_for("students.my_profile"))
 
-    return render_template("students/edit_profile.html", profile=profile, stages=CAMBRIDGE_STAGES)
+    return render_template("students/edit_profile.html", profile=profile, stages=STUDENT_PROGRAMS)

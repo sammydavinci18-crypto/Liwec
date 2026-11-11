@@ -24,9 +24,7 @@
     </div>
     <div class="appt-actions">
       {% if u.is_banned %}<span class="status-pill status-declined">Banned</span>{% endif %}
-      {% if u.is_premium %}<span class="status-pill status-approved">Premium</span>{% endif %}
       {% if u.is_admin %}<span class="status-pill status-pending">Admin</span>{% endif %}
-      {% if u.consultant_profile %}<span class="vertical-pill vertical-both">Consultant</span>{% endif %}
     </div>
   </a>
   {% endfor %}

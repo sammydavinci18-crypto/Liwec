@@ -6,7 +6,7 @@
 <div class="room-header">
   <div>
     <span class="title">{{ meeting.title }}</span>
-    <span class="code-pill">{{ meeting.room_code }}</span>
+    <span class="code-pill">{{ meeting.type_label() }}</span>
   </div>
   <div class="room-header-right">
     {% if call_limit_minutes and call_limit_minutes > 0 %}
@@ -55,18 +55,6 @@
     <span class="icon" data-icon="screenShare"></span><span class="ctrl-label">Share</span>
   </button>
 
-  <div class="bg-picker-wrap">
-    <button class="ctrl-btn" id="btn-background" title="Virtual background">
-      <span class="icon" data-icon="background"></span><span class="ctrl-label">Background</span>
-    </button>
-    <div class="background-menu" id="background-menu">
-      <div class="bg-option selected" data-bg-mode="none">None</div>
-      <div class="bg-option" data-bg-mode="blur">Blur</div>
-      <div class="bg-option" data-bg-mode="image" data-bg-image="https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&q=60">Office</div>
-      <div class="bg-option" data-bg-mode="image" data-bg-image="https://images.unsplash.com/photo-1519681393784-d120267933ba?w=800&q=60">Sky</div>
-    </div>
-  </div>
-
   <button class="ctrl-btn" id="btn-hand-raise" title="Raise / lower hand">
     <span class="icon" data-icon="hand"></span><span class="ctrl-label">Raise hand</span>
   </button>
@@ -96,7 +84,7 @@
     <span class="icon" data-icon="users"></span><span class="ctrl-label">People</span>
     <span class="badge-count" id="pending-count" style="display:none;">0</span>
   </button>
-  <button class="ctrl-btn notes-toggle" id="btn-notes" title="Consultation notes">
+  <button class="ctrl-btn notes-toggle" id="btn-notes" title="Session notes">
     <span class="icon" data-icon="notes"></span><span class="ctrl-label">Notes</span>
     <span class="badge-count" id="notes-unread" style="display:none;">0</span>
   </button>
@@ -125,20 +113,20 @@
 <!-- Waiting room overlay (non-hosts, before the host admits them) -->
 <div class="waiting-overlay" id="waiting-overlay">
   <div class="waiting-box">
-    <h3>Waiting for the host to let you in…</h3>
-    <p>You'll join automatically as soon as {{ meeting.host.name }} admits you.</p>
+    <h3>Waiting for the administrator to let you in…</h3>
+    <p>You'll join automatically as soon as {{ meeting.host.name }} admits you. Nobody enters a session without the administrator's approval.</p>
   </div>
 </div>
 
 <!-- Consultation notes side panel -->
 <div class="notes-panel" id="notes-panel">
   <div class="notes-header">
-    <h3>Consultation notes</h3>
+    <h3>Session notes</h3>
     <button class="notes-close" id="notes-close" data-icon="close"></button>
   </div>
   <div class="notes-list" id="notes-list"></div>
   <form class="notes-form" id="notes-form">
-    <textarea id="notes-input" placeholder="Add a note about this consultation…"></textarea>
+    <textarea id="notes-input" placeholder="Add a note about this session…"></textarea>
     <button type="submit" class="btn btn-primary btn-sm">Add note</button>
   </form>
 </div>
@@ -176,14 +164,20 @@
 {% endblock %}
 
 {% block scripts %}
+{% if local_socketio %}
+<script src="{{ url_for('static', filename='vendor/socket.io.min.js') }}"></script>
+{% else %}
+<!-- Run `python tools/fetch_vendor.py` once to serve this library from your own server instead. -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+{% endif %}
 <script>
   window.ROOM_CONFIG = {
     roomCode: {{ meeting.room_code|tojson }},
     isHost: {{ is_host|tojson }},
     userName: {{ current_user.name|tojson }},
     hostName: {{ meeting.host.name|tojson }},
-    callLimitMinutes: {{ call_limit_minutes|tojson }}
+    callLimitMinutes: {{ call_limit_minutes|tojson }},
+    iceServers: {{ ice_servers|tojson }}
   };
 </script>
 <script src="{{ url_for('static', filename='js/icons.js') }}"></script>
@@ -191,9 +185,6 @@
 {% if is_host %}
 <script src="{{ url_for('static', filename='js/recorder.js') }}"></script>
 {% endif %}
-<!-- Virtual backgrounds (client-side, no server round trip) -->
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
-<script src="{{ url_for('static', filename='js/background.js') }}"></script>
 <script src="{{ url_for('static', filename='js/collab.js') }}"></script>
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 {% endblock %}

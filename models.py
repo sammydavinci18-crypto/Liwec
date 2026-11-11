@@ -1,5 +1,5 @@
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -18,14 +18,14 @@ class User(UserMixin, db.Model):
     name = db.Column(db.String(120), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
-    # "client" (default — regular user: books consultations, enrolls as a
+    # "client" (default — regular user: requests consultations, enrolls as a
     # student, can be linked as a parent), "registrar" (school-scoped staff:
     # manages enrollment/rosters, does NOT approve teacher applications —
-    # that stays with admin), "admin" (reviews verification requests,
-    # platform-wide). Being a consultant or teacher is NOT a role value —
-    # it's determined by holding an approved ConsultantProfile/TeacherProfile,
-    # same pattern as the existing consultant flow, so one person can hold
-    # several of these at once (e.g. teacher AND parent).
+    # that stays with admin), "admin" (the Director: the ONLY person who
+    # hosts meetings and consultations, approves every request, and reviews
+    # applications). Being a teacher is NOT a role value — it's determined
+    # by holding an approved TeacherProfile, so one person can hold several
+    # of these at once (e.g. teacher AND parent).
     role = db.Column(db.String(20), default="client", nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -35,16 +35,13 @@ class User(UserMixin, db.Model):
     ban_reason = db.Column(db.Text)  # admin-only note, e.g. for legal/abuse records
     banned_at = db.Column(db.DateTime)
 
-    # Premium — admin-granted (no payment processing), gates call length and
-    # recording retention. See config.py for the actual limits.
+    # LEGACY — no longer used. Every feature is free for everyone now (no
+    # tiers). The column is kept only so existing databases, where it is
+    # NOT NULL, keep accepting inserts without a migration that drops it.
     is_premium = db.Column(db.Boolean, default=False, nullable=False)
 
     meetings_hosted = db.relationship(
         "Meeting", backref="host", lazy=True, foreign_keys="Meeting.host_id"
-    )
-    consultant_profile = db.relationship(
-        "ConsultantProfile", backref="user", uselist=False, cascade="all, delete-orphan",
-        foreign_keys="ConsultantProfile.user_id",
     )
     teacher_profile = db.relationship(
         "TeacherProfile", backref="user", uselist=False, cascade="all, delete-orphan",
@@ -70,16 +67,35 @@ class User(UserMixin, db.Model):
         return self.role == "registrar"
 
 
+MEETING_TYPES = [
+    ("consultation", "Consultation"),
+    ("class", "Live class"),
+    ("meeting", "Meeting"),
+]
+
+# How long before the scheduled start invited people may wait in the lobby.
+LOBBY_OPENS_MINUTES_BEFORE = 15
+
+
 class Meeting(db.Model):
+    """Every meeting on the platform is created by the admin (directly, or by
+    approving a MeetingRequest). Nobody else can create or host one, and only
+    people the admin has invited can enter the room."""
     __tablename__ = "meetings"
 
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
     room_code = db.Column(db.String(16), unique=True, nullable=False, default=generate_room_code, index=True)
+    # Always an admin account. Kept as a plain FK so older rows still load.
     host_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     scheduled_time = db.Column(db.DateTime, nullable=True)
-    status = db.Column(db.String(20), default="scheduled")  # scheduled, live, ended
+    # scheduled, live, ended, cancelled
+    status = db.Column(db.String(20), default="scheduled")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # consultation | class | meeting — see MEETING_TYPES.
+    meeting_type = db.Column(db.String(20), default="consultation", nullable=False, server_default="consultation")
+    description = db.Column(db.Text)
 
     # Set when the host actually joins (not when the row is created) — this
     # is what the server-side call-length limit counts from. See sockets.py.
@@ -88,6 +104,54 @@ class Meeting(db.Model):
 
     participants = db.relationship("MeetingParticipant", backref="meeting", lazy=True, cascade="all, delete-orphan")
     notes = db.relationship("ConsultationNote", backref="meeting", lazy=True, cascade="all, delete-orphan")
+    invites = db.relationship("MeetingInvite", backref="meeting", lazy=True, cascade="all, delete-orphan")
+
+    # ---- access rules (single source of truth: routes AND sockets use these)
+
+    def type_label(self):
+        return dict(MEETING_TYPES).get(self.meeting_type, "Meeting")
+
+    def is_hosted_by(self, user):
+        return bool(user and user.is_authenticated and user.is_admin and user.id == self.host_id)
+
+    def is_invited(self, user):
+        return bool(user and user.is_authenticated and any(i.user_id == user.id for i in self.invites))
+
+    def lobby_opens_at(self):
+        if not self.scheduled_time:
+            return None
+        return self.scheduled_time - timedelta(minutes=LOBBY_OPENS_MINUTES_BEFORE)
+
+    def entry_state(self, user):
+        """Why/whether `user` may be in this meeting's room right now:
+        "host" | "ok" | "forbidden" | "cancelled" | "not_open".
+        Being logged in is never enough — you must be the admin host or have
+        been invited by the admin."""
+        if self.is_hosted_by(user):
+            return "cancelled" if self.status == "cancelled" else "host"
+        if not self.is_invited(user):
+            return "forbidden"
+        if self.status == "cancelled":
+            return "cancelled"
+        if self.status == "ended":
+            return "ok"  # may view the recording
+        opens = self.lobby_opens_at()
+        if opens and datetime.utcnow() < opens:
+            return "not_open"
+        return "ok"
+
+
+class MeetingInvite(db.Model):
+    """The admin's guest list for one meeting. No invite, no entry."""
+    __tablename__ = "meeting_invites"
+    __table_args__ = (db.UniqueConstraint("meeting_id", "user_id", name="uq_meeting_invite"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    meeting_id = db.Column(db.Integer, db.ForeignKey("meetings.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    invited_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User")
 
 
 class MeetingParticipant(db.Model):
@@ -138,132 +202,44 @@ class Recording(db.Model):
 
 
 # =============================================================================
-# Consultant marketplace: profiles, verification, availability, booking, chat
+# Consultancy is run by the admin only. People don't browse consultants or
+# start meetings themselves — they ask, and the admin decides.
 # =============================================================================
 
-class ConsultantProfile(db.Model):
-    __tablename__ = "consultant_profiles"
+REQUEST_KINDS = [
+    ("education", "Education administration consultation"),
+    ("business", "Business consultation"),
+    ("meeting", "Meeting request"),
+]
+
+
+class MeetingRequest(db.Model):
+    """A person asking the admin for a consultation or a meeting. Nothing
+    happens until the admin approves it — approval is what creates the
+    Meeting (hosted by the admin, with the requester invited)."""
+    __tablename__ = "meeting_requests"
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), unique=True, nullable=False)
+    requester_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    kind = db.Column(db.String(20), default="education", nullable=False)  # see REQUEST_KINDS
+    topic = db.Column(db.String(200), nullable=False)
+    details = db.Column(db.Text)
+    preferred_time = db.Column(db.DateTime, nullable=True)  # a suggestion only; the admin sets the real time
 
-    headline = db.Column(db.String(160))
-    bio = db.Column(db.Text)
-    # "education" | "business" | "both" — matches the two consulting tracks
-    # on the landing page, so the directory can filter the same way.
-    vertical = db.Column(db.String(20), default="education", nullable=False)
-
-    price_amount = db.Column(db.Numeric(10, 2))
-    price_currency = db.Column(db.String(8), default="USD")
-    price_unit = db.Column(db.String(20), default="session")  # "session" | "hour"
-
-    # "pending" (awaiting admin review) | "approved" | "rejected"
+    # "pending" | "approved" | "declined" | "cancelled"
     status = db.Column(db.String(20), default="pending", nullable=False)
-    review_note = db.Column(db.Text)  # admin's note, shown to the consultant on rejection
-    submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
-    reviewed_at = db.Column(db.DateTime)
-    reviewed_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
-
-    documents = db.relationship(
-        "VerificationDocument", backref="profile", lazy=True, cascade="all, delete-orphan"
-    )
-    availability_slots = db.relationship(
-        "AvailabilitySlot", backref="profile", lazy=True, cascade="all, delete-orphan",
-        order_by="AvailabilitySlot.start_time",
-    )
-
-    def price_display(self):
-        if self.price_amount is None:
-            return "Rate on request"
-        unit = "hr" if self.price_unit == "hour" else "session"
-        return f"{self.price_currency} {self.price_amount:.0f} / {unit}"
-
-
-class VerificationDocument(db.Model):
-    __tablename__ = "verification_documents"
-
-    id = db.Column(db.Integer, primary_key=True)
-    profile_id = db.Column(db.Integer, db.ForeignKey("consultant_profiles.id"), nullable=False)
-    stored_filename = db.Column(db.String(255), nullable=False)  # random name on disk
-    original_filename = db.Column(db.String(255), nullable=False)  # name to show the consultant/admin
-    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-
-class AvailabilitySlot(db.Model):
-    __tablename__ = "availability_slots"
-
-    id = db.Column(db.Integer, primary_key=True)
-    profile_id = db.Column(db.Integer, db.ForeignKey("consultant_profiles.id"), nullable=False)
-    start_time = db.Column(db.DateTime, nullable=False)
-    end_time = db.Column(db.DateTime, nullable=False)
-    is_booked = db.Column(db.Boolean, default=False, nullable=False)
-
-
-class Appointment(db.Model):
-    __tablename__ = "appointments"
-
-    id = db.Column(db.Integer, primary_key=True)
-    consultant_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    client_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    slot_id = db.Column(db.Integer, db.ForeignKey("availability_slots.id"), nullable=True)
-
-    # Set when booked from an open slot; otherwise this is the client's
-    # requested date/time for the consultant to confirm or renegotiate.
-    requested_time = db.Column(db.DateTime, nullable=True)
-
-    price_amount = db.Column(db.Numeric(10, 2))
-    price_currency = db.Column(db.String(8), default="USD")
-    client_note = db.Column(db.Text)
-
-    # "pending" | "confirmed" | "declined" | "cancelled" | "completed"
-    status = db.Column(db.String(20), default="pending", nullable=False)
+    admin_note = db.Column(db.Text)  # shown to the requester with the decision
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    responded_at = db.Column(db.DateTime)
-
+    decided_at = db.Column(db.DateTime)
+    decided_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     meeting_id = db.Column(db.Integer, db.ForeignKey("meetings.id"), nullable=True)
 
-    consultant = db.relationship("User", foreign_keys=[consultant_id])
-    client = db.relationship("User", foreign_keys=[client_id])
-    slot = db.relationship("AvailabilitySlot")
-    meeting = db.relationship("Meeting")
+    requester = db.relationship("User", foreign_keys=[requester_id])
+    decided_by = db.relationship("User", foreign_keys=[decided_by_id])
+    meeting = db.relationship("Meeting", foreign_keys=[meeting_id])
 
-    def price_display(self):
-        if self.price_amount is None:
-            return "Not set yet"
-        return f"{self.price_currency} {self.price_amount:.0f}"
-
-
-class Conversation(db.Model):
-    __tablename__ = "conversations"
-    __table_args__ = (db.UniqueConstraint("consultant_id", "client_id", name="uq_conversation_pair"),)
-
-    id = db.Column(db.Integer, primary_key=True)
-    consultant_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    client_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    consultant = db.relationship("User", foreign_keys=[consultant_id])
-    client = db.relationship("User", foreign_keys=[client_id])
-    messages = db.relationship(
-        "DirectMessage", backref="conversation", lazy=True, cascade="all, delete-orphan",
-        order_by="DirectMessage.created_at",
-    )
-
-    def other_party(self, current_user_id):
-        return self.client if current_user_id == self.consultant_id else self.consultant
-
-
-class DirectMessage(db.Model):
-    __tablename__ = "direct_messages"
-
-    id = db.Column(db.Integer, primary_key=True)
-    conversation_id = db.Column(db.Integer, db.ForeignKey("conversations.id"), nullable=False)
-    sender_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    content = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    read_at = db.Column(db.DateTime)
-
-    sender = db.relationship("User")
+    def kind_label(self):
+        return dict(REQUEST_KINDS).get(self.kind, "Request")
 
 
 # =============================================================================
@@ -275,6 +251,16 @@ CAMBRIDGE_STAGES = [
     ("lower_secondary", "Cambridge Lower Secondary"),
     ("igcse", "Cambridge IGCSE"),
     ("as_a_level", "Cambridge AS & A Level"),
+]
+
+
+# The academy's three programmes (see the mission document). These are what a
+# student applies to. Older applications may still carry a Cambridge-stage key,
+# so stage_label() understands both lists.
+STUDENT_PROGRAMS = [
+    ("bridging", "Year 6–Year 8 Bridging"),
+    ("transition", "National Curriculum to Cambridge Transition"),
+    ("homeschool", "Home Schooling"),
 ]
 
 
@@ -296,7 +282,7 @@ class TeacherProfile(db.Model):
     # this flag is about employment status, not trust level.
     teacher_type = db.Column(db.String(20), default="independent", nullable=False)
 
-    # "pending" | "approved" | "rejected" — same review flow as consultants.
+    # "pending" | "approved" | "rejected" — same review flow as teachers.
     status = db.Column(db.String(20), default="pending", nullable=False)
     review_note = db.Column(db.Text)
     submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -351,7 +337,7 @@ class ParentStudentLink(db.Model):
 
 class StudentProfile(db.Model):
     """A student's admission application to the virtual school. Goes through
-    the same admin document-review flow as teachers/consultants — nobody is
+    the same admin document-review flow as teachers — nobody is
     an enrolled student until an admin approves this."""
     __tablename__ = "student_profiles"
 
@@ -375,7 +361,7 @@ class StudentProfile(db.Model):
     )
 
     def stage_label(self):
-        return dict(CAMBRIDGE_STAGES).get(self.desired_stage, self.desired_stage or "—")
+        return dict(STUDENT_PROGRAMS + CAMBRIDGE_STAGES).get(self.desired_stage, self.desired_stage or "—")
 
 
 class StudentVerificationDocument(db.Model):

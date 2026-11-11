@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Requests · Admin · Light-Way{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Admin</span>
+    <h1>Consultation &amp; meeting requests</h1>
+    <p>Nothing happens until you decide. Approving sets the time and creates a session with the requester invited.</p>
+  </div>
+  <div class="dash-actions">
+    <a class="btn btn-primary" href="{{ url_for('admin.new_meeting') }}">+ Schedule a session</a>
+  </div>
+</div>
+
+<h3 class="section-heading">Waiting for your decision ({{ pending|length }})</h3>
+{% if pending %}
+<div class="appointment-list">
+  {% for r in pending %}
+  <div class="appointment-row request-row">
+    <div class="request-info">
+      <strong>{{ r.topic }}</strong>
+      <span class="appt-time">{{ r.requester.name }} · {{ r.requester.email }}</span>
+      <span class="vertical-pill vertical-{{ 'business' if r.kind == 'business' else 'education' }}">{{ r.kind_label() }}</span>
+      {% if r.details %}<p class="appt-note">"{{ r.details }}"</p>{% endif %}
+      <span class="appt-time">Sent {{ r.created_at|dt }}{% if r.preferred_time %} · they suggested {{ r.preferred_time|dt }}{% endif %}</span>
+    </div>
+    <div class="request-actions">
+      <form method="POST" action="{{ url_for('admin.request_approve', request_id=r.id) }}" class="request-approve">
+        <div class="field">
+          <label for="when-{{ r.id }}">Session date &amp; time (UTC)</label>
+          <input type="datetime-local" id="when-{{ r.id }}" name="scheduled_time" required
+                 value="{{ r.preferred_time.strftime('%Y-%m-%dT%H:%M') if r.preferred_time else '' }}">
+        </div>
+        <div class="field">
+          <label for="note-{{ r.id }}">Note to the requester (optional)</label>
+          <input type="text" id="note-{{ r.id }}" name="admin_note" maxlength="500" placeholder="e.g. Please have your policy documents ready">
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Approve &amp; schedule</button>
+      </form>
+      <form method="POST" action="{{ url_for('admin.request_decline', request_id=r.id) }}" class="request-decline">
+        <input type="text" name="admin_note" maxlength="500" placeholder="Reason (optional)">
+        <button type="submit" class="btn btn-ghost btn-sm">Decline</button>
+      </form>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">No requests waiting. You're all caught up.</div>
+{% endif %}
+
+<h3 class="section-heading">Recently handled</h3>
+{% if decided %}
+<div class="appointment-list">
+  {% for r in decided %}
+  <div class="appointment-row">
+    <div>
+      <strong>{{ r.topic }}</strong>
+      <span class="appt-time">{{ r.requester.name }} · {{ r.kind_label() }}</span>
+      {% if r.meeting %}<span class="appt-time">Session: <a href="{{ url_for('admin.meeting_detail', meeting_id=r.meeting.id) }}">{{ r.meeting.scheduled_time|dt }}</a></span>{% endif %}
+      {% if r.admin_note %}<p class="appt-note">"{{ r.admin_note }}"</p>{% endif %}
+    </div>
+    <div class="appt-actions"><span class="status-pill status-{{ r.status }}">{{ r.status|capitalize }}</span></div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">Nothing handled yet.</div>
+{% endif %}
+{% endblock %}

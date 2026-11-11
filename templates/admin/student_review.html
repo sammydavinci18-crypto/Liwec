@@ -17,7 +17,7 @@
 
     <h3>Application</h3>
     <p><strong>Date of birth:</strong> {{ profile.date_of_birth.strftime('%b %-d, %Y') if profile.date_of_birth else "—" }}</p>
-    <p><strong>Cambridge stage:</strong> {{ profile.stage_label() }}</p>
+    <p><strong>Programme:</strong> {{ profile.stage_label() }}</p>
     <p><strong>Subjects:</strong> {{ profile.subjects_of_interest or "—" }}</p>
     <p><strong>Notes:</strong> {{ profile.notes or "—" }}</p>
 

@@ -14,6 +14,12 @@ CONNECTED = {}  # sid -> {"room_code": str, "user_id": int, "name": str, "is_hos
 # room_code -> { sid: name }
 WAITING = {}
 
+# Sockets the admin host has actually let in (the host's own socket is added
+# automatically). A socket that is not in here can't join the call or relay
+# signals — so skipping the lobby by emitting "join" directly does nothing.
+# room_code -> set(sid)
+ADMITTED = {}
+
 # Whether the host currently has recording turned on, per room. Lets a
 # participant who joins mid-call immediately see accurate status instead of
 # assuming "not recording" until the next toggle.
@@ -62,37 +68,42 @@ def _enforce_call_time_limit(app, room_code, meeting_id, limit_minutes):
 
 
 # ---------------------------------------------------------------------------
-# Waiting room / lobby
+# Waiting room / lobby — the admin decides who comes in. Always.
 # ---------------------------------------------------------------------------
+
+def _may_be_here(meeting, user):
+    """Only the admin host, or a guest on the admin's invite list."""
+    return meeting is not None and meeting.status not in ("ended", "cancelled") \
+        and meeting.entry_state(user) in ("host", "ok")
+
 
 @socketio.on("request_to_join")
 def handle_request_to_join(data):
-    """First thing a client does on page load. Host is auto-admitted.
-    Everyone else waits for the host to approve them, unless no host is
-    currently in the room (then we let them straight in rather than stall)."""
+    """First thing a client does on page load. The admin host is let in
+    straight away. Every guest waits for the admin to admit them — including
+    when the admin hasn't arrived yet (guests queue up and the admin sees
+    them the moment they open the room). Nobody is ever auto-admitted."""
     room_code = data.get("room_code")
     if not current_user.is_authenticated:
         return
 
     meeting = Meeting.query.filter_by(room_code=room_code).first()
-    if not meeting:
+    if not _may_be_here(meeting, current_user):
+        emit("join_denied", {})
         return
 
     sid = request.sid
-    is_host = meeting.host_id == current_user.id
 
-    if is_host:
-        emit("join_approved", {})
-        return
-
-    host_sid = _host_sid_for_room(room_code)
-    if not host_sid:
+    if meeting.is_hosted_by(current_user):
+        ADMITTED.setdefault(room_code, set()).add(sid)
         emit("join_approved", {})
         return
 
     WAITING.setdefault(room_code, {})[sid] = current_user.name
-    emit("join_request", {"sid": sid, "name": current_user.name}, room=host_sid)
     emit("waiting_for_host", {})
+    host_sid = _host_sid_for_room(room_code)
+    if host_sid:
+        emit("join_request", {"sid": sid, "name": current_user.name}, room=host_sid)
 
 
 @socketio.on("admit_participant")
@@ -103,10 +114,14 @@ def handle_admit_participant(data):
         return
 
     meeting = Meeting.query.filter_by(room_code=room_code).first()
-    if not meeting or meeting.host_id != current_user.id:
+    if not meeting or not meeting.is_hosted_by(current_user):
         return
 
-    WAITING.get(room_code, {}).pop(target_sid, None)
+    # Can only admit someone who is genuinely waiting in this room.
+    if target_sid not in WAITING.get(room_code, {}):
+        return
+    WAITING[room_code].pop(target_sid, None)
+    ADMITTED.setdefault(room_code, set()).add(target_sid)
     emit("join_approved", {}, room=target_sid)
 
 
@@ -118,7 +133,7 @@ def handle_deny_participant(data):
         return
 
     meeting = Meeting.query.filter_by(room_code=room_code).first()
-    if not meeting or meeting.host_id != current_user.id:
+    if not meeting or not meeting.is_hosted_by(current_user):
         return
 
     WAITING.get(room_code, {}).pop(target_sid, None)
@@ -136,11 +151,15 @@ def handle_join(data):
         return
 
     meeting = Meeting.query.filter_by(room_code=room_code).first()
-    if not meeting:
+    if not _may_be_here(meeting, current_user):
         return
 
-    is_host = meeting.host_id == current_user.id
+    is_host = meeting.is_hosted_by(current_user)
     sid = request.sid
+
+    # Must have been through the lobby (admitted by the admin).
+    if sid not in ADMITTED.get(room_code, set()):
+        return
 
     existing_peers = [
         {"sid": s, "name": info["name"], "is_host": info["is_host"]}
@@ -162,10 +181,7 @@ def handle_join(data):
             meeting.call_started_at = datetime.utcnow()
             db.session.commit()
 
-        limit_minutes = (
-            current_app.config["PREMIUM_CALL_LIMIT_MINUTES"] if meeting.host.is_premium
-            else current_app.config["FREE_CALL_LIMIT_MINUTES"]
-        )
+        limit_minutes = current_app.config["CALL_LIMIT_MINUTES"]  # 0 = no limit
         if limit_minutes and limit_minutes > 0:
             TIMED_ROOMS.add(room_code)
             app_obj = current_app._get_current_object()
@@ -181,11 +197,21 @@ def handle_join(data):
         include_self=False,
     )
 
+    # Guests who arrived before the admin are queued — show them to the admin now.
+    if is_host:
+        for waiting_sid, waiting_name in WAITING.get(room_code, {}).items():
+            emit("join_request", {"sid": waiting_sid, "name": waiting_name})
+
 
 @socketio.on("signal")
 def handle_signal(data):
     target = data.get("target")
     if not target:
+        return
+    # Signals only pass between two people who are both inside the same call.
+    sender_info = CONNECTED.get(request.sid)
+    target_info = CONNECTED.get(target)
+    if not sender_info or not target_info or sender_info["room_code"] != target_info["room_code"]:
         return
     emit(
         "signal",
@@ -275,7 +301,7 @@ def handle_recording_status(data):
     if not current_user.is_authenticated:
         return
     meeting = Meeting.query.filter_by(room_code=room_code).first()
-    if not meeting or meeting.host_id != current_user.id:
+    if not meeting or not meeting.is_hosted_by(current_user):
         return
     recording = bool(data.get("recording"))
     RECORDING[room_code] = recording
@@ -292,7 +318,7 @@ def handle_host_mute_all(data):
     if not current_user.is_authenticated:
         return
     meeting = Meeting.query.filter_by(room_code=room_code).first()
-    if not meeting or meeting.host_id != current_user.id:
+    if not meeting or not meeting.is_hosted_by(current_user):
         return
     emit("force_mute", {}, room=room_code, include_self=False)
 
@@ -304,8 +330,10 @@ def handle_host_remove_participant(data):
     if not current_user.is_authenticated or not target_sid:
         return
     meeting = Meeting.query.filter_by(room_code=room_code).first()
-    if not meeting or meeting.host_id != current_user.id:
+    if not meeting or not meeting.is_hosted_by(current_user):
         return
+    # Removed guests lose their admission and must be let in again by the admin.
+    ADMITTED.get(room_code, set()).discard(target_sid)
     emit("removed_by_host", {}, room=target_sid)
 
 
@@ -317,9 +345,11 @@ def handle_host_remove_participant(data):
 def handle_disconnect():
     sid = request.sid
 
-    # Clear from any waiting-room lists regardless of admission state.
+    # Clear from any waiting-room / admitted lists regardless of state.
     for pending in WAITING.values():
         pending.pop(sid, None)
+    for admitted in ADMITTED.values():
+        admitted.discard(sid)
 
     info = CONNECTED.pop(sid, None)
     if not info:

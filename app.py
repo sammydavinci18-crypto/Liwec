@@ -7,9 +7,7 @@ from datetime import datetime, timezone
 from config import Config
 from extensions import db, login_manager, socketio, migrate
 from models import (
-    User, Meeting, MeetingParticipant, ConsultationNote, Recording,
-    ConsultantProfile, VerificationDocument, AvailabilitySlot, Appointment,
-    Conversation, DirectMessage,
+    User, Meeting, MeetingParticipant, MeetingInvite, MeetingRequest, ConsultationNote, Recording,
     TeacherProfile, TeacherVerificationDocument, ParentStudentLink,
     StudentProfile, StudentVerificationDocument, StudentTeacherAssignment,
 )  # noqa: F401
@@ -228,12 +226,28 @@ def create_app():
     def inject_current_year():
         return {"current_year": datetime.now(timezone.utc).year}
 
+    @app.context_processor
+    def inject_admin_counts():
+        """Lets the admin's nav show how many requests are waiting."""
+        from flask_login import current_user
+        try:
+            if current_user.is_authenticated and current_user.is_admin:
+                return {"pending_requests_count": MeetingRequest.query.filter_by(status="pending").count()}
+        except Exception:
+            db.session.rollback()
+        return {"pending_requests_count": 0}
+
+    @app.template_filter("dt")
+    def format_datetime(value):
+        """Portable date/time display (the platform stores and shows UTC)."""
+        if not value:
+            return "—"
+        return value.strftime("%a %d %b %Y, %H:%M") + " UTC"
+
     from routes.auth import auth_bp
     from routes.main import main_bp
     from routes.meetings import meetings_bp
-    from routes.consultants import consultants_bp
-    from routes.appointments import appointments_bp
-    from routes.messages import messages_bp
+    from routes.consultation import consult_bp
     from routes.admin import admin_bp
     from routes.teachers import teachers_bp
     from routes.family import family_bp
@@ -242,9 +256,7 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(meetings_bp)
-    app.register_blueprint(consultants_bp)
-    app.register_blueprint(appointments_bp)
-    app.register_blueprint(messages_bp)
+    app.register_blueprint(consult_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(teachers_bp)
     app.register_blueprint(family_bp)
@@ -279,8 +291,8 @@ def create_app():
 
     @app.cli.command("make-admin")
     def make_admin():
-        """Promote a user to admin so they can review consultant verification
-        requests. Run with: flask --app app make-admin <email>
+        """Promote a user to admin (the Director). Admins are the only people who
+        can host meetings, approve requests and review applications. Run with: flask --app app make-admin <email>
         There's deliberately no web route that can do this — admin access is
         only ever granted from the server/CLI side."""
         import click

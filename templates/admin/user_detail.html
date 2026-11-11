@@ -13,25 +13,16 @@
         <p class="sub">{{ user.email }}</p>
         <div class="profile-badges">
           {% if user.is_banned %}<span class="status-pill status-declined">Banned</span>{% endif %}
-          {% if user.is_premium %}<span class="status-pill status-approved">Premium</span>{% endif %}
           {% if user.is_admin %}<span class="status-pill status-pending">Admin</span>{% endif %}
           {% if user.is_registrar %}<span class="status-pill status-confirmed">Registrar</span>{% endif %}
-          {% if not user.is_banned and not user.is_premium and not user.is_admin %}<span class="status-pill status-confirmed">Free tier</span>{% endif %}
         </div>
       </div>
     </div>
 
     <h3>Activity</h3>
-    <p><strong>Joined:</strong> {{ user.created_at.strftime('%b %-d, %Y') if user.created_at else '—' }}</p>
-    <p><strong>Meetings hosted:</strong> {{ meetings_hosted_count }}</p>
-    <p><strong>Appointments booked (as client):</strong> {{ appointments_as_client }}</p>
-    <p><strong>Appointments received (as consultant):</strong> {{ appointments_as_consultant }}</p>
-
-    {% if user.consultant_profile %}
-    <h3>Consultant profile</h3>
-    <p><strong>Status:</strong> <span class="status-pill status-{{ user.consultant_profile.status }}">{{ user.consultant_profile.status|capitalize }}</span></p>
-    <p><a href="{{ url_for('admin.review', profile_id=user.consultant_profile.id) }}">Review consultant application &rarr;</a></p>
-    {% endif %}
+    <p><strong>Joined:</strong> {{ user.created_at|dt if user.created_at else '—' }}</p>
+    <p><strong>Sessions invited to:</strong> {{ sessions_invited_count }}</p>
+    <p><strong>Requests made to the administrator:</strong> {{ requests_made_count }}</p>
 
     {% if user.teacher_profile %}
     <h3>Teacher profile</h3>
@@ -42,7 +33,7 @@
     {% if user.is_banned and user.ban_reason %}
     <h3>Ban reason (admin-only)</h3>
     <p class="flash flash-error">{{ user.ban_reason }}</p>
-    <p class="sub">Banned {{ user.banned_at.strftime('%b %-d, %Y') if user.banned_at else '' }}</p>
+    <p class="sub">Banned {{ user.banned_at|dt if user.banned_at else '' }}</p>
     {% endif %}
   </div>
 
@@ -58,16 +49,6 @@
       </form>
     </div>
     {% endif %}
-
-    <div class="booking-card">
-      <h3>Premium</h3>
-      <p class="sub">Grants a higher/no call-length limit and longer recording retention. No payment is processed — this is a manual admin flag.</p>
-      <form method="POST" action="{{ url_for('admin.toggle_premium', user_id=user.id) }}">
-        <button type="submit" class="btn {{ 'btn-ghost' if user.is_premium else 'btn-primary' }} btn-block">
-          {{ "Remove premium" if user.is_premium else "Grant premium" }}
-        </button>
-      </form>
-    </div>
 
     {% if user.id != current_user.id and not user.is_admin %}
     <div class="booking-card moderation-card">

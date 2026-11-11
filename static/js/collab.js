@@ -22,7 +22,7 @@ document.addEventListener("DOMContentLoaded", () => {
       waitingOverlay.innerHTML = `
         <div class="waiting-box">
           <h3>Access denied</h3>
-          <p>The host didn't admit you to this meeting.</p>
+          <p>The administrator didn't admit you to this session.</p>
           <a class="btn btn-primary btn-sm" href="/dashboard">Back to dashboard</a>
         </div>`;
       waitingOverlay.classList.add("show");
@@ -271,7 +271,14 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   socket.on("removed_by_host", () => {
-    alert("The host has removed you from this meeting.");
+    alert("The administrator has removed you from this meeting.");
+    window.location.href = "/dashboard";
+  });
+
+  // The admin ended the session — everyone (including the lobby) goes home.
+  socket.on("meeting_ended", () => {
+    if (isHost) return; // the host's own End button handles its redirect
+    alert("The administrator has ended this session.");
     window.location.href = "/dashboard";
   });
 
@@ -279,7 +286,7 @@ document.addEventListener("DOMContentLoaded", () => {
      Call time limit (server-enforced — see sockets.py)
      ========================================================= */
   socket.on("time_limit_warning", ({ minutes_left }) => {
-    showReactionToast("Liwec", `⏳ ${minutes_left} minute${minutes_left === 1 ? "" : "s"} left in this call`);
+    showReactionToast("Light-Way", `⏳ ${minutes_left} minute${minutes_left === 1 ? "" : "s"} left in this call`);
   });
 
   socket.on("time_limit_reached", async () => {

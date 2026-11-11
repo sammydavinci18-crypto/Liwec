@@ -1,54 +1,146 @@
 {% extends "base.html" %}
-{% block title %}Dashboard · Light-Way{% endblock %}
+{% block title %}My sessions · Light-Way{% endblock %}
 
 {% block content %}
+{% macro session_card(m, show_host=True) %}
+<div class="meeting-card">
+  <h3>{{ m.title }}</h3>
+  <span class="code">{{ m.type_label() }}</span>
+  <span class="meta">
+    {{ m.scheduled_time|dt }}
+    {% if m.status == 'live' %}· <strong>Live now</strong>{% endif %}
+  </span>
+  {% if show_host %}<span class="meta">With {{ m.host.name }}</span>{% endif %}
+  <a href="{{ url_for('meetings.room', room_code=m.room_code) }}" class="btn btn-primary btn-sm">
+    {% if current_user.is_admin %}{% if m.status == 'live' %}Return to room{% else %}Open room{% endif %}
+    {% else %}Enter waiting room{% endif %}
+  </a>
+</div>
+{% endmacro %}
+{% if current_user.is_admin %}
 <div class="dash-head">
   <div>
-    <span class="eyebrow eyebrow-dark">Virtual school &amp; consultancy</span>
-    <h1>Your consultations</h1>
-    <p>Host a new session or join one with a room code.</p>
+    <span class="eyebrow eyebrow-dark">Administrator</span>
+    <h1>Your control room</h1>
+    <p>Every consultation, class and meeting on Light-Way is scheduled by you. Nobody can start one, or enter one, without your approval.</p>
   </div>
   <div class="dash-actions">
-    <a href="{{ url_for('meetings.join_meeting') }}" class="btn btn-ghost">Join with code</a>
-    <a href="{{ url_for('meetings.create_meeting') }}" class="btn btn-primary">+ New meeting</a>
+    <a href="{{ url_for('admin.requests_queue') }}" class="btn btn-ghost">
+      Requests{% if pending_count %} ({{ pending_count }} waiting){% endif %}
+    </a>
+    <a href="{{ url_for('admin.new_meeting') }}" class="btn btn-primary">+ Schedule a session</a>
   </div>
 </div>
 
+{% if pending_count %}
 <div class="marketplace-promo">
   <div>
-    <h3>Looking for a consultant, or want to become one?</h3>
-    <p>Browse verified education administration and business consultants, or apply to be listed yourself.</p>
+    <h3>{{ pending_count }} request{{ '' if pending_count == 1 else 's' }} waiting for your decision</h3>
+    <p>People have asked for a consultation or a meeting. Approve with a date and time, or decline.</p>
   </div>
   <div class="marketplace-promo-actions">
-    <a class="btn btn-ghost" href="{{ url_for('consultants.directory') }}">Browse consultants</a>
-    {% if current_user.consultant_profile %}
-    <a class="btn btn-primary" href="{{ url_for('consultants.my_profile') }}">My consultant profile</a>
-    {% else %}
-    <a class="btn btn-primary" href="{{ url_for('consultants.apply') }}">Become a consultant</a>
-    {% endif %}
+    <a class="btn btn-primary" href="{{ url_for('admin.requests_queue') }}">Review requests</a>
   </div>
 </div>
+{% endif %}
 
+<div class="section-label">Upcoming &amp; live sessions</div>
+{% if upcoming %}
+  <div class="meeting-grid">
+    {% for m in upcoming %}
+      <div class="meeting-card">
+        <h3>{{ m.title }}</h3>
+        <span class="code">{{ m.type_label() }}</span>
+        <span class="meta">
+          {{ m.scheduled_time|dt }} · {{ m.status|capitalize }}
+        </span>
+        <span class="meta">{{ m.invites|length }} guest{{ '' if m.invites|length == 1 else 's' }} invited</span>
+        <div class="appt-actions">
+          <a href="{{ url_for('meetings.room', room_code=m.room_code) }}" class="btn btn-primary btn-sm">
+            {{ 'Return to room' if m.status == 'live' else 'Open room' }}
+          </a>
+          <a href="{{ url_for('admin.meeting_detail', meeting_id=m.id) }}" class="btn btn-ghost btn-sm">Manage</a>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty-state">Nothing scheduled. Approve a request or schedule a session to get started.</div>
+{% endif %}
+
+<div class="section-label">The school</div>
 <div class="marketplace-promo">
   <div>
-    <h3>Light-Way Virtual School</h3>
-    <p>Browse verified Cambridge-stage teachers, or apply to teach — as an official Light-Way teacher or independently.</p>
+    <h3>Admissions, teachers and placements</h3>
+    <p>Review student and teacher applications, place students with teachers, and schedule live classes for them.</p>
   </div>
   <div class="marketplace-promo-actions">
-    <a class="btn btn-ghost" href="{{ url_for('teachers.directory') }}">Browse teachers</a>
-    {% if current_user.teacher_profile %}
-    <a class="btn btn-ghost" href="{{ url_for('teachers.my_students') }}">My students</a>
-    <a class="btn btn-primary" href="{{ url_for('teachers.my_profile') }}">My teacher profile</a>
-    {% else %}
-    <a class="btn btn-primary" href="{{ url_for('teachers.apply') }}">Become a teacher</a>
-    {% endif %}
+    <a class="btn btn-ghost" href="{{ url_for('admin.student_queue') }}">Student review</a>
+    <a class="btn btn-ghost" href="{{ url_for('admin.teacher_queue') }}">Teacher review</a>
+    <a class="btn btn-ghost" href="{{ url_for('admin.placements') }}">Placements</a>
   </div>
 </div>
 
+{% else %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Light-Way International Virtual Academy</span>
+    <h1>My sessions</h1>
+    <p>Sessions are scheduled by the administrator. You'll see here every session you've been invited to.</p>
+  </div>
+  <div class="dash-actions">
+    <a href="{{ url_for('consult.new') }}" class="btn btn-primary">Request a consultation</a>
+  </div>
+</div>
+
+<div class="section-label">Upcoming sessions</div>
+{% if upcoming %}
+  <div class="meeting-grid">
+    {% for m in upcoming %}{{ session_card(m) }}{% endfor %}
+  </div>
+{% else %}
+  <div class="empty-state">No sessions scheduled for you yet. To meet the administrator, <a href="{{ url_for('consult.new') }}">send a request</a>.</div>
+{% endif %}
+
+<div class="section-label">My requests</div>
+{% if my_requests %}
+  <div class="appointment-list">
+    {% for r in my_requests %}
+    <div class="appointment-row">
+      <div>
+        <strong>{{ r.topic }}</strong>
+        <span class="appt-time">{{ r.kind_label() }}</span>
+      </div>
+      <div class="appt-actions">
+        <span class="status-pill status-{{ r.status }}">{{ r.status|capitalize }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <p><a href="{{ url_for('consult.mine') }}">See all my requests &rarr;</a></p>
+{% else %}
+  <div class="empty-state">You haven't asked for a session yet.</div>
+{% endif %}
+
+{% if past %}
+<div class="section-label">Past sessions</div>
+<div class="meeting-grid">
+  {% for m in past %}
+  <div class="meeting-card">
+    <h3>{{ m.title }}</h3>
+    <span class="code">{{ m.type_label() }}</span>
+    <span class="meta">{{ m.scheduled_time|dt }}</span>
+    <a href="{{ url_for('meetings.room', room_code=m.room_code) }}" class="btn btn-ghost btn-sm">Recording &amp; notes</a>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="section-label">Light-Way Virtual School</div>
 <div class="marketplace-promo">
   <div>
     <h3>Student admissions</h3>
-    <p>Apply to enroll in Light-Way's Cambridge-structured classes. An admin reviews every application and places you with a teacher.</p>
+    <p>Apply to one of our programmes. The administrator reviews every application and places you with a teacher.</p>
   </div>
   <div class="marketplace-promo-actions">
     {% if current_user.student_profile %}
@@ -61,50 +153,27 @@
 
 <div class="marketplace-promo">
   <div>
+    <h3>Teach with Light-Way</h3>
+    <p>Apply to teach Cambridge stages and subjects. Every teacher is verified by the administrator before going live.</p>
+  </div>
+  <div class="marketplace-promo-actions">
+    {% if current_user.teacher_profile %}
+    <a class="btn btn-ghost" href="{{ url_for('teachers.my_students') }}">My students</a>
+    <a class="btn btn-primary" href="{{ url_for('teachers.my_profile') }}">My teacher profile</a>
+    {% else %}
+    <a class="btn btn-primary" href="{{ url_for('teachers.apply') }}">Become a teacher</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="marketplace-promo">
+  <div>
     <h3>Parent or guardian?</h3>
-    <p>Link your account to your child's so you can keep an eye on their records once classes are live.</p>
+    <p>Link your account to your child's so you can follow their records once classes are live.</p>
   </div>
   <div class="marketplace-promo-actions">
     <a class="btn btn-primary" href="{{ url_for('family.dashboard') }}">Manage family links</a>
   </div>
 </div>
-
-<div class="section-label">Meetings you host</div>
-{% if hosted %}
-  <div class="meeting-grid">
-    {% for m in hosted %}
-      <div class="meeting-card">
-        <h3>{{ m.title }}</h3>
-        <span class="code">{{ m.room_code }}</span>
-        <span class="meta">
-          {% if m.scheduled_time %}Scheduled {{ m.scheduled_time.strftime('%b %d, %Y %I:%M %p') }}{% else %}No fixed time{% endif %}
-          · {{ m.status|capitalize }}
-        </span>
-        <a href="{{ url_for('meetings.room', room_code=m.room_code) }}" class="btn btn-primary btn-sm">
-          {% if m.status == 'ended' %}Watch recording{% else %}Start / enter room{% endif %}
-        </a>
-      </div>
-    {% endfor %}
-  </div>
-{% else %}
-  <div class="empty-state">You haven't created a meeting yet. Click "New meeting" to set one up.</div>
-{% endif %}
-
-<div class="section-label">Meetings you've joined</div>
-{% if joined %}
-  <div class="meeting-grid">
-    {% for m in joined %}
-      <div class="meeting-card">
-        <h3>{{ m.title }}</h3>
-        <span class="code">{{ m.room_code }}</span>
-        <span class="meta">Hosted by {{ m.host.name }}</span>
-        <a href="{{ url_for('meetings.room', room_code=m.room_code) }}" class="btn btn-ghost btn-sm">
-          {% if m.status == 'ended' %}Watch recording{% else %}Rejoin room{% endif %}
-        </a>
-      </div>
-    {% endfor %}
-  </div>
-{% else %}
-  <div class="empty-state">You haven't joined any meetings yet.</div>
 {% endif %}
 {% endblock %}

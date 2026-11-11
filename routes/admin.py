@@ -8,7 +8,7 @@ from flask_login import login_required, current_user
 
 import storage
 from extensions import db
-from models import ConsultantProfile, VerificationDocument, User, Meeting, Appointment
+from models import User, Meeting, MeetingInvite, MeetingRequest, MEETING_TYPES
 from models import TeacherProfile, TeacherVerificationDocument
 from models import StudentProfile, StudentVerificationDocument, StudentTeacherAssignment
 from permissions import admin_required
@@ -17,83 +17,240 @@ admin_bp = Blueprint("admin", __name__)
 
 
 # ---------------------------------------------------------------------------
-# Consultant verification queue
+# Sessions — the admin is the ONLY person who can create or host a meeting.
+# Everything on the platform that happens live (consultations, classes,
+# ordinary meetings) is scheduled here, with a guest list. No invite, no entry.
 # ---------------------------------------------------------------------------
 
-@admin_bp.route("/admin/consultants")
+def _parse_local_datetime(raw):
+    try:
+        return datetime.fromisoformat((raw or "").strip())
+    except ValueError:
+        return None
+
+
+def _invitable_users(exclude_ids=()):
+    return (
+        User.query.filter(User.is_banned.is_(False), User.id != current_user.id)
+        .filter(~User.id.in_(list(exclude_ids) or [0]))
+        .order_by(User.name).all()
+    )
+
+
+@admin_bp.route("/admin/meetings")
 @login_required
 @admin_required
-def queue():
+def meetings():
+    active = Meeting.query.filter(Meeting.status.in_(["scheduled", "live"])).all()
+    active.sort(key=lambda m: m.scheduled_time or m.created_at)
+    past = (
+        Meeting.query.filter(Meeting.status.in_(["ended", "cancelled"]))
+        .order_by(Meeting.created_at.desc()).limit(30).all()
+    )
+    return render_template("admin/meetings.html", active=active, past=past)
+
+
+@admin_bp.route("/admin/meetings/new", methods=["GET", "POST"])
+@login_required
+@admin_required
+def new_meeting():
+    teachers = (
+        TeacherProfile.query.filter_by(status="approved")
+        .join(User, TeacherProfile.user_id == User.id).order_by(User.name).all()
+    )
+    users_ = _invitable_users()
+
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+        meeting_type = request.form.get("meeting_type", "consultation")
+        if meeting_type not in {k for k, _ in MEETING_TYPES}:
+            meeting_type = "consultation"
+        scheduled_time = _parse_local_datetime(request.form.get("scheduled_time"))
+        description = request.form.get("description", "").strip()
+
+        if not title or scheduled_time is None:
+            flash("A title and a date/time are required.", "error")
+            return render_template("admin/new_meeting.html", users=users_, teachers=teachers,
+                                   types=MEETING_TYPES, form=request.form)
+
+        guest_ids = {int(x) for x in request.form.getlist("guests") if x.isdigit()}
+
+        # Class shortcut: invite a teacher together with every student the
+        # admin has placed with them.
+        teacher_id = request.form.get("class_teacher_id", type=int)
+        if teacher_id:
+            if TeacherProfile.query.filter_by(user_id=teacher_id, status="approved").first():
+                guest_ids.add(teacher_id)
+                for a in StudentTeacherAssignment.query.filter_by(teacher_id=teacher_id).all():
+                    guest_ids.add(a.student_id)
+
+        valid_ids = {u.id for u in User.query.filter(User.id.in_(list(guest_ids) or [0]),
+                                                      User.is_banned.is_(False)).all()}
+        valid_ids.discard(current_user.id)
+
+        meeting = Meeting(
+            title=title[:200], host_id=current_user.id, scheduled_time=scheduled_time,
+            meeting_type=meeting_type, description=description, status="scheduled",
+        )
+        db.session.add(meeting)
+        db.session.flush()
+        for uid in valid_ids:
+            db.session.add(MeetingInvite(meeting_id=meeting.id, user_id=uid))
+        db.session.commit()
+        flash(f"Session scheduled with {len(valid_ids)} guest(s).", "success")
+        return redirect(url_for("admin.meeting_detail", meeting_id=meeting.id))
+
+    return render_template("admin/new_meeting.html", users=users_, teachers=teachers,
+                           types=MEETING_TYPES, form={})
+
+
+@admin_bp.route("/admin/meetings/<int:meeting_id>")
+@login_required
+@admin_required
+def meeting_detail(meeting_id):
+    meeting = Meeting.query.get_or_404(meeting_id)
+    invited_ids = [i.user_id for i in meeting.invites]
+    return render_template(
+        "admin/meeting_detail.html", meeting=meeting,
+        invitable=_invitable_users(exclude_ids=invited_ids),
+    )
+
+
+@admin_bp.route("/admin/meetings/<int:meeting_id>/invite", methods=["POST"])
+@login_required
+@admin_required
+def meeting_invite(meeting_id):
+    meeting = Meeting.query.get_or_404(meeting_id)
+    if meeting.status in ("ended", "cancelled"):
+        flash("This session is over — you can't change its guest list.", "error")
+        return redirect(url_for("admin.meeting_detail", meeting_id=meeting_id))
+    user_id = request.form.get("user_id", type=int)
+    user = User.query.get(user_id) if user_id else None
+    if not user or user.is_banned or user.id == current_user.id:
+        flash("Pick a valid user to invite.", "error")
+    elif meeting.is_invited(user):
+        flash(f"{user.name} is already invited.", "info")
+    else:
+        db.session.add(MeetingInvite(meeting_id=meeting.id, user_id=user.id))
+        db.session.commit()
+        flash(f"{user.name} invited.", "success")
+    return redirect(url_for("admin.meeting_detail", meeting_id=meeting_id))
+
+
+@admin_bp.route("/admin/meetings/<int:meeting_id>/invite/<int:user_id>/remove", methods=["POST"])
+@login_required
+@admin_required
+def meeting_uninvite(meeting_id, user_id):
+    invite = MeetingInvite.query.filter_by(meeting_id=meeting_id, user_id=user_id).first_or_404()
+    db.session.delete(invite)
+    db.session.commit()
+    flash("Guest removed from the invite list.", "info")
+    return redirect(url_for("admin.meeting_detail", meeting_id=meeting_id))
+
+
+@admin_bp.route("/admin/meetings/<int:meeting_id>/reschedule", methods=["POST"])
+@login_required
+@admin_required
+def meeting_reschedule(meeting_id):
+    meeting = Meeting.query.get_or_404(meeting_id)
+    new_time = _parse_local_datetime(request.form.get("scheduled_time"))
+    if meeting.status != "scheduled":
+        flash("Only a session that hasn't started can be rescheduled.", "error")
+    elif new_time is None:
+        flash("Enter a valid date and time.", "error")
+    else:
+        meeting.scheduled_time = new_time
+        db.session.commit()
+        flash("Session rescheduled.", "success")
+    return redirect(url_for("admin.meeting_detail", meeting_id=meeting_id))
+
+
+@admin_bp.route("/admin/meetings/<int:meeting_id>/cancel", methods=["POST"])
+@login_required
+@admin_required
+def meeting_cancel(meeting_id):
+    meeting = Meeting.query.get_or_404(meeting_id)
+    if meeting.status != "scheduled":
+        flash("Only a session that hasn't started can be cancelled — end a live one from inside its room.", "error")
+    else:
+        meeting.status = "cancelled"
+        db.session.commit()
+        flash("Session cancelled. Guests can no longer enter it.", "info")
+    return redirect(url_for("admin.meeting_detail", meeting_id=meeting_id))
+
+
+# ---------------------------------------------------------------------------
+# Requests — people ask, the admin decides. Approval creates the session.
+# ---------------------------------------------------------------------------
+
+@admin_bp.route("/admin/requests")
+@login_required
+@admin_required
+def requests_queue():
     pending = (
-        ConsultantProfile.query.filter_by(status="pending")
-        .order_by(ConsultantProfile.submitted_at.asc()).all()
+        MeetingRequest.query.filter_by(status="pending")
+        .order_by(MeetingRequest.created_at.asc()).all()
     )
-    reviewed = (
-        ConsultantProfile.query.filter(ConsultantProfile.status.in_(["approved", "rejected"]))
-        .order_by(ConsultantProfile.reviewed_at.desc()).limit(30).all()
+    decided = (
+        MeetingRequest.query.filter(MeetingRequest.status.in_(["approved", "declined", "cancelled"]))
+        .order_by(MeetingRequest.created_at.desc()).limit(30).all()
     )
-    return render_template("admin/queue.html", pending=pending, reviewed=reviewed)
+    return render_template("admin/requests.html", pending=pending, decided=decided)
 
 
-@admin_bp.route("/admin/consultants/<int:profile_id>")
+@admin_bp.route("/admin/requests/<int:request_id>/approve", methods=["POST"])
 @login_required
 @admin_required
-def review(profile_id):
-    profile = ConsultantProfile.query.get_or_404(profile_id)
-    return render_template("admin/review.html", profile=profile)
+def request_approve(request_id):
+    req = MeetingRequest.query.get_or_404(request_id)
+    if req.status != "pending":
+        flash("That request has already been handled.", "error")
+        return redirect(url_for("admin.requests_queue"))
 
+    scheduled_time = _parse_local_datetime(request.form.get("scheduled_time"))
+    if scheduled_time is None:
+        flash("Set the date and time for the session before approving.", "error")
+        return redirect(url_for("admin.requests_queue"))
 
-@admin_bp.route("/admin/consultants/<int:profile_id>/approve", methods=["POST"])
-@login_required
-@admin_required
-def approve(profile_id):
-    profile = ConsultantProfile.query.get_or_404(profile_id)
-    profile.status = "approved"
-    profile.review_note = None
-    profile.reviewed_at = datetime.utcnow()
-    profile.reviewed_by_id = current_user.id
+    title = request.form.get("title", "").strip() or f"{req.kind_label()}: {req.topic}"
+    meeting = Meeting(
+        title=title[:200], host_id=current_user.id, scheduled_time=scheduled_time,
+        meeting_type="meeting" if req.kind == "meeting" else "consultation",
+        description=req.details, status="scheduled",
+    )
+    db.session.add(meeting)
+    db.session.flush()
+    db.session.add(MeetingInvite(meeting_id=meeting.id, user_id=req.requester_id))
+
+    req.status = "approved"
+    req.meeting_id = meeting.id
+    req.admin_note = request.form.get("admin_note", "").strip() or None
+    req.decided_at = datetime.utcnow()
+    req.decided_by_id = current_user.id
     db.session.commit()
-    flash(f"{profile.user.name} is now a verified consultant.", "success")
-    return redirect(url_for("admin.queue"))
+    flash(f"Approved. {req.requester.name} can now enter the session at the scheduled time.", "success")
+    return redirect(url_for("admin.requests_queue"))
 
 
-@admin_bp.route("/admin/consultants/<int:profile_id>/reject", methods=["POST"])
+@admin_bp.route("/admin/requests/<int:request_id>/decline", methods=["POST"])
 @login_required
 @admin_required
-def reject(profile_id):
-    profile = ConsultantProfile.query.get_or_404(profile_id)
-    profile.status = "rejected"
-    profile.review_note = request.form.get("review_note", "").strip()
-    profile.reviewed_at = datetime.utcnow()
-    profile.reviewed_by_id = current_user.id
+def request_decline(request_id):
+    req = MeetingRequest.query.get_or_404(request_id)
+    if req.status != "pending":
+        flash("That request has already been handled.", "error")
+        return redirect(url_for("admin.requests_queue"))
+    req.status = "declined"
+    req.admin_note = request.form.get("admin_note", "").strip() or None
+    req.decided_at = datetime.utcnow()
+    req.decided_by_id = current_user.id
     db.session.commit()
-    flash(f"{profile.user.name}'s application was rejected.", "info")
-    return redirect(url_for("admin.queue"))
-
-
-@admin_bp.route("/admin/documents/<int:document_id>")
-@login_required
-def view_document(document_id):
-    # Deliberately not @admin_required alone — the consultant who uploaded
-    # a document also needs to be able to see their own file. Access is
-    # otherwise fully locked down: nobody else, no public /static path.
-    doc = VerificationDocument.query.get_or_404(document_id)
-    profile = doc.profile
-    if not (current_user.is_admin or profile.user_id == current_user.id):
-        abort(403)
-
-    bucket = current_app.config["VERIFICATION_BUCKET"]
-    url = storage.signed_url(bucket, doc.stored_filename, expires_in=60)
-    if url:
-        return redirect(url)
-
-    # Local-fallback mode (no Supabase configured) — serve directly.
-    local_dir = current_app.config["VERIFICATION_DOCS_DIR"]
-    return send_from_directory(local_dir, doc.stored_filename, as_attachment=False)
+    flash("Request declined.", "info")
+    return redirect(url_for("admin.requests_queue"))
 
 
 # ---------------------------------------------------------------------------
-# Teacher verification queue — same flow as consultants, admin-only approval
+# Teacher verification queue — admin-only approval
 # ---------------------------------------------------------------------------
 
 @admin_bp.route("/admin/teachers")
@@ -178,7 +335,7 @@ def view_teacher_document(document_id):
 
 
 # ---------------------------------------------------------------------------
-# Student admission queue — same review flow as teachers/consultants
+# Student admission queue — same review flow as teachers
 # ---------------------------------------------------------------------------
 
 @admin_bp.route("/admin/students")
@@ -333,15 +490,13 @@ def users():
 @admin_required
 def user_detail(user_id):
     user = User.query.get_or_404(user_id)
-    meetings_hosted_count = Meeting.query.filter_by(host_id=user.id).count()
-    appointments_as_client = Appointment.query.filter_by(client_id=user.id).count()
-    appointments_as_consultant = Appointment.query.filter_by(consultant_id=user.id).count()
+    sessions_invited_count = MeetingInvite.query.filter_by(user_id=user.id).count()
+    requests_made_count = MeetingRequest.query.filter_by(requester_id=user.id).count()
     return render_template(
         "admin/user_detail.html",
         user=user,
-        meetings_hosted_count=meetings_hosted_count,
-        appointments_as_client=appointments_as_client,
-        appointments_as_consultant=appointments_as_consultant,
+        sessions_invited_count=sessions_invited_count,
+        requests_made_count=requests_made_count,
     )
 
 
@@ -375,17 +530,6 @@ def unban_user(user_id):
     user.banned_at = None
     db.session.commit()
     flash(f"{user.name}'s account has been reinstated.", "success")
-    return redirect(url_for("admin.user_detail", user_id=user_id))
-
-
-@admin_bp.route("/admin/users/<int:user_id>/toggle-premium", methods=["POST"])
-@login_required
-@admin_required
-def toggle_premium(user_id):
-    user = User.query.get_or_404(user_id)
-    user.is_premium = not user.is_premium
-    db.session.commit()
-    flash(f"{user.name} is now {'premium' if user.is_premium else 'on the free tier'}.", "success")
     return redirect(url_for("admin.user_detail", user_id=user_id))
 
 

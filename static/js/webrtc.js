@@ -6,14 +6,15 @@
     the server — it flows directly between browsers (peer-to-peer).
   - Whoever is the meeting's host always renders into the large "spotlight" tile.
     Everyone else renders into the small filmstrip tiles below.
-  - Non-host participants wait for host approval (lobby/waiting room) before
-    joining the mesh, unless no host is in the room yet.
+  - Non-host participants always wait for the administrator's approval
+    (lobby/waiting room) before joining the mesh — nobody is auto-admitted.
   - View can be toggled between "speaker" (spotlight + filmstrip) and
     "gallery" (uniform grid) — see setViewMode() below.
 */
 
+// Set by the server (ICE_SERVERS in config) — see meeting_room.html.
 const ICE_SERVERS = {
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+  iceServers: (window.ROOM_CONFIG && window.ROOM_CONFIG.iceServers) || [],
 };
 
 const socket = io();
@@ -44,8 +45,7 @@ async function initMedia() {
 
   window._localStreamRef = localStream;
   window._originalVideoTrack = localStream.getVideoTracks()[0] || null;
-  // What we send when NOT screen sharing — plain camera by default, swapped
-  // out by background.js when a virtual background is turned on.
+  // What we send when NOT screen sharing — the plain camera track.
   window._cameraOrBackgroundTrack = window._originalVideoTrack;
 
   // Show my own video immediately: spotlight if I'm the host, filmstrip otherwise.
@@ -176,11 +176,11 @@ function teardownPeer(sid) {
   if (viewMode === "gallery") renderGalleryView();
 }
 
-/* ---------------- Screen share / virtual background support ---------------- */
+/* ---------------- Screen share support ---------------- */
 
 // Swaps the outgoing video track on every open peer connection (used by
-// screen sharing and virtual backgrounds — anything that needs to replace
-// what we're sending without a full renegotiation).
+// screen sharing — anything that needs to replace what we're sending
+// without a full renegotiation).
 window.replaceOutgoingVideoTrack = function (newTrack) {
   Object.values(peerConnections).forEach((pc) => {
     const sender = pc.getSenders().find((s) => s.track && s.track.kind === "video");

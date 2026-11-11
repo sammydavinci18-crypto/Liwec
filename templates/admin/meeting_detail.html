@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}{{ meeting.title }} · Admin · Light-Way{% endblock %}
+
+{% block content %}
+<a class="back-link" href="{{ url_for('admin.meetings') }}">&larr; All sessions</a>
+
+<div class="profile-layout">
+  <div class="profile-main">
+    <h1>{{ meeting.title }}</h1>
+    <div class="profile-badges">
+      <span class="status-pill status-{{ 'approved' if meeting.status == 'live' else ('cancelled' if meeting.status == 'cancelled' else ('completed' if meeting.status == 'ended' else 'pending')) }}">{{ meeting.status|capitalize }}</span>
+      <span class="vertical-pill vertical-education">{{ meeting.type_label() }}</span>
+    </div>
+    <p><strong>When:</strong> {{ meeting.scheduled_time|dt }}</p>
+    {% if meeting.description %}<p><strong>Agenda:</strong> {{ meeting.description }}</p>{% endif %}
+
+    <h3>Guest list ({{ meeting.invites|length }})</h3>
+    <p class="sub">Only these people can enter, and only once you admit them from the lobby.</p>
+    {% if meeting.invites %}
+    <div class="appointment-list">
+      {% for inv in meeting.invites %}
+      <div class="appointment-row">
+        <div>
+          <strong>{{ inv.user.name }}</strong>
+          <span class="appt-time">{{ inv.user.email }}</span>
+        </div>
+        {% if meeting.status in ('scheduled', 'live') %}
+        <form method="POST" action="{{ url_for('admin.meeting_uninvite', meeting_id=meeting.id, user_id=inv.user_id) }}">
+          <button type="submit" class="btn btn-ghost btn-sm">Remove</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">Nobody is invited yet — only you can enter.</div>
+    {% endif %}
+  </div>
+
+  <div class="profile-side">
+    {% if meeting.status in ('scheduled', 'live') %}
+    <div class="booking-card">
+      <h3>Room</h3>
+      <a class="btn btn-primary btn-block" href="{{ url_for('meetings.room', room_code=meeting.room_code) }}">
+        {{ 'Return to room' if meeting.status == 'live' else 'Open room' }}
+      </a>
+    </div>
+
+    <div class="booking-card">
+      <h3>Invite someone</h3>
+      <form method="POST" action="{{ url_for('admin.meeting_invite', meeting_id=meeting.id) }}">
+        <div class="field">
+          <select name="user_id" required>
+            <option value="">— Choose a user —</option>
+            {% for u in invitable %}
+            <option value="{{ u.id }}">{{ u.name }} ({{ u.email }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="btn btn-ghost btn-block">Invite</button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% if meeting.status == 'scheduled' %}
+    <div class="booking-card">
+      <h3>Reschedule</h3>
+      <form method="POST" action="{{ url_for('admin.meeting_reschedule', meeting_id=meeting.id) }}">
+        <div class="field">
+          <input type="datetime-local" name="scheduled_time" required value="{{ meeting.scheduled_time.strftime('%Y-%m-%dT%H:%M') if meeting.scheduled_time else '' }}">
+        </div>
+        <button type="submit" class="btn btn-ghost btn-block">Save new time</button>
+      </form>
+    </div>
+
+    <div class="booking-card moderation-card">
+      <h3>Cancel session</h3>
+      <p class="sub">Guests will no longer be able to enter.</p>
+      <form method="POST" action="{{ url_for('admin.meeting_cancel', meeting_id=meeting.id) }}">
+        <button type="submit" class="btn btn-danger btn-block">Cancel this session</button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% if meeting.status == 'ended' %}
+    <div class="booking-card">
+      <h3>Recording</h3>
+      <a class="btn btn-ghost btn-block" href="{{ url_for('meetings.room', room_code=meeting.room_code) }}">Open recording &amp; notes</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

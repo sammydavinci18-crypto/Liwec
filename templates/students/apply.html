@@ -23,7 +23,7 @@
         <input type="date" id="date_of_birth" name="date_of_birth" value="{{ existing.date_of_birth.isoformat() if existing and existing.date_of_birth else '' }}" required>
       </div>
       <div class="field">
-        <label for="desired_stage">Cambridge stage</label>
+        <label for="desired_stage">Programme</label>
         <select id="desired_stage" name="desired_stage" required>
           <option value="">— Choose —</option>
           {% for key, label in stages %}

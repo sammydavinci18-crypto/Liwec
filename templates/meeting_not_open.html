@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}{{ meeting.title }} · Not open yet{% endblock %}
+{% block page_class %}auth-page{% endblock %}
+
+{% block content %}
+<div class="auth-card">
+  <span class="auth-eyebrow">{{ meeting.type_label() }}</span>
+  <h1>{{ meeting.title }}</h1>
+  <p class="sub">
+    This session is scheduled for <strong>{{ meeting.scheduled_time|dt }}</strong>.
+    The waiting room opens 15 minutes before it starts.
+  </p>
+  <a href="{{ url_for('main.dashboard') }}" class="btn btn-primary btn-block">Back to my sessions</a>
+</div>
+{% endblock %}

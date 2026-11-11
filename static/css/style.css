@@ -1,5 +1,5 @@
 /* =========================================================
-   ConsultMeet design tokens
+   Light-Way design tokens
    ========================================================= */
 :root {
   --ink: #16211F;
@@ -20,8 +20,9 @@
   --radius-md: 12px;
   --radius-lg: 20px;
   --shadow-card: 0 1px 2px rgba(22, 33, 31, 0.06), 0 8px 24px rgba(22, 33, 31, 0.06);
-  --font-display: "Source Serif 4", Georgia, serif;
-  --font-body: "Manrope", -apple-system, BlinkMacSystemFont, sans-serif;
+  /* System fonts only — nothing is fetched from an outside website. */
+  --font-display: Georgia, "Times New Roman", "Noto Serif", serif;
+  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -1808,3 +1809,76 @@ button, input, textarea, select { font-family: inherit; }
 .join-card p { font-size: 0.92rem; margin: 0 0 20px; flex: 1; }
 .join-note { margin: 28px 0 0; font-size: 0.92rem; text-align: center; }
 @media (max-width: 960px) { .join-grid { grid-template-columns: 1fr; } }
+
+/* =========================================================
+   Admin-controlled sessions: requests, guest lists
+   ========================================================= */
+.request-row { align-items: flex-start; gap: 24px; }
+.request-info { flex: 1 1 280px; min-width: 0; }
+.request-actions { flex: 1 1 320px; display: flex; flex-direction: column; gap: 12px; }
+.request-approve { display: flex; flex-direction: column; gap: 8px; }
+.request-approve .field { margin-bottom: 0; }
+.request-decline { display: flex; gap: 8px; align-items: center; }
+.request-decline input { flex: 1; min-width: 0; }
+
+.guest-list {
+  max-height: 260px;
+  overflow-y: auto;
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--paper-raised);
+  padding: 6px;
+}
+.guest-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.guest-option:hover { background: var(--teal-tint); }
+.guest-option input { accent-color: var(--teal); }
+.guest-email { color: var(--ink-soft); font-size: 0.8rem; margin-left: 6px; }
+
+/* =========================================================
+   Landing: mission, programmes, values
+   ========================================================= */
+.mission-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-top: 28px; }
+.mission-card {
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 26px;
+  box-shadow: var(--shadow-card);
+}
+.mission-card h3 { font-size: 1.15rem; }
+.value-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-top: 28px; }
+.value-card {
+  border-top: 3px solid var(--amber);
+  background: var(--paper-raised);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-card);
+}
+.value-card h3 { font-size: 1rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.value-card p { margin: 0; font-size: 0.9rem; }
+.program-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; margin-top: 28px; }
+.program-card {
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.program-card h3 { font-size: 1.1rem; margin: 0; }
+.program-card p { margin: 0; font-size: 0.92rem; }
+.objective-list { list-style: none; padding: 0; margin: 28px 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.objective-list li { background: var(--paper-raised); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 16px 18px; }
+.objective-list strong { display: block; margin-bottom: 4px; color: var(--ink); }
+.objective-list span { font-size: 0.9rem; color: var(--ink-soft); }

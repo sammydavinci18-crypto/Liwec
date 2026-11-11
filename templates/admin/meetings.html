@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Sessions · Admin · Light-Way{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Admin</span>
+    <h1>All sessions</h1>
+    <p>You are the only host. A session can be entered only by you and the guests you've invited.</p>
+  </div>
+  <div class="dash-actions">
+    <a class="btn btn-primary" href="{{ url_for('admin.new_meeting') }}">+ Schedule a session</a>
+  </div>
+</div>
+
+<h3 class="section-heading">Upcoming &amp; live</h3>
+{% if active %}
+<div class="appointment-list">
+  {% for m in active %}
+  <div class="appointment-row">
+    <div>
+      <strong>{{ m.title }}</strong>
+      <span class="appt-time">{{ m.type_label() }} · {{ m.scheduled_time|dt }}</span>
+      <span class="appt-time">{{ m.invites|length }} guest{{ '' if m.invites|length == 1 else 's' }}</span>
+    </div>
+    <div class="appt-actions">
+      <span class="status-pill status-{{ 'approved' if m.status == 'live' else 'pending' }}">{{ m.status|capitalize }}</span>
+      <a class="btn btn-primary btn-sm" href="{{ url_for('meetings.room', room_code=m.room_code) }}">{{ 'Return to room' if m.status == 'live' else 'Open room' }}</a>
+      <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.meeting_detail', meeting_id=m.id) }}">Manage</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">No upcoming sessions.</div>
+{% endif %}
+
+<h3 class="section-heading">Past &amp; cancelled</h3>
+{% if past %}
+<div class="appointment-list">
+  {% for m in past %}
+  <div class="appointment-row">
+    <div>
+      <strong>{{ m.title }}</strong>
+      <span class="appt-time">{{ m.type_label() }} · {{ m.scheduled_time|dt }}</span>
+    </div>
+    <div class="appt-actions">
+      <span class="status-pill status-{{ 'cancelled' if m.status == 'cancelled' else 'completed' }}">{{ m.status|capitalize }}</span>
+      <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.meeting_detail', meeting_id=m.id) }}">Details</a>
+      {% if m.status == 'ended' %}
+      <a class="btn btn-ghost btn-sm" href="{{ url_for('meetings.room', room_code=m.room_code) }}">Recording</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">Nothing here yet.</div>
+{% endif %}
+{% endblock %}

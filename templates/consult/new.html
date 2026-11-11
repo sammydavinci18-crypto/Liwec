@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Request a consultation · Light-Way{% endblock %}
+{% block page_class %}auth-page{% endblock %}
+
+{% block content %}
+<div class="auth-card auth-card-wide">
+  <span class="auth-eyebrow">Consult the Director</span>
+  <h1>Request a consultation</h1>
+  <p class="sub">
+    All consultations at Light-Way are held personally by the administrator. Tell us what you need.
+    <strong>Nothing is scheduled until the administrator approves your request</strong> — you'll then
+    be invited to a session at the time they set.
+  </p>
+
+  <form method="POST">
+    <div class="field">
+      <label>What kind of session do you need?</label>
+      <div class="role-options">
+        {% for key, label in kinds %}
+        <label class="role-option">
+          <input type="radio" name="kind" value="{{ key }}" {{ 'checked' if form.get('kind') == key or (not form.get('kind') and loop.first) }} required>
+          <span class="role-option-body">
+            <strong>{{ label }}</strong>
+            <span>
+              {% if key == 'education' %}Accreditation, curriculum, school policy and leadership.
+              {% elif key == 'business' %}Strategy, operations, growth and team advisory.
+              {% else %}A meeting for any other purpose.{% endif %}
+            </span>
+          </span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="field">
+      <label for="topic">What is it about?</label>
+      <input type="text" id="topic" name="topic" maxlength="200" required value="{{ form.get('topic', '') }}" placeholder="e.g. Setting up our school's assessment policy">
+    </div>
+    <div class="field">
+      <label for="details">More detail (optional)</label>
+      <textarea id="details" name="details" rows="4" placeholder="Anything the administrator should know before deciding.">{{ form.get('details', '') }}</textarea>
+    </div>
+    <div class="field">
+      <label for="preferred_time">Preferred date &amp; time (optional, UTC)</label>
+      <input type="datetime-local" id="preferred_time" name="preferred_time" value="{{ form.get('preferred_time', '') }}">
+      <p class="doc-list-note">This is only a suggestion. The administrator sets the actual time.</p>
+    </div>
+    <button type="submit" class="btn btn-primary btn-block">Send request to the administrator</button>
+  </form>
+  <p class="auth-switch"><a href="{{ url_for('consult.mine') }}">See my requests</a></p>
+</div>
+{% endblock %}

@@ -25,18 +25,6 @@ def registrar_required(view):
     return wrapped
 
 
-def approved_consultant_required(view):
-    """Restricts a route to users with an approved ConsultantProfile —
-    e.g. managing availability slots."""
-    @wraps(view)
-    def wrapped(*args, **kwargs):
-        profile = getattr(current_user, "consultant_profile", None)
-        if not current_user.is_authenticated or not profile or profile.status != "approved":
-            abort(403)
-        return view(*args, **kwargs)
-    return wrapped
-
-
 def approved_teacher_required(view):
     """Restricts a route to users with an approved TeacherProfile."""
     @wraps(view)

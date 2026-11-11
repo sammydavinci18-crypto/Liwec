@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Schedule a session · Admin · Light-Way{% endblock %}
+{% block page_class %}auth-page{% endblock %}
+
+{% block content %}
+<div class="auth-card auth-card-wide">
+  <span class="auth-eyebrow">Admin</span>
+  <h1>Schedule a session</h1>
+  <p class="sub">Only the guests you pick below will be able to enter. They wait in a lobby until you let them in.</p>
+
+  <form method="POST">
+    <div class="field">
+      <label for="title">Title</label>
+      <input type="text" id="title" name="title" maxlength="200" required value="{{ form.get('title', '') }}" placeholder="e.g. Year 7 Mathematics — Bridging class">
+    </div>
+    <div class="field-row field-row-2">
+      <div class="field">
+        <label for="meeting_type">Type</label>
+        <select id="meeting_type" name="meeting_type">
+          {% for key, label in types %}
+          <option value="{{ key }}" {{ 'selected' if form.get('meeting_type') == key }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="scheduled_time">Date &amp; time (UTC)</label>
+        <input type="datetime-local" id="scheduled_time" name="scheduled_time" required value="{{ form.get('scheduled_time', '') }}">
+      </div>
+    </div>
+    <div class="field">
+      <label for="description">Agenda / notes for guests (optional)</label>
+      <textarea id="description" name="description" rows="3">{{ form.get('description', '') }}</textarea>
+    </div>
+
+    {% if teachers %}
+    <div class="field">
+      <label for="class_teacher_id">Class shortcut — invite a teacher and all the students you've placed with them</label>
+      <select id="class_teacher_id" name="class_teacher_id">
+        <option value="">— None —</option>
+        {% for t in teachers %}
+        <option value="{{ t.user_id }}">{{ t.user.name }}{% if t.subjects %} ({{ t.subjects }}){% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+
+    <div class="field">
+      <label>Guests</label>
+      <input type="text" id="guest-filter" placeholder="Filter by name or email…" autocomplete="off">
+      <div class="guest-list" id="guest-list">
+        {% for u in users %}
+        <label class="guest-option" data-search="{{ (u.name ~ ' ' ~ u.email)|lower }}">
+          <input type="checkbox" name="guests" value="{{ u.id }}">
+          <span><strong>{{ u.name }}</strong> <span class="guest-email">{{ u.email }}</span></span>
+        </label>
+        {% else %}
+        <p class="sub">No other users yet.</p>
+        {% endfor %}
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary btn-block">Schedule session</button>
+  </form>
+  <p class="auth-switch"><a href="{{ url_for('admin.meetings') }}">&larr; All sessions</a></p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    var filter = document.getElementById("guest-filter");
+    var items = document.querySelectorAll("#guest-list .guest-option");
+    if (!filter) return;
+    filter.addEventListener("input", function () {
+      var q = filter.value.trim().toLowerCase();
+      items.forEach(function (el) {
+        el.style.display = !q || el.dataset.search.indexOf(q) !== -1 ? "" : "none";
+      });
+    });
+  })();
+</script>
+{% endblock %}

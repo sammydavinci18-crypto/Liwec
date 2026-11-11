@@ -54,32 +54,6 @@ document.addEventListener("DOMContentLoaded", () => {
     window._socket.emit("screen_share", { sharing: false });
   }
 
-  /* ---------------- Virtual backgrounds ---------------- */
-  const btnBackground = document.getElementById("btn-background");
-  const backgroundMenu = document.getElementById("background-menu");
-  if (btnBackground && backgroundMenu) {
-    btnBackground.addEventListener("click", () => {
-      backgroundMenu.classList.toggle("open");
-    });
-    backgroundMenu.querySelectorAll("[data-bg-mode]").forEach((opt) => {
-      opt.addEventListener("click", async () => {
-        const bgMode = opt.dataset.bgMode;
-        const bgImage = opt.dataset.bgImage || null;
-        backgroundMenu.querySelectorAll("[data-bg-mode]").forEach((o) => o.classList.remove("selected"));
-        opt.classList.add("selected");
-        backgroundMenu.classList.remove("open");
-        if (window.VirtualBackground) {
-          await window.VirtualBackground.setMode(bgMode, bgImage);
-        }
-      });
-    });
-    document.addEventListener("click", (e) => {
-      if (!backgroundMenu.contains(e.target) && e.target !== btnBackground) {
-        backgroundMenu.classList.remove("open");
-      }
-    });
-  }
-
   btnMic.addEventListener("click", () => {
     if (!window.localStream) return;
     micOn = !micOn;

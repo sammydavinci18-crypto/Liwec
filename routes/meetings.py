@@ -17,54 +17,45 @@ from flask_login import login_required, current_user
 
 import storage
 from extensions import db, socketio
-from models import Meeting, MeetingParticipant, ConsultationNote, Recording, User
+from models import Meeting, MeetingParticipant, ConsultationNote, Recording
 
 meetings_bp = Blueprint("meetings", __name__)
 
 
-@meetings_bp.route("/meetings/new", methods=["GET", "POST"])
-@login_required
-def create_meeting():
-    if request.method == "POST":
-        title = request.form.get("title", "").strip() or "Consultation"
-        scheduled_raw = request.form.get("scheduled_time", "").strip()
-        scheduled_time = None
-        if scheduled_raw:
-            try:
-                scheduled_time = datetime.fromisoformat(scheduled_raw)
-            except ValueError:
-                scheduled_time = None
+# There is deliberately NO route here for creating a meeting or joining one by
+# typing a room code. Meetings are created only by the admin (see
+# routes/admin.py) — directly, or by approving a person's request — and a room
+# can only be entered by the admin host or someone the admin has invited.
 
-        meeting = Meeting(title=title, host_id=current_user.id, scheduled_time=scheduled_time)
-        db.session.add(meeting)
-        db.session.commit()
-
-        flash("Meeting created. Share the room code with your participants.", "success")
-        return redirect(url_for("main.dashboard"))
-
-    return render_template("create_meeting.html")
+def _meeting_or_404(room_code):
+    return Meeting.query.filter_by(room_code=room_code).first_or_404()
 
 
-@meetings_bp.route("/join", methods=["GET", "POST"])
-@login_required
-def join_meeting():
-    if request.method == "POST":
-        code = request.form.get("room_code", "").strip()
-        meeting = Meeting.query.filter_by(room_code=code).first()
-        if not meeting:
-            flash("No meeting found with that room code.", "error")
-            return render_template("join_meeting.html")
-        return redirect(url_for("meetings.room", room_code=meeting.room_code))
-
-    return render_template("join_meeting.html")
+def _require_entry(meeting):
+    """Aborts unless the current user may be in this meeting. Returns the
+    entry state ("host" or "ok") otherwise. Uninvited users get a 404 so
+    that a guessed room code reveals nothing."""
+    state = meeting.entry_state(current_user)
+    if state == "forbidden":
+        abort(404)
+    return state
 
 
 @meetings_bp.route("/room/<room_code>")
 @login_required
 def room(room_code):
-    meeting = Meeting.query.filter_by(room_code=room_code).first_or_404()
+    meeting = _meeting_or_404(room_code)
+    state = meeting.entry_state(current_user)
 
-    # A meeting the host has already ended: show playback instead of a live room.
+    if state == "forbidden":
+        abort(404)
+    if state == "cancelled":
+        flash("This session was cancelled by the administrator.", "info")
+        return redirect(url_for("main.dashboard"))
+    if state == "not_open":
+        return render_template("meeting_not_open.html", meeting=meeting)
+
+    # A meeting the admin has already ended: show playback instead of a live room.
     if meeting.status == "ended":
         if meeting.recording and meeting.recording.finalized:
             if meeting.recording.is_expired or meeting.recording.deleted_at:
@@ -72,8 +63,16 @@ def room(room_code):
             return render_template("playback.html", meeting=meeting)
         return render_template("meeting_ended.html", meeting=meeting, expired=False)
 
-    # Record (or refresh) this user's participation, unless they're the host
-    if meeting.host_id != current_user.id:
+    is_host = state == "host"
+
+    if is_host:
+        # Only the admin opening the room makes it live. A guest arriving
+        # early just waits in the lobby (see sockets.py).
+        if meeting.status != "live":
+            meeting.status = "live"
+            db.session.commit()
+    else:
+        # Record (or refresh) this guest's attendance.
         existing = MeetingParticipant.query.filter_by(
             meeting_id=meeting.id, user_id=current_user.id, left_at=None
         ).first()
@@ -81,21 +80,41 @@ def room(room_code):
             db.session.add(MeetingParticipant(meeting_id=meeting.id, user_id=current_user.id))
             db.session.commit()
 
-    meeting.status = "live"
-    db.session.commit()
-
-    is_host = meeting.host_id == current_user.id
-    call_limit_minutes = current_app.config["PREMIUM_CALL_LIMIT_MINUTES"] if meeting.host.is_premium \
-        else current_app.config["FREE_CALL_LIMIT_MINUTES"]
+    call_limit_minutes = current_app.config["CALL_LIMIT_MINUTES"]
     return render_template(
-        "meeting_room.html", meeting=meeting, is_host=is_host, call_limit_minutes=call_limit_minutes
+        "meeting_room.html",
+        meeting=meeting,
+        is_host=is_host,
+        call_limit_minutes=call_limit_minutes,
+        ice_servers=_ice_servers(),
+        local_socketio=_local_socketio_available(),
     )
+
+
+def _ice_servers():
+    cfg = current_app.config
+    servers = []
+    for url in cfg["ICE_SERVERS"]:
+        entry = {"urls": url}
+        if url.startswith("turn") and cfg.get("TURN_USERNAME"):
+            entry["username"] = cfg["TURN_USERNAME"]
+            entry["credential"] = cfg["TURN_CREDENTIAL"]
+        servers.append(entry)
+    return servers
+
+
+def _local_socketio_available():
+    """True if the Socket.IO browser library has been vendored into
+    static/vendor/ (see tools/fetch_vendor.py), so the room can load it from
+    this server instead of a public CDN."""
+    return os.path.exists(os.path.join(current_app.static_folder, "vendor", "socket.io.min.js"))
 
 
 @meetings_bp.route("/room/<room_code>/notes", methods=["GET", "POST"])
 @login_required
 def notes(room_code):
-    meeting = Meeting.query.filter_by(room_code=room_code).first_or_404()
+    meeting = _meeting_or_404(room_code)
+    _require_entry(meeting)
 
     if request.method == "POST":
         content = request.form.get("content", "").strip()
@@ -151,8 +170,8 @@ def upload_recording_chunk(room_code):
     the duration of the live call only (Storage's simple upload API doesn't
     support appending) — the complete file gets pushed to Supabase Storage
     once, when the host ends the meeting. See end_meeting() below."""
-    meeting = Meeting.query.filter_by(room_code=room_code).first_or_404()
-    if meeting.host_id != current_user.id:
+    meeting = _meeting_or_404(room_code)
+    if not meeting.is_hosted_by(current_user):
         abort(403)
 
     chunk = request.get_data()
@@ -175,10 +194,10 @@ def upload_recording_chunk(room_code):
 @login_required
 def end_meeting(room_code):
     """Host ends the meeting: locks it as 'ended', uploads the completed
-    recording to Storage (if any), and sets a retention expiry based on the
-    host's plan at the time."""
-    meeting = Meeting.query.filter_by(room_code=room_code).first_or_404()
-    if meeting.host_id != current_user.id:
+    recording to Storage (if any), and sets a retention expiry from the
+    configured retention period."""
+    meeting = _meeting_or_404(room_code)
+    if not meeting.is_hosted_by(current_user):
         abort(403)
 
     meeting.status = "ended"
@@ -200,15 +219,24 @@ def end_meeting(room_code):
             if current_app.config.get("SUPABASE_URL") and current_app.config.get("SUPABASE_SERVICE_KEY"):
                 os.remove(local_buffer)
             recording.finalized = True
-            retention_days = (
-                current_app.config["PREMIUM_RECORDING_RETENTION_DAYS"] if meeting.host.is_premium
-                else current_app.config["FREE_RECORDING_RETENTION_DAYS"]
+            retention_days = current_app.config["RECORDING_RETENTION_DAYS"]
+            # 0 = keep until the admin deletes it.
+            recording.expires_at = (
+                datetime.utcnow() + timedelta(days=retention_days) if retention_days > 0 else None
             )
-            recording.expires_at = datetime.utcnow() + timedelta(days=retention_days)
         except storage.StorageError as exc:
             current_app.logger.error(f"Recording upload failed for meeting {meeting.id}: {exc}")
 
     db.session.commit()
+
+    # Tell everyone still in the room (and anyone waiting in the lobby) the
+    # session is over, and forget who was admitted to it.
+    import sockets
+    socketio.emit("meeting_ended", {}, room=meeting.room_code)
+    for waiting_sid in list(sockets.WAITING.pop(meeting.room_code, {})):
+        socketio.emit("meeting_ended", {}, room=waiting_sid)
+    sockets.ADMITTED.pop(meeting.room_code, None)
+
     return jsonify(ok=True, redirect=url_for("main.dashboard"))
 
 
@@ -221,12 +249,8 @@ def stream_recording(meeting_id):
     if not recording or not recording.finalized:
         abort(404)
 
-    # Only the host or someone who actually attended can watch it back.
-    is_host = meeting.host_id == current_user.id
-    was_participant = MeetingParticipant.query.filter_by(
-        meeting_id=meeting.id, user_id=current_user.id
-    ).first() is not None
-    if not (is_host or was_participant):
+    # Only the admin host, or a guest the admin invited, can watch it back.
+    if meeting.entry_state(current_user) not in ("host", "ok"):
         abort(403)
 
     if recording.is_expired or recording.deleted_at:

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}My requests · Light-Way{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Consultations &amp; meetings</span>
+    <h1>My requests</h1>
+    <p>Each request waits for the administrator's decision. Approved requests become a session you can enter at the scheduled time.</p>
+  </div>
+  <div class="dash-actions">
+    <a class="btn btn-primary" href="{{ url_for('consult.new') }}">New request</a>
+  </div>
+</div>
+
+{% if requests %}
+<div class="appointment-list">
+  {% for r in requests %}
+  <div class="appointment-row">
+    <div>
+      <strong>{{ r.topic }}</strong>
+      <span class="appt-time">{{ r.kind_label() }} · sent {{ r.created_at|dt }}</span>
+      {% if r.status == 'approved' and r.meeting %}
+        <span class="appt-time"><strong>Scheduled:</strong> {{ r.meeting.scheduled_time|dt }}</span>
+      {% elif r.preferred_time and r.status == 'pending' %}
+        <span class="appt-time">You suggested {{ r.preferred_time|dt }}</span>
+      {% endif %}
+      {% if r.admin_note %}<p class="appt-note">Administrator: "{{ r.admin_note }}"</p>{% endif %}
+    </div>
+    <div class="appt-actions">
+      <span class="status-pill status-{{ r.status }}">{{ r.status|capitalize }}</span>
+      {% if r.status == 'approved' and r.meeting and r.meeting.status in ('scheduled', 'live', 'ended') %}
+        <a class="btn btn-primary btn-sm" href="{{ url_for('meetings.room', room_code=r.meeting.room_code) }}">
+          {{ 'Recording' if r.meeting.status == 'ended' else 'Enter waiting room' }}
+        </a>
+      {% endif %}
+      {% if r.status == 'pending' %}
+      <form method="POST" action="{{ url_for('consult.cancel', request_id=r.id) }}">
+        <button type="submit" class="btn btn-ghost btn-sm">Withdraw</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">You haven't sent any requests. <a href="{{ url_for('consult.new') }}">Request a consultation</a>.</div>
+{% endif %}
+{% endblock %}

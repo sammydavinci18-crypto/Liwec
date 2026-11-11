@@ -6,7 +6,7 @@
 <div class="room-header">
   <div>
     <span class="title">{{ meeting.title }}</span>
-    <span class="code-pill">{{ meeting.room_code }}</span>
+    <span class="code-pill">{{ meeting.type_label() }}</span>
   </div>
   <span class="recording-badge">● Recording</span>
 </div>
@@ -16,7 +16,7 @@
     This meeting has ended. You're watching a recording of the session,
     from the beginning, as it happened.
     {% if meeting.recording.expires_at %}
-      This recording is available until {{ meeting.recording.expires_at.strftime('%b %-d, %Y') }}.
+      This recording is available until {{ meeting.recording.expires_at|dt }}.
     {% endif %}
   </p>
   <video

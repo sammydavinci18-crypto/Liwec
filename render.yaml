@@ -28,7 +28,7 @@ services:
       - key: RECORDINGS_DIR
         value: /var/data/recordings
       - key: VERIFICATION_DOCS_DIR
-        value: /var/data/verification_docs   # consultant ID/certificate uploads — sensitive, never publicly served
+        value: /var/data/verification_docs   # teacher/student ID and certificate uploads — sensitive, never publicly served
       # Optional — only needed once. Set these two in the Render dashboard
       # (not here, so the password never gets committed to the repo) to
       # auto-create your first admin account on next deploy. Safe to leave

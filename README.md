@@ -1,79 +1,74 @@
-# Liwec — Light-way Education Consultancy
+# Light-Way International Virtual Academy — platform (Liwec)
 
-A simple, self-contained video-consultation app: one Flask process serves the
-pages **and** handles real-time signaling (no separate backend/frontend
-services). Actual video/audio streams directly between participants' browsers
-(WebRTC) — the server never sees or stores video.
+*Elite Cambridge Pathways From Home · Lighting Paths. Empowering Futures.*
 
-**Layout:** whoever hosts a meeting is shown large in the "spotlight" at the
-top; everyone else appears in a scrollable strip of small tiles underneath.
+One Flask app that serves the pages **and** handles live-video signalling. Video
+streams directly between browsers (WebRTC); the server never sees or stores it
+unless the administrator records a session.
 
-## Quick start (local testing — SQLite, zero setup)
+## The core rule: the administrator controls everything live
 
-By default this app uses **SQLite** — a single file on disk, no database
-server to install or configure. This is the easiest way to try it out and
-keep building on it locally.
+- **Only the admin hosts.** Every consultation, class and meeting is created by the admin.
+  There is no "new meeting" button for anyone else and **no join-by-room-code**.
+- **Only invited guests can enter,** and only after the admin lets them in from the lobby.
+  Guests who arrive before the admin simply wait; nobody is ever auto-admitted. The lobby
+  opens 15 minutes before the scheduled time.
+- **Consultancy is the admin's alone.** No consultant directory, profiles, availability or
+  peer-to-peer messaging. People *request* a consultation or meeting
+  (`/consult`); the admin approves it with a date/time (which creates the session and invites
+  the requester) or declines it.
+- The server enforces this in routes **and** in the real-time layer (`sockets.py`): a user who
+  tries to skip the lobby or relay signals without being admitted is ignored.
+
+### Admin screens
+| Screen | Path |
+| --- | --- |
+| Requests queue (approve / decline) | `/admin/requests` |
+| All sessions | `/admin/meetings` |
+| Schedule a session (guest list, class shortcut) | `/admin/meetings/new` |
+| Manage one session (invite, reschedule, cancel) | `/admin/meetings/<id>` |
+| Student / teacher review, placements, users | `/admin/students`, `/admin/teachers`, `/admin/placements`, `/admin/users` |
+
+The **class shortcut** on the schedule form invites a teacher plus every student the admin
+has placed with them, in one click.
+
+## Everything is free and built in
+- No plans or tiers: no premium flag, no call-time limit by default (`CALL_LIMIT_MINUTES=0`),
+  recordings kept 90 days by default (`RECORDING_RETENTION_DAYS`, `0` = forever).
+- Video, chat, screen sharing, notes, recording and playback are the platform's own features.
+- No Google Meet, Moodle or FlexibleX. The virtual-background feature was removed because it
+  relied on an outside model and stock photos.
+- Fonts are system fonts (nothing fetched from Google Fonts).
+
+### What still touches outside services
+1. **Socket.IO browser library** is loaded from a CDN unless you run
+   `python tools/fetch_vendor.py` once, which saves it to `static/vendor/` and is used automatically.
+2. **STUN server** (helps browsers find each other behind home routers). Default is a free public
+   one; set `ICE_SERVERS` (and `TURN_USERNAME` / `TURN_CREDENTIAL`) to point at your own coturn.
+3. **Supabase Storage** is optional (documents & recordings). Without it, files are kept on local disk.
+
+## Quick start (local, SQLite — no setup)
 
 ```bash
 python -m venv venv
 source venv/bin/activate        # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-python app.py
+ADMIN_EMAIL=you@example.com ADMIN_PASSWORD=choose-one python app.py   # creates the admin on first boot
 ```
+Visit http://localhost:5000. Log in as the admin, open **Schedule a session**, invite a second
+(test) account, then open the room as both to see the lobby.
+Existing deployments: `flask --app app db upgrade` (or just boot — it self-heals). The new
+migration only *adds* tables/columns; old consultant tables are left untouched.
 
-That's it — no `.env` file, no database setup needed. Visit
-**http://localhost:5000**, register an account, click **New meeting**, and
-share the room code shown on your dashboard with whoever you're consulting
-with (open a second browser / incognito window and register a second account
-to test two people in the same room).
+## Academy content (from the brand document)
+Mission, vision, six objectives, four values (Excellence, Integrity, Resilience, Global-mindedness)
+and the three programmes (Year 6–Year 8 Bridging; National Curriculum to Cambridge Transition;
+Home Schooling) are on the landing page. Students apply to one of those three programmes.
 
-Your data lives in `instance/consultmeet.db`. Delete that file any time to
-start fresh.
+## Roles
+`admin` (the Director) · `registrar` (enrolment & parent links) · teachers and students (approved by the admin) · parents (linked to a student).
 
-## Switching to MySQL later (for real hosting)
-
-When you're ready to host this somewhere, switch the database backend to
-MySQL — nothing else in the app changes:
-
-1. Copy `.env.example` to `.env`
-2. Set `DB_ENGINE=mysql` and fill in your MySQL connection details
-3. Create the database: `CREATE DATABASE consultmeet CHARACTER SET utf8mb4;`
-   (or run `schema.sql`)
-4. Create the tables: `flask --app app init-db`
-5. `pip install PyMySQL` if you removed it (it's in requirements.txt already)
-6. `python app.py`
-
-**Windows users:** `run_setup.bat` automates installing MySQL itself (via
-Chocolatey), creating the database, and configuring `.env` for you — useful
-once you're past local testing and want MySQL running. It sets `DB_ENGINE=mysql`
-automatically.
-
-## What's included
-
-- **Auth** — register/login/logout, passwords hashed with Werkzeug.
-- **Meetings** — create a meeting (get a unique room code), join by code.
-- **Video room** — spotlight layout (host large, others in a filmstrip),
-  mic/camera toggles, leave button.
-- **Consultation notes** — a slide-out panel per meeting, saved to the
-  database, so notes taken during a session persist and can be reviewed later.
-- **Recording & playback** — the host's browser records the live layout
-  (spotlight + participant grid, with everyone's audio mixed in) and uploads
-  it in ~30s chunks as the meeting happens. Once the host clicks **End
-  meeting**, the meeting is locked — anyone who enters that same room code
-  afterward is shown the recording instead of a live room, playing from the
-  beginning. Only the host and people who actually attended can watch it back.
-- **Database** — `users`, `meetings`, `meeting_participants`,
-  `consultation_notes` tables (see `models.py` / `schema.sql`). Works on
-  SQLite or MySQL without any code changes — just the `DB_ENGINE` setting.
-
-## Where to go from here
-
-Some natural next steps once this base is working for you:
-- Screen sharing (adding a second `getDisplayMedia` track to the peer connections)
-- A waiting room / host-approval step before participants can join
-- Explicit recording consent capture (currently everyone just sees a notice banner)
-- Meeting scheduling with reminder emails
-- TURN server config for participants behind restrictive firewalls (STUN alone
-  isn't always enough outside a dev/demo setting)
-
-Let me know which of these you want next and we'll build on this base.
+## Configuration (env vars)
+`SECRET_KEY`, `DB_ENGINE` (`sqlite`|`postgres`|`mysql`), `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`,
+`CALL_LIMIT_MINUTES`, `RECORDING_RETENTION_DAYS`, `ICE_SERVERS`, `TURN_USERNAME`, `TURN_CREDENTIAL`,
+`SUPABASE_URL`, `SUPABASE_SERVICE_KEY`.
