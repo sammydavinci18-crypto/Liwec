@@ -2128,3 +2128,8 @@ button, input, textarea, select { font-family: inherit; }
 
 :root[data-theme="dark"] .eyebrow, :root[data-theme="dark"] .eyebrow-dark { color: var(--amber); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .eyebrow, :root:not([data-theme="light"]) .eyebrow-dark { color: var(--amber); } }
+
+/* ---- Back-to-home link on login / sign-up ---- */
+.back-home { display: block; width: 100%; max-width: 420px; align-self: center; margin-bottom: 14px; font-size: .9rem; font-weight: 600; color: var(--ink-soft); }
+.back-home:hover { color: var(--teal); text-decoration: none; }
+.auth-form-side { flex-direction: column; }

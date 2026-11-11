@@ -10,6 +10,7 @@
     <span class="code-pill">{{ meeting.type_label() }}</span>
   </div>
   <div class="room-header-right">
+    <a class="btn btn-ghost btn-sm" href="{{ url_for('main.dashboard') }}" onclick="return confirm('Leave this session and go back to your dashboard?');">&larr; Back to dashboard</a>
     {% if call_limit_minutes and call_limit_minutes > 0 %}
     <span class="time-limit-notice" title="Server-enforced call length limit">{{ call_limit_minutes }} min limit</span>
     {% endif %}

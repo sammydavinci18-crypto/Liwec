@@ -21,6 +21,7 @@
       <span class="brand-tagline">Lighting paths. Empowering futures.</span>
     </a>
     <nav class="topnav">
+      <a class="topnav-link" href="{{ url_for('main.dashboard') }}">Home</a>
       <a class="topnav-link" href="{{ url_for('main.dashboard') }}">My sessions</a>
       <a class="topnav-link" href="{{ url_for('portal.timetable') }}">Timetable</a>
       {% if not current_user.is_admin %}
