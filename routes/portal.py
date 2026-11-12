@@ -37,7 +37,7 @@ def index():
 def timetable():
     """Upcoming sessions grouped by day (mine, and my children's), alongside
     the school calendar."""
-    entries = [(m, None) for m in upcoming_sessions_for(current_user.id, include_hosted=current_user.is_admin)]
+    entries = [(m, None) for m in upcoming_sessions_for(current_user.id, include_hosted=True)]
     for child in approved_children(current_user):
         entries += [(m, child) for m in upcoming_sessions_for(child.id)]
     entries.sort(key=lambda e: e[0].scheduled_time or e[0].created_at)

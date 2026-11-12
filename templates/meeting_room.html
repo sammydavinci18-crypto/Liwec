@@ -8,13 +8,20 @@
   <div>
     <span class="title">{{ meeting.title }}</span>
     <span class="code-pill">{{ meeting.type_label() }}</span>
+    {% if meeting.school_class %}<span class="code-pill">{{ meeting.school_class.name }}</span>{% endif %}
   </div>
   <div class="room-header-right">
+    {% if is_observer %}
+    <span class="observer-notice" title="Only you can see this. Nobody in the session is told you are here.">&#128065; Observing &middot; unseen</span>
+    {% elif not attendance_required %}
     <a class="btn btn-ghost btn-sm" href="{{ url_for('main.dashboard') }}" onclick="return confirm('Leave this session and go back to your dashboard?');">&larr; Back to dashboard</a>
+    {% else %}
+    <span class="attendance-notice" title="This lesson is compulsory. It ends when your teacher ends it.">Compulsory lesson</span>
+    {% endif %}
     {% if call_limit_minutes and call_limit_minutes > 0 %}
     <span class="time-limit-notice" title="Server-enforced call length limit">{{ call_limit_minutes }} min limit</span>
     {% endif %}
-    <span class="recording-notice" id="recording-notice" style="display:none;">
+    <span class="recording-notice" id="recording-notice" title="Every session is recorded for safeguarding and can't be switched off.">
       <span class="rec-dot"></span> Recording
     </span>
     <span class="live-dot">Live</span>
@@ -46,15 +53,24 @@
 <!-- Floating reaction toasts -->
 <div class="reaction-toasts" id="reaction-toasts"></div>
 
-<div class="controls-bar">
+<div class="controls-bar{{ ' is-observer' if is_observer }}">
   <button class="ctrl-btn" id="btn-mic" title="Mute / unmute">
     <span class="icon" data-icon="mic"></span><span class="ctrl-label">Mute</span>
   </button>
-  <button class="ctrl-btn" id="btn-cam" title="Turn camera on / off">
+  <button class="ctrl-btn" id="btn-cam" title="Turn camera on / off"{% if attendance_required %} hidden{% endif %}>
     <span class="icon" data-icon="video"></span><span class="ctrl-label">Stop video</span>
   </button>
   <button class="ctrl-btn" id="btn-screen-share" title="Share your screen">
     <span class="icon" data-icon="screenShare"></span><span class="ctrl-label">Share</span>
+  </button>
+
+  {% if is_host %}
+  <button class="ctrl-btn" id="btn-whiteboard" title="Open the whiteboard">
+    <span class="icon" data-icon="whiteboard"></span><span class="ctrl-label">Whiteboard</span>
+  </button>
+  {% endif %}
+  <button class="ctrl-btn" id="btn-enlarge" title="Enlarge the shared screen" hidden>
+    <span class="icon" data-icon="enlarge"></span><span class="ctrl-label">Enlarge</span>
   </button>
 
   <button class="ctrl-btn" id="btn-hand-raise" title="Raise / lower hand">
@@ -72,12 +88,6 @@
     <span class="icon" data-icon="grid"></span><span class="ctrl-label">Layout</span>
   </button>
 
-  {% if is_host %}
-  <button class="ctrl-btn" id="btn-record" title="Start recording">
-    <span class="icon" data-icon="record"></span><span class="ctrl-label">Record</span>
-  </button>
-  {% endif %}
-
   <button class="ctrl-btn" id="btn-chat" title="Chat">
     <span class="icon" data-icon="chat"></span><span class="ctrl-label">Chat</span>
     <span class="badge-count" id="chat-unread" style="display:none;">0</span>
@@ -92,22 +102,71 @@
   </button>
 
   {% if is_host %}
-    <button class="ctrl-btn leave" id="btn-end-meeting" title="End meeting for everyone">End meeting</button>
-  {% else %}
+    <button class="ctrl-btn leave" id="btn-end-meeting" title="End the session for everyone. This also stops the recording.">End {{ 'lesson' if meeting.is_timetabled else 'meeting' }}</button>
+  {% elif is_observer %}
+    <button class="ctrl-btn leave" id="btn-leave" title="Stop observing. Nobody is told.">Stop observing</button>
+  {% elif not attendance_required %}
     <button class="ctrl-btn leave" id="btn-leave" title="Leave meeting">Leave</button>
   {% endif %}
 </div>
 
 {% if is_host %}
-<!-- Recording consent — the host decides before anything records -->
-<div class="waiting-overlay" id="record-consent-overlay">
+<!-- Shown only if this browser can't record. The session can't go on unrecorded. -->
+<div class="waiting-overlay" id="record-failed-overlay">
   <div class="waiting-box">
-    <h3>Record this meeting?</h3>
-    <p>Everyone in the room will see a "Recording" indicator the moment it starts. You can turn it on or off at any time from the Record button.</p>
+    <h3>Recording could not start</h3>
+    <p>Every session must be recorded and this browser can't do it. Open the session again in an up-to-date Chrome, Edge or Firefox on a computer.</p>
     <div class="consent-actions">
-      <button class="btn btn-primary btn-sm" id="btn-consent-record">Start recording</button>
-      <button class="btn btn-ghost btn-sm" id="btn-consent-skip">Don't record</button>
+      <button class="btn btn-primary btn-sm" onclick="location.reload()">Try again</button>
+      <a class="btn btn-ghost btn-sm" href="{{ url_for('main.dashboard') }}">Back to dashboard</a>
     </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Whiteboard: covers the whole screen for everyone while the host uses it. -->
+<div class="wb-overlay" id="wb-overlay">
+  {% if is_host %}
+  <div class="wb-toolbar">
+    <button class="wb-btn is-on" data-wb-tool="pen" title="Write or draw">✏️ Pen</button>
+    <button class="wb-btn" data-wb-tool="text" title="Click the board, then type">Aa Type</button>
+    <button class="wb-btn" data-wb-tool="eraser" title="Eraser">🧽 Eraser</button>
+    <span class="wb-sep"></span>
+    <button class="wb-swatch is-on" data-wb-colour="#111111" title="Black"></button>
+    <button class="wb-swatch" data-wb-colour="#1e5fd8" title="Blue"></button>
+    <button class="wb-swatch" data-wb-colour="#d12f2f" title="Red"></button>
+    <button class="wb-swatch" data-wb-colour="#1f9d55" title="Green"></button>
+    <span class="wb-sep"></span>
+    <button class="wb-btn" data-wb-size="0" title="Thin">S</button>
+    <button class="wb-btn is-on" data-wb-size="1" title="Medium">M</button>
+    <button class="wb-btn" data-wb-size="2" title="Thick">L</button>
+    <span class="wb-sep"></span>
+    <button class="wb-btn" id="wb-undo">↶ Undo</button>
+    <button class="wb-btn" id="wb-clear">Clear</button>
+    <button class="wb-btn wb-close" id="wb-close">Close board ✕</button>
+  </div>
+  {% else %}
+  <div class="wb-toolbar wb-toolbar-view"><span>Your teacher is using the whiteboard</span></div>
+  {% endif %}
+  <div class="wb-stage" id="wb-stage">
+    <canvas id="wb-canvas" width="1600" height="900"{% if not is_host %} class="wb-readonly"{% endif %}></canvas>
+    <textarea id="wb-text-input" rows="1" spellcheck="false"></textarea>
+  </div>
+</div>
+
+<!-- Enlarged shared screen -->
+<div class="focus-overlay" id="focus-overlay">
+  <div class="focus-bar"><span id="focus-label"></span><button class="wb-btn" id="focus-close">Close ✕</button></div>
+  <video id="focus-video" autoplay playsinline muted></video>
+</div>
+
+{% if attendance_required %}
+<!-- Compulsory attendance: shown when the student isn't on the lesson screen. -->
+<div class="waiting-overlay attendance-overlay" id="attendance-overlay">
+  <div class="waiting-box">
+    <h3 id="attendance-title">Your lesson is starting</h3>
+    <p id="attendance-text">This lesson is compulsory. Keep this screen open, in full screen, with your camera on, until your teacher ends the lesson.</p>
+    <button class="btn btn-primary btn-sm" id="attendance-enter">Enter the lesson</button>
   </div>
 </div>
 {% endif %}
@@ -140,7 +199,7 @@
     <button class="notes-close" id="chat-close" data-icon="close"></button>
   </div>
   <div class="notes-list" id="chat-messages"></div>
-  <form class="notes-form chat-form" id="chat-form">
+  <form class="notes-form chat-form" id="chat-form"{% if is_observer %} style="display:none"{% endif %}>
     <input type="text" id="chat-input" placeholder="Message everyone…" autocomplete="off" maxlength="2000" />
     <button type="submit" class="btn btn-primary btn-sm" id="chat-send" title="Send" data-icon="send"></button>
   </form>
@@ -178,6 +237,8 @@
     isHost: {{ is_host|tojson }},
     userName: {{ current_user.name|tojson }},
     hostName: {{ meeting.host.name|tojson }},
+    isObserver: {{ is_observer|tojson }},
+    attendanceRequired: {{ attendance_required|tojson }},
     callLimitMinutes: {{ call_limit_minutes|tojson }},
     iceServers: {{ ice_servers|tojson }}
   };
@@ -187,6 +248,11 @@
 {% if is_host %}
 <script src="{{ url_for('static', filename='js/recorder.js') }}"></script>
 {% endif %}
+{% if attendance_required %}
+<script src="{{ url_for('static', filename='js/attendance.js') }}"></script>
+{% endif %}
 <script src="{{ url_for('static', filename='js/collab.js') }}"></script>
+<script src="{{ url_for('static', filename='js/whiteboard.js') }}"></script>
+<script src="{{ url_for('static', filename='js/focusview.js') }}"></script>
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 {% endblock %}

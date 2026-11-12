@@ -1,28 +1,36 @@
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import (
     Blueprint, render_template, redirect, url_for, request, flash, abort, current_app,
     send_from_directory,
 )
 from flask_login import login_required, current_user
+from sqlalchemy import func
 from werkzeug.datastructures import MultiDict
 
 import storage
 from extensions import db
-from models import User, Meeting, MeetingInvite, MeetingRequest, MEETING_TYPES
+from models import User, Meeting, MeetingInvite, MeetingRequest, MEETING_TYPES, SchoolClass
+from models import MeetingParticipant
+from models import DEFAULT_SESSION_MINUTES, MIN_SESSION_MINUTES, MAX_SESSION_MINUTES
 from models import Announcement, ANNOUNCEMENT_AUDIENCES
 from models import TeacherProfile, TeacherVerificationDocument, CAMBRIDGE_STAGES, STUDENT_PROGRAMS
 from models import StudentProfile, StudentVerificationDocument, StudentTeacherAssignment, ParentStudentLink
 from permissions import admin_required
+from school import (
+    active_classes, class_roster, find_conflict, resync_rosters, sync_lesson_roster,
+)
 
 admin_bp = Blueprint("admin", __name__)
 
 
 # ---------------------------------------------------------------------------
-# Sessions — the admin is the ONLY person who can create or host a meeting.
-# Everything on the platform that happens live (consultations, classes,
-# ordinary meetings) is scheduled here, with a guest list. No invite, no entry.
+# Sessions. The admin hosts consultations and ordinary meetings. Teaching is
+# different: a timetabled lesson (one class + one teacher) or an ad-hoc session
+# the admin sets up for a teacher and chosen people. In those the TEACHER is
+# the host — they open the room and admit the guests — and the admin is not
+# part of it. In every case: no invite, no entry.
 # ---------------------------------------------------------------------------
 
 def _parse_local_datetime(raw):
@@ -32,12 +40,42 @@ def _parse_local_datetime(raw):
         return None
 
 
+def _parse_minutes(raw):
+    """Session length in minutes: blank -> the default, bad/out of range -> None."""
+    raw = (raw or "").strip()
+    if not raw:
+        return DEFAULT_SESSION_MINUTES
+    try:
+        minutes = int(raw)
+    except ValueError:
+        return None
+    return minutes if MIN_SESSION_MINUTES <= minutes <= MAX_SESSION_MINUTES else None
+
+
+_LENGTH_ERROR = f"Session length must be between {MIN_SESSION_MINUTES} and {MAX_SESSION_MINUTES} minutes."
+
+
 def _invitable_users(exclude_ids=()):
     return (
         User.query.filter(User.is_banned.is_(False), User.id != current_user.id)
         .filter(~User.id.in_(list(exclude_ids) or [0]))
         .order_by(User.name).all()
     )
+
+
+def _approved_teachers():
+    return (
+        User.query.join(TeacherProfile, TeacherProfile.user_id == User.id)
+        .filter(TeacherProfile.status == "approved", User.is_banned.is_(False))
+        .order_by(User.name).all()
+    )
+
+
+def _conflict_message(found):
+    other, who = found
+    what = "That teacher is" if who == "teacher" else "That class is"
+    return (f"{what} already booked at that time: \"{other.title}\" on "
+            f"{other.scheduled_time:%a %d %b %H:%M} UTC. Pick another time.")
 
 
 @admin_bp.route("/admin/meetings")
@@ -53,58 +91,94 @@ def meetings():
     return render_template("admin/meetings.html", active=active, past=past)
 
 
+def _render_new_meeting(form):
+    return render_template("admin/new_meeting.html", users=_invitable_users(),
+                           teachers=_approved_teachers(), classes=active_classes(),
+                           types=MEETING_TYPES, form=form)
+
+
 @admin_bp.route("/admin/meetings/new", methods=["GET", "POST"])
 @login_required
 @admin_required
 def new_meeting():
-    teachers = (
-        TeacherProfile.query.filter_by(status="approved")
-        .join(User, TeacherProfile.user_id == User.id).order_by(User.name).all()
-    )
-    users_ = _invitable_users()
-
     if request.method == "POST":
         title = request.form.get("title", "").strip()
+        host_mode = "teacher" if request.form.get("host_mode") == "teacher" else "admin"
         meeting_type = request.form.get("meeting_type", "consultation")
         if meeting_type not in {k for k, _ in MEETING_TYPES}:
             meeting_type = "consultation"
         scheduled_time = _parse_local_datetime(request.form.get("scheduled_time"))
+        minutes = _parse_minutes(request.form.get("duration_minutes"))
         description = request.form.get("description", "").strip()
 
         if not title or scheduled_time is None:
             flash("A title and a date/time are required.", "error")
-            return render_template("admin/new_meeting.html", users=users_, teachers=teachers,
-                                   types=MEETING_TYPES, form=request.form)
+            return _render_new_meeting(request.form)
+        if minutes is None:
+            flash(_LENGTH_ERROR, "error")
+            return _render_new_meeting(request.form)
+
+        host = current_user
+        if host_mode == "teacher":
+            teacher_id = request.form.get("host_teacher_id", type=int)
+            host = User.query.get(teacher_id) if teacher_id else None
+            if not host or host.is_banned or not host.is_approved_teacher:
+                flash("Pick an approved teacher to host this session.", "error")
+                return _render_new_meeting(request.form)
 
         guest_ids = {int(x) for x in request.form.getlist("guests") if x.isdigit()}
 
-        # Class shortcut: invite a teacher together with every student the
-        # admin has placed with them.
-        teacher_id = request.form.get("class_teacher_id", type=int)
-        if teacher_id:
-            if TeacherProfile.query.filter_by(user_id=teacher_id, status="approved").first():
-                guest_ids.add(teacher_id)
-                for a in StudentTeacherAssignment.query.filter_by(teacher_id=teacher_id).all():
-                    guest_ids.add(a.student_id)
+        if host_mode == "teacher":
+            # Shortcut: add the teacher's placed students — all of them, or just
+            # one class's worth.
+            bulk = request.form.get("bulk_students", "")
+            if bulk == "all":
+                guest_ids |= {a.student_id for a in
+                              StudentTeacherAssignment.query.filter_by(teacher_id=host.id).all()}
+            elif bulk.isdigit():
+                guest_ids |= {u.id for u in class_roster(host.id, int(bulk))}
+        else:
+            # Class shortcut (admin-hosted): invite a teacher together with every
+            # student the admin has placed with them.
+            teacher_id = request.form.get("class_teacher_id", type=int)
+            if teacher_id:
+                if TeacherProfile.query.filter_by(user_id=teacher_id, status="approved").first():
+                    guest_ids.add(teacher_id)
+                    for a in StudentTeacherAssignment.query.filter_by(teacher_id=teacher_id).all():
+                        guest_ids.add(a.student_id)
 
         valid_ids = {u.id for u in User.query.filter(User.id.in_(list(guest_ids) or [0]),
                                                       User.is_banned.is_(False)).all()}
         valid_ids.discard(current_user.id)
+        valid_ids.discard(host.id)
+
+        if host_mode == "teacher":
+            if not valid_ids:
+                flash("Pick at least one student or guest for the teacher to meet.", "error")
+                return _render_new_meeting(request.form)
+            found = find_conflict(scheduled_time, minutes, host_id=host.id)
+            if found:
+                flash(_conflict_message(found), "error")
+                return _render_new_meeting(request.form)
 
         meeting = Meeting(
-            title=title[:200], host_id=current_user.id, scheduled_time=scheduled_time,
+            title=title[:200], host_id=host.id, scheduled_time=scheduled_time,
             meeting_type=meeting_type, description=description, status="scheduled",
+            duration_minutes=minutes,
         )
         db.session.add(meeting)
         db.session.flush()
         for uid in valid_ids:
-            db.session.add(MeetingInvite(meeting_id=meeting.id, user_id=uid))
+            db.session.add(MeetingInvite(meeting_id=meeting.id, user_id=uid, source="manual"))
         db.session.commit()
-        flash(f"Session scheduled with {len(valid_ids)} guest(s).", "success")
+        if host_mode == "teacher":
+            flash(f"Session scheduled. {host.name} will host it for {len(valid_ids)} guest(s); "
+                  f"you are not part of it.", "success")
+        else:
+            flash(f"Session scheduled with {len(valid_ids)} guest(s).", "success")
         return redirect(url_for("admin.meeting_detail", meeting_id=meeting.id))
 
-    return render_template("admin/new_meeting.html", users=users_, teachers=teachers,
-                           types=MEETING_TYPES, form={})
+    return _render_new_meeting({})
 
 
 @admin_bp.route("/admin/meetings/<int:meeting_id>")
@@ -112,10 +186,19 @@ def new_meeting():
 @admin_required
 def meeting_detail(meeting_id):
     meeting = Meeting.query.get_or_404(meeting_id)
-    invited_ids = [i.user_id for i in meeting.invites]
+    invited_ids = [i.user_id for i in meeting.invites] + [meeting.host_id]
+    attendance = (
+        MeetingParticipant.query.filter_by(meeting_id=meeting.id)
+        .order_by(MeetingParticipant.joined_at).all()
+    )
+    came = {r.user_id for r in attendance}
+    # Invited but never joined (only meaningful once the session has started).
+    absent = [i.user for i in meeting.invites if i.user_id not in came] \
+        if meeting.status in ("live", "ended") else []
     return render_template(
         "admin/meeting_detail.html", meeting=meeting,
         invitable=_invitable_users(exclude_ids=invited_ids),
+        attendance=attendance, absent=absent,
     )
 
 
@@ -131,10 +214,12 @@ def meeting_invite(meeting_id):
     user = User.query.get(user_id) if user_id else None
     if not user or user.is_banned or user.id == current_user.id:
         flash("Pick a valid user to invite.", "error")
+    elif user.id == meeting.host_id:
+        flash(f"{user.name} is the host of this session.", "info")
     elif meeting.is_invited(user):
         flash(f"{user.name} is already invited.", "info")
     else:
-        db.session.add(MeetingInvite(meeting_id=meeting.id, user_id=user.id))
+        db.session.add(MeetingInvite(meeting_id=meeting.id, user_id=user.id, source="manual"))
         db.session.commit()
         flash(f"{user.name} invited.", "success")
     return redirect(url_for("admin.meeting_detail", meeting_id=meeting_id))
@@ -145,6 +230,12 @@ def meeting_invite(meeting_id):
 @admin_required
 def meeting_uninvite(meeting_id, user_id):
     invite = MeetingInvite.query.filter_by(meeting_id=meeting_id, user_id=user_id).first_or_404()
+    if invite.source == "roster" and invite.meeting.status in ("scheduled", "live"):
+        # The class list is the single source of truth for a lesson's roster;
+        # removing the invite here would just be undone at the next sync.
+        flash("This student is on the class list for this lesson. Change their class or "
+              "remove their placement with this teacher instead.", "error")
+        return redirect(url_for("admin.meeting_detail", meeting_id=meeting_id))
     db.session.delete(invite)
     db.session.commit()
     flash("Guest removed from the invite list.", "info")
@@ -157,14 +248,27 @@ def meeting_uninvite(meeting_id, user_id):
 def meeting_reschedule(meeting_id):
     meeting = Meeting.query.get_or_404(meeting_id)
     new_time = _parse_local_datetime(request.form.get("scheduled_time"))
+    minutes = _parse_minutes(request.form.get("duration_minutes")) \
+        if request.form.get("duration_minutes") else meeting.length_minutes()
     if meeting.status != "scheduled":
         flash("Only a session that hasn't started can be rescheduled.", "error")
     elif new_time is None:
         flash("Enter a valid date and time.", "error")
+    elif minutes is None:
+        flash(_LENGTH_ERROR, "error")
     else:
-        meeting.scheduled_time = new_time
-        db.session.commit()
-        flash("Session rescheduled.", "success")
+        found = find_conflict(
+            new_time, minutes,
+            host_id=meeting.host_id if meeting.led_by_teacher() else None,
+            class_id=meeting.class_id, ignore_id=meeting.id,
+        )
+        if found:
+            flash(_conflict_message(found), "error")
+        else:
+            meeting.scheduled_time = new_time
+            meeting.duration_minutes = minutes
+            db.session.commit()
+            flash("Session rescheduled.", "success")
     return redirect(url_for("admin.meeting_detail", meeting_id=meeting_id))
 
 
@@ -174,12 +278,236 @@ def meeting_reschedule(meeting_id):
 def meeting_cancel(meeting_id):
     meeting = Meeting.query.get_or_404(meeting_id)
     if meeting.status != "scheduled":
-        flash("Only a session that hasn't started can be cancelled — end a live one from inside its room.", "error")
+        flash("Only a session that hasn't started can be cancelled — the host ends a live one from inside its room.", "error")
     else:
         meeting.status = "cancelled"
         db.session.commit()
         flash("Session cancelled. Guests can no longer enter it.", "info")
     return redirect(url_for("admin.meeting_detail", meeting_id=meeting_id))
+
+
+@admin_bp.route("/admin/meetings/<int:meeting_id>/cancel-series", methods=["POST"])
+@login_required
+@admin_required
+def meeting_cancel_series(meeting_id):
+    """Cancel this lesson and every later, not-yet-started one in its weekly series."""
+    meeting = Meeting.query.get_or_404(meeting_id)
+    if not meeting.series_id or not meeting.scheduled_time:
+        flash("This session isn't part of a repeating series.", "error")
+        return redirect(url_for("admin.meeting_detail", meeting_id=meeting_id))
+    later = Meeting.query.filter(
+        Meeting.series_id == meeting.series_id, Meeting.status == "scheduled",
+        Meeting.scheduled_time >= meeting.scheduled_time,
+    ).all()
+    for m in later:
+        m.status = "cancelled"
+    db.session.commit()
+    flash(f"Cancelled {len(later)} lesson(s) in this series.", "info")
+    return redirect(url_for("admin.meeting_detail", meeting_id=meeting_id))
+
+
+# ---------------------------------------------------------------------------
+# Classes (year groups) — each student is in one. A timetabled lesson is for
+# one class, so Year 7 and Year 8 can share a teacher and a subject and still
+# have separate lessons, and Bridging students are their own group.
+# ---------------------------------------------------------------------------
+
+def _class_name_taken(name, ignore_id=None):
+    q = SchoolClass.query.filter(func.lower(SchoolClass.name) == name.lower())
+    if ignore_id:
+        q = q.filter(SchoolClass.id != ignore_id)
+    return q.first() is not None
+
+
+@admin_bp.route("/admin/classes")
+@login_required
+@admin_required
+def classes():
+    all_classes = SchoolClass.query.order_by(SchoolClass.sort_order, SchoolClass.name).all()
+    student_counts = dict(
+        db.session.query(StudentProfile.class_id, func.count(StudentProfile.id))
+        .filter(StudentProfile.status == "approved", StudentProfile.class_id.isnot(None))
+        .group_by(StudentProfile.class_id).all()
+    )
+    lesson_counts = dict(
+        db.session.query(Meeting.class_id, func.count(Meeting.id))
+        .filter(Meeting.class_id.isnot(None), Meeting.status == "scheduled")
+        .group_by(Meeting.class_id).all()
+    )
+    return render_template("admin/classes.html", classes=all_classes,
+                           student_counts=student_counts, lesson_counts=lesson_counts)
+
+
+@admin_bp.route("/admin/classes/create", methods=["POST"])
+@login_required
+@admin_required
+def class_create():
+    name = request.form.get("name", "").strip()[:60]
+    if not name:
+        flash("Give the class a name, e.g. \"Year 8\" or \"Bridging\".", "error")
+    elif _class_name_taken(name):
+        flash(f"There is already a class called \"{name}\".", "error")
+    else:
+        last = db.session.query(func.max(SchoolClass.sort_order)).scalar()
+        db.session.add(SchoolClass(name=name, sort_order=(last or 0) + 1))
+        db.session.commit()
+        flash(f"Class \"{name}\" added.", "success")
+    return redirect(url_for("admin.classes"))
+
+
+@admin_bp.route("/admin/classes/<int:class_id>/rename", methods=["POST"])
+@login_required
+@admin_required
+def class_rename(class_id):
+    cls = SchoolClass.query.get_or_404(class_id)
+    name = request.form.get("name", "").strip()[:60]
+    if not name:
+        flash("A class needs a name.", "error")
+    elif _class_name_taken(name, ignore_id=cls.id):
+        flash(f"There is already a class called \"{name}\".", "error")
+    else:
+        cls.name = name
+        db.session.commit()
+        flash("Class renamed.", "success")
+    return redirect(url_for("admin.classes"))
+
+
+@admin_bp.route("/admin/classes/<int:class_id>/toggle", methods=["POST"])
+@login_required
+@admin_required
+def class_toggle(class_id):
+    """Archive/restore. Classes are never deleted so past lessons keep their label."""
+    cls = SchoolClass.query.get_or_404(class_id)
+    cls.is_active = not cls.is_active
+    db.session.commit()
+    flash(f"\"{cls.name}\" {'restored' if cls.is_active else 'archived'}.", "info")
+    return redirect(url_for("admin.classes"))
+
+
+@admin_bp.route("/admin/students/<int:user_id>/class", methods=["POST"])
+@login_required
+@admin_required
+def set_student_class(user_id):
+    profile = StudentProfile.query.filter_by(user_id=user_id).first_or_404()
+    new_id = request.form.get("class_id", type=int)
+    if new_id and not SchoolClass.query.get(new_id):
+        flash("That class doesn't exist.", "error")
+        return redirect(url_for("admin.placements"))
+    old_id = profile.class_id
+    profile.class_id = new_id or None
+    db.session.flush()
+    # Lessons for the class they left lose them; lessons for the new class gain them.
+    for cid in {old_id, profile.class_id} - {None}:
+        resync_rosters(class_id=cid)
+    db.session.commit()
+    flash(f"{profile.user.name} is now in {profile.class_label()}." if profile.class_id
+          else f"{profile.user.name} was taken out of their class.", "success")
+    return redirect(url_for("admin.placements", class_id=request.form.get("back_class", type=int)))
+
+
+# ---------------------------------------------------------------------------
+# Timetable — the admin prepares lessons: class + teacher + subject + time
+# (optionally repeating weekly). They are ordinary sessions, hosted by the
+# teacher, whose guest list is exactly the students of THAT class placed with
+# THAT teacher. The admin doesn't open, admit or attend.
+# ---------------------------------------------------------------------------
+
+MAX_REPEAT_WEEKS = 40
+
+
+@admin_bp.route("/admin/timetable")
+@login_required
+@admin_required
+def timetable():
+    class_id = request.args.get("class_id", type=int)
+    teacher_id = request.args.get("teacher_id", type=int)
+    q = Meeting.query.filter(Meeting.class_id.isnot(None))
+    if class_id:
+        q = q.filter(Meeting.class_id == class_id)
+    if teacher_id:
+        q = q.filter(Meeting.host_id == teacher_id)
+    upcoming = q.filter(Meeting.status.in_(["scheduled", "live"])).all()
+    upcoming.sort(key=lambda m: m.scheduled_time or m.created_at)
+    past = (
+        q.filter(Meeting.status.in_(["ended", "cancelled"]))
+        .order_by(Meeting.scheduled_time.desc()).limit(30).all()
+    )
+    return render_template(
+        "admin/timetable.html", upcoming=upcoming, past=past,
+        classes=SchoolClass.query.order_by(SchoolClass.sort_order, SchoolClass.name).all(),
+        teachers=_approved_teachers(), class_id=class_id, teacher_id=teacher_id,
+    )
+
+
+@admin_bp.route("/admin/timetable/new", methods=["GET", "POST"])
+@login_required
+@admin_required
+def timetable_new():
+    def render(form):
+        return render_template(
+            "admin/timetable_new.html", form=form, classes=active_classes(),
+            teachers=_approved_teachers(), max_weeks=MAX_REPEAT_WEEKS,
+            default_minutes=DEFAULT_SESSION_MINUTES,
+        )
+
+    if request.method == "GET":
+        return render(request.args)
+
+    form = request.form
+    cls = SchoolClass.query.get(form.get("class_id", type=int) or 0)
+    teacher = User.query.get(form.get("teacher_id", type=int) or 0)
+    subject = form.get("subject", "").strip()[:120]
+    start = _parse_local_datetime(form.get("scheduled_time"))
+    minutes = _parse_minutes(form.get("duration_minutes"))
+    weeks = form.get("repeat_weeks", default=1, type=int) or 1
+
+    if not cls or not cls.is_active:
+        flash("Pick a class.", "error")
+    elif not teacher or teacher.is_banned or not teacher.is_approved_teacher:
+        flash("Pick an approved teacher.", "error")
+    elif not subject:
+        flash("Enter the subject being taught.", "error")
+    elif start is None:
+        flash("Enter a valid date and time.", "error")
+    elif start < datetime.utcnow() - timedelta(minutes=5):
+        flash("That time is in the past. Pick a time in the future.", "error")
+    elif minutes is None:
+        flash(_LENGTH_ERROR, "error")
+    elif not 1 <= weeks <= MAX_REPEAT_WEEKS:
+        flash(f"Repeat for between 1 and {MAX_REPEAT_WEEKS} weeks.", "error")
+    else:
+        times = [start + timedelta(weeks=i) for i in range(weeks)]
+        for t in times:
+            found = find_conflict(t, minutes, host_id=teacher.id, class_id=cls.id)
+            if found:
+                flash(_conflict_message(found) + " Nothing was added.", "error")
+                return render(form)
+
+        title = form.get("title", "").strip()[:200] or f"{subject} · {cls.name}"
+        description = form.get("description", "").strip() or None
+        series_id = secrets.token_hex(6) if weeks > 1 else None
+        created = []
+        for t in times:
+            m = Meeting(
+                title=title, host_id=teacher.id, scheduled_time=t, meeting_type="class",
+                description=description, status="scheduled", class_id=cls.id,
+                subject=subject, duration_minutes=minutes, series_id=series_id,
+            )
+            db.session.add(m)
+            created.append(m)
+        db.session.flush()
+        for m in created:
+            sync_lesson_roster(m)
+        db.session.commit()
+
+        roster = class_roster(teacher.id, cls.id)
+        flash(f"Added {len(created)} lesson(s): {cls.name} · {subject} with {teacher.name}, "
+              f"{len(roster)} student(s) on the list.", "success")
+        if not roster:
+            flash(f"No {cls.name} students are placed with {teacher.name} yet. "
+                  f"Place them and they'll be added to these lessons automatically.", "info")
+        return redirect(url_for("admin.timetable", class_id=cls.id))
+    return render(form)
 
 
 # ---------------------------------------------------------------------------
@@ -403,7 +731,13 @@ def student_queue():
 @admin_required
 def student_review(profile_id):
     profile = StudentProfile.query.get_or_404(profile_id)
-    return render_template("admin/student_review.html", profile=profile)
+    classes_ = active_classes()
+    # A bridging applicant most likely belongs in the Bridging class.
+    suggested = profile.class_id
+    if not suggested and profile.desired_stage == "bridging":
+        suggested = next((c.id for c in classes_ if c.name.lower() == "bridging"), None)
+    return render_template("admin/student_review.html", profile=profile,
+                           classes=classes_, suggested_class_id=suggested)
 
 
 @admin_bp.route("/admin/students/<int:profile_id>/approve", methods=["POST"])
@@ -411,12 +745,18 @@ def student_review(profile_id):
 @admin_required
 def student_approve(profile_id):
     profile = StudentProfile.query.get_or_404(profile_id)
+    class_id = request.form.get("class_id", type=int)
+    if class_id and SchoolClass.query.get(class_id):
+        profile.class_id = class_id
     profile.status = "approved"
     profile.review_note = None
     profile.reviewed_at = datetime.utcnow()
     profile.reviewed_by_id = current_user.id
     db.session.commit()
-    flash(f"{profile.user.name} is now an enrolled student.", "success")
+    if profile.class_id:
+        flash(f"{profile.user.name} is now an enrolled student in {profile.class_label()}.", "success")
+    else:
+        flash(f"{profile.user.name} is now an enrolled student. Set their class before placing them.", "success")
     return redirect(url_for("admin.student_queue"))
 
 
@@ -460,28 +800,61 @@ def view_student_document(document_id):
 @login_required
 @admin_required
 def placements():
-    approved_students = (
+    all_classes = SchoolClass.query.order_by(SchoolClass.sort_order, SchoolClass.name).all()
+    # ?class_id=<id> narrows the student list and placements to one class;
+    # -1 means "students with no class yet".
+    class_filter = request.args.get("class_id", type=int)
+
+    students_q = (
         StudentProfile.query.filter_by(status="approved")
-        .join(User, StudentProfile.user_id == User.id).order_by(User.name).all()
+        .join(User, StudentProfile.user_id == User.id).order_by(User.name)
     )
+    if class_filter == -1:
+        students_q = students_q.filter(StudentProfile.class_id.is_(None))
+    elif class_filter:
+        students_q = students_q.filter(StudentProfile.class_id == class_filter)
+    approved_students = students_q.all()
+    all_approved = StudentProfile.query.filter_by(status="approved").all()
+
     approved_teachers = (
         TeacherProfile.query.filter_by(status="approved")
         .join(User, TeacherProfile.user_id == User.id).order_by(User.name).all()
     )
     existing = StudentTeacherAssignment.query.order_by(StudentTeacherAssignment.created_at.desc()).all()
 
-    # Who is placed with whom, so the two lists can show it at a glance.
+    # Who is placed with whom, so the lists can show it at a glance — and, per
+    # teacher, split by class: the same teacher's Year 7s and Year 8s are
+    # different groups.
     teachers_of = {}   # student user_id -> [teacher User]
-    students_of = {}   # teacher user_id -> [student User]
+    class_names = {c.id: c.name for c in all_classes}
+    grouped = {}       # teacher user_id -> {class_id|None: [student User]}
     for a in existing:
         teachers_of.setdefault(a.student_id, []).append(a.teacher)
-        students_of.setdefault(a.teacher_id, []).append(a.student)
+        sp = a.student.student_profile
+        grouped.setdefault(a.teacher_id, {}).setdefault(sp.class_id if sp else None, []).append(a.student)
+    teacher_groups = {
+        tid: sorted(
+            [(class_names.get(cid, "No class yet"), cid, users) for cid, users in by_class.items()],
+            key=lambda g: (g[1] is None, g[0]),
+        )
+        for tid, by_class in grouped.items()
+    }
+
+    def in_filter(a):
+        sp = a.student.student_profile
+        cid = sp.class_id if sp else None
+        if class_filter == -1:
+            return cid is None
+        return not class_filter or cid == class_filter
 
     return render_template(
         "admin/placements.html",
-        students=approved_students, teachers=approved_teachers, assignments=existing,
-        teachers_of=teachers_of, students_of=students_of,
-        unplaced_count=sum(1 for s_ in approved_students if s_.user_id not in teachers_of),
+        students=approved_students, teachers=approved_teachers,
+        assignments=[a for a in existing if in_filter(a)],
+        teachers_of=teachers_of, teacher_groups=teacher_groups,
+        classes=all_classes, class_filter=class_filter,
+        unplaced_count=sum(1 for s_ in all_approved if s_.user_id not in teachers_of),
+        unclassed_count=sum(1 for s_ in all_approved if s_.class_id is None),
         preselect_student=request.args.get("student", type=int),
         preselect_teacher=request.args.get("teacher", type=int),
     )
@@ -500,6 +873,9 @@ def create_placement():
     if not student_profile or not teacher_profile:
         flash("Pick an approved student and an approved teacher.", "error")
         return redirect(url_for("admin.placements"))
+    if not student_profile.class_id:
+        flash(f"Set {student_profile.user.name}'s class first — lessons are timetabled per class.", "error")
+        return redirect(url_for("admin.placements", class_id=-1))
 
     existing = StudentTeacherAssignment.query.filter_by(student_id=student_id, teacher_id=teacher_id).first()
     if existing:
@@ -509,9 +885,46 @@ def create_placement():
     db.session.add(StudentTeacherAssignment(
         student_id=student_id, teacher_id=teacher_id, assigned_by_id=current_user.id, notes=notes,
     ))
+    db.session.flush()
+    resync_rosters(teacher_id=teacher_id, class_id=student_profile.class_id)
     db.session.commit()
-    flash("Student placed with teacher.", "success")
+    flash(f"{student_profile.user.name} ({student_profile.class_label()}) placed with "
+          f"{teacher_profile.user.name}.", "success")
     return redirect(url_for("admin.placements"))
+
+
+@admin_bp.route("/admin/placements/class", methods=["POST"])
+@login_required
+@admin_required
+def create_class_placement():
+    """Place every enrolled student of one class with one teacher in one go."""
+    class_id = request.form.get("class_id", type=int)
+    teacher_id = request.form.get("teacher_id", type=int)
+    cls = SchoolClass.query.get(class_id) if class_id else None
+    teacher_profile = TeacherProfile.query.filter_by(user_id=teacher_id, status="approved").first()
+    if not cls or not teacher_profile:
+        flash("Pick a class and an approved teacher.", "error")
+        return redirect(url_for("admin.placements"))
+
+    already = {a.student_id for a in StudentTeacherAssignment.query.filter_by(teacher_id=teacher_id).all()}
+    added = 0
+    for sp in StudentProfile.query.filter_by(class_id=cls.id, status="approved").all():
+        if sp.user_id in already or sp.user.is_banned:
+            continue
+        db.session.add(StudentTeacherAssignment(
+            student_id=sp.user_id, teacher_id=teacher_id, assigned_by_id=current_user.id,
+            notes=f"Placed with the whole {cls.name} class.",
+        ))
+        added += 1
+    db.session.flush()
+    resync_rosters(teacher_id=teacher_id, class_id=cls.id)
+    db.session.commit()
+    if added:
+        flash(f"{added} {cls.name} student(s) placed with {teacher_profile.user.name}.", "success")
+    else:
+        flash(f"Nobody new to place: every {cls.name} student is already with "
+              f"{teacher_profile.user.name}, or the class is empty.", "info")
+    return redirect(url_for("admin.placements", class_id=cls.id))
 
 
 @admin_bp.route("/admin/placements/<int:assignment_id>/remove", methods=["POST"])
@@ -519,9 +932,12 @@ def create_placement():
 @admin_required
 def remove_placement(assignment_id):
     assignment = StudentTeacherAssignment.query.get_or_404(assignment_id)
+    teacher_id = assignment.teacher_id
     db.session.delete(assignment)
+    db.session.flush()
+    resync_rosters(teacher_id=teacher_id)
     db.session.commit()
-    flash("Placement removed.", "info")
+    flash("Placement removed. They are off that teacher's upcoming lessons.", "info")
     return redirect(url_for("admin.placements"))
 
 
@@ -647,6 +1063,9 @@ def ban_user(user_id):
     user.is_banned = True
     user.ban_reason = request.form.get("ban_reason", "").strip()
     user.banned_at = datetime.utcnow()
+    db.session.flush()
+    if user.student_profile and user.student_profile.class_id:
+        resync_rosters(class_id=user.student_profile.class_id)   # drop them from class lessons
     db.session.commit()
     flash(f"{user.name}'s account has been banned.", "info")
     return redirect(url_for("admin.user_detail", user_id=user_id))
@@ -660,6 +1079,9 @@ def unban_user(user_id):
     user.is_banned = False
     user.ban_reason = None
     user.banned_at = None
+    db.session.flush()
+    if user.student_profile and user.student_profile.class_id:
+        resync_rosters(class_id=user.student_profile.class_id)
     db.session.commit()
     flash(f"{user.name}'s account has been reinstated.", "success")
     return redirect(url_for("admin.user_detail", user_id=user_id))
@@ -711,7 +1133,7 @@ def create_account():
 
         def fail(msg):
             flash(msg, "error")
-            return render_template("admin/create_account.html", form=form,
+            return render_template("admin/create_account.html", form=form, classes=active_classes(),
                                    stages=CAMBRIDGE_STAGES, programs=STUDENT_PROGRAMS)
 
         if account_type not in ("teacher", "student"):
@@ -746,8 +1168,10 @@ def create_account():
         else:
             valid_programs = {k for k, _ in STUDENT_PROGRAMS}
             program = form.get("desired_stage")
+            class_id = form.get("class_id", type=int)
             profile = StudentProfile(
                 user_id=user.id,
+                class_id=class_id if class_id and SchoolClass.query.get(class_id) else None,
                 desired_stage=program if program in valid_programs else None,
                 subjects_of_interest=form.get("subjects", "").strip() or None,
                 notes="Account created by the administrator.",
@@ -764,7 +1188,7 @@ def create_account():
             login_url=url_for("auth.login", _external=True),
         )
 
-    return render_template("admin/create_account.html", form=form,
+    return render_template("admin/create_account.html", form=form, classes=active_classes(),
                            stages=CAMBRIDGE_STAGES, programs=STUDENT_PROGRAMS)
 
 

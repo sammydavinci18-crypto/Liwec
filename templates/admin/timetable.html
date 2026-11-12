@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Timetable · Admin · Light-Way{% endblock %}
+
+{% macro lesson_row(m, past=False) %}
+<div class="appointment-row">
+  <div>
+    <strong>{{ m.title }}</strong>
+    <span class="appt-time">{{ m.scheduled_time|dt }} · {{ m.length_minutes() }} min</span>
+    <span class="appt-time">
+      <span class="class-pill">{{ m.school_class.name }}</span>
+      {{ m.subject or '' }} · Teacher: {{ m.host.name }} · {{ m.invites|length }} student{{ '' if m.invites|length == 1 else 's' }}
+    </span>
+  </div>
+  <div class="appt-actions">
+    <span class="status-pill status-{{ 'approved' if m.status == 'live' else ('cancelled' if m.status == 'cancelled' else ('completed' if m.status == 'ended' else 'pending')) }}">{{ m.status|capitalize }}</span>
+    {% if m.status == 'live' %}<a class="btn btn-primary btn-sm" href="{{ url_for('meetings.observe', room_code=m.room_code) }}" title="Watch unseen">&#128065; Observe</a>{% endif %}
+    <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.meeting_detail', meeting_id=m.id) }}">{{ 'Details' if past else 'Manage' }}</a>
+  </div>
+</div>
+{% endmacro %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Admin</span>
+    <h1>Class timetable</h1>
+    <p>Prepare lessons for a class and a teacher. They run at the set time without you: the teacher opens the room and admits the class, and only students of that class placed with that teacher can attend.</p>
+  </div>
+  <div class="dash-actions">
+    <a class="btn btn-ghost" href="{{ url_for('admin.classes') }}">Classes</a>
+    <a class="btn btn-ghost" href="{{ url_for('admin.placements') }}">Placements</a>
+    <a class="btn btn-primary" href="{{ url_for('admin.timetable_new', class_id=class_id, teacher_id=teacher_id) }}">+ Add to timetable</a>
+  </div>
+</div>
+
+<form method="GET" class="filter-bar">
+  <label>Class
+    <select name="class_id" onchange="this.form.submit()">
+      <option value="">All classes</option>
+      {% for c in classes %}{% if c.is_active or c.id == class_id %}<option value="{{ c.id }}" {{ 'selected' if c.id == class_id }}>{{ c.name }}</option>{% endif %}{% endfor %}
+    </select>
+  </label>
+  <label>Teacher
+    <select name="teacher_id" onchange="this.form.submit()">
+      <option value="">All teachers</option>
+      {% for t in teachers %}<option value="{{ t.id }}" {{ 'selected' if t.id == teacher_id }}>{{ t.name }}</option>{% endfor %}
+    </select>
+  </label>
+  <noscript><button type="submit" class="btn btn-ghost btn-sm">Filter</button></noscript>
+</form>
+
+<h3 class="section-heading">Upcoming &amp; live ({{ upcoming|length }})</h3>
+{% if upcoming %}
+<div class="appointment-list">{% for m in upcoming %}{{ lesson_row(m) }}{% endfor %}</div>
+{% else %}
+<div class="empty-state">Nothing on the timetable{{ ' for this selection' if class_id or teacher_id }}. <a href="{{ url_for('admin.timetable_new', class_id=class_id, teacher_id=teacher_id) }}">Add a lesson</a>.</div>
+{% endif %}
+
+{% if past %}
+<h3 class="section-heading">Past &amp; cancelled</h3>
+<div class="appointment-list">{% for m in past %}{{ lesson_row(m, True) }}{% endfor %}</div>
+{% endif %}
+{% endblock %}

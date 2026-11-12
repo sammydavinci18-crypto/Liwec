@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}My teaching schedule · Light-Way{% endblock %}
+
+{% macro session_row(m, ended=False) %}
+<div class="appointment-row">
+  <div>
+    <strong>{{ m.title }}</strong>
+    <span class="appt-time">{{ m.scheduled_time|dt }}{% if not ended %} · {{ m.length_minutes() }} min{% endif %}{% if m.status == 'live' %} · <strong>Live now</strong>{% endif %}</span>
+    <span class="appt-time">
+      {{ m.type_label() }}{% if m.school_class %} · <span class="class-pill">{{ m.school_class.name }}</span>{% endif %}{% if m.subject %} · {{ m.subject }}{% endif %}
+      · {{ m.invites|length }} guest{{ '' if m.invites|length == 1 else 's' }}
+    </span>
+    {% if m.invites and not ended %}
+    <details class="roster">
+      <summary>Who's invited</summary>
+      <ul>{% for inv in m.invites %}<li>{{ inv.user.name }}</li>{% endfor %}</ul>
+    </details>
+    {% endif %}
+  </div>
+  <div class="appt-actions">
+    {% if ended %}
+      {% if m.recording %}<a class="btn btn-ghost btn-sm" href="{{ url_for('meetings.room', room_code=m.room_code) }}">Recording &amp; notes</a>{% endif %}
+    {% else %}
+      <a class="btn btn-primary btn-sm" href="{{ url_for('meetings.room', room_code=m.room_code) }}">{{ 'Return to room' if m.status == 'live' else 'Start session' }}</a>
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Teacher</span>
+    <h1>My teaching schedule</h1>
+    <p>Lessons the admin has put on the timetable for your classes, and sessions set up for you. You open the room and admit your students from the waiting room.</p>
+  </div>
+  <div class="dash-actions">
+    <a class="btn btn-ghost" href="{{ url_for('teachers.my_students') }}">My students</a>
+  </div>
+</div>
+
+<h3 class="section-heading">Upcoming &amp; live ({{ upcoming|length }})</h3>
+{% if upcoming %}
+<div class="appointment-list">{% for m in upcoming %}{{ session_row(m) }}{% endfor %}</div>
+{% else %}
+<div class="empty-state">Nothing scheduled for you yet. The admin adds lessons to the class timetable once students are placed with you.</div>
+{% endif %}
+
+{% if past %}
+<h3 class="section-heading">Finished</h3>
+<div class="appointment-list">{% for m in past %}{{ session_row(m, True) }}{% endfor %}</div>
+{% endif %}
+{% endblock %}

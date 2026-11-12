@@ -6,8 +6,104 @@ from datetime import datetime, timedelta
 from extensions import db
 from models import (
     Announcement, Meeting, MeetingInvite, ParentStudentLink, ProgressReport,
-    StudentTeacherAssignment, User,
+    SchoolClass, StudentProfile, StudentTeacherAssignment, User,
+    MAX_SESSION_MINUTES,
 )
+
+DEFAULT_CLASSES = ["Year 6", "Year 7", "Year 8", "Year 9", "Year 10", "Year 11",
+                   "Year 12", "Year 13", "Bridging"]
+
+
+def seed_default_classes():
+    """First run only: give the admin a starting list of classes to rename,
+    archive or add to. Classes are never deleted, so this can't re-run later."""
+    if SchoolClass.query.first():
+        return
+    for i, name in enumerate(DEFAULT_CLASSES):
+        db.session.add(SchoolClass(name=name, sort_order=i))
+    db.session.commit()
+
+
+def active_classes():
+    return (SchoolClass.query.filter_by(is_active=True)
+            .order_by(SchoolClass.sort_order, SchoolClass.name).all())
+
+
+# ---------------------------------------------------------------------------
+# Class rosters: who is on a timetabled lesson
+# ---------------------------------------------------------------------------
+
+def class_roster(teacher_id, class_id):
+    """Enrolled, not-banned students who are in `class_id` AND placed with this
+    teacher. This is the whole class-separation rule: placing Year 7 and
+    Year 8 students with the same physics teacher still gives two rosters."""
+    return (
+        User.query
+        .join(StudentProfile, StudentProfile.user_id == User.id)
+        .join(StudentTeacherAssignment, StudentTeacherAssignment.student_id == User.id)
+        .filter(
+            StudentTeacherAssignment.teacher_id == teacher_id,
+            StudentProfile.class_id == class_id,
+            StudentProfile.status == "approved",
+            User.is_banned.is_(False),
+        )
+        .order_by(User.name).all()
+    )
+
+
+def sync_lesson_roster(meeting):
+    """Make a timetabled lesson's roster-sourced invites match the current
+    class list. Hand-added invites are never touched. Caller commits."""
+    if not meeting.class_id:
+        return
+    wanted = {u.id for u in class_roster(meeting.host_id, meeting.class_id)}
+    wanted.discard(meeting.host_id)
+    roster_rows = {i.user_id: i for i in meeting.invites if i.source == "roster"}
+    manual = {i.user_id for i in meeting.invites if i.source != "roster"}
+    for uid, invite in roster_rows.items():
+        if uid not in wanted:
+            db.session.delete(invite)
+    for uid in wanted - set(roster_rows) - manual:
+        db.session.add(MeetingInvite(meeting_id=meeting.id, user_id=uid, source="roster"))
+
+
+def resync_rosters(teacher_id=None, class_id=None):
+    """Call after a placement is made/removed or a student changes class: every
+    upcoming lesson for that teacher / class gets its roster refreshed.
+    Finished lessons keep their guest list so history and recordings stay put.
+    Caller commits."""
+    q = Meeting.query.filter(Meeting.class_id.isnot(None), Meeting.status.in_(["scheduled", "live"]))
+    if teacher_id is not None:
+        q = q.filter(Meeting.host_id == teacher_id)
+    if class_id is not None:
+        q = q.filter(Meeting.class_id == class_id)
+    for m in q.all():
+        sync_lesson_roster(m)
+
+
+def find_conflict(start, minutes, host_id=None, class_id=None, ignore_id=None):
+    """Is the teacher (host) or the class already booked in [start, start+minutes)?
+    Returns (meeting, "teacher" | "class") or None."""
+    end = start + timedelta(minutes=minutes)
+    conds = []
+    if host_id is not None:
+        conds.append(Meeting.host_id == host_id)
+    if class_id is not None:
+        conds.append(Meeting.class_id == class_id)
+    if not conds:
+        return None
+    candidates = Meeting.query.filter(
+        Meeting.status.in_(["scheduled", "live"]),
+        Meeting.scheduled_time.isnot(None),
+        Meeting.scheduled_time < end,
+        Meeting.scheduled_time > start - timedelta(minutes=MAX_SESSION_MINUTES),
+        db.or_(*conds),
+    ).all()
+    for m in candidates:
+        if m.id == ignore_id or m.ends_at() <= start:
+            continue
+        return m, ("teacher" if host_id is not None and m.host_id == host_id else "class")
+    return None
 
 
 def approved_children(user):
@@ -62,9 +158,10 @@ def upcoming_sessions_for(user_id, include_hosted=False):
     )
     meetings = q.all()
     if include_hosted:
-        meetings += Meeting.query.filter(
+        have = {m.id for m in meetings}
+        meetings += [m for m in Meeting.query.filter(
             Meeting.host_id == user_id, Meeting.status.in_(["scheduled", "live"])
-        ).all()
+        ).all() if m.id not in have]
     meetings = [m for m in meetings if m.status == "live" or not m.scheduled_time or m.scheduled_time >= cutoff]
     meetings.sort(key=lambda m: m.scheduled_time or m.created_at)
     return meetings

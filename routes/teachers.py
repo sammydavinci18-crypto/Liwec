@@ -5,7 +5,7 @@ from flask_login import login_required, current_user
 
 import storage
 from extensions import db
-from models import TeacherProfile, TeacherVerificationDocument, CAMBRIDGE_STAGES, StudentTeacherAssignment
+from models import TeacherProfile, TeacherVerificationDocument, CAMBRIDGE_STAGES, StudentTeacherAssignment, Meeting
 
 teachers_bp = Blueprint("teachers", __name__)
 
@@ -152,4 +152,30 @@ def my_students():
         return redirect(url_for("teachers.apply"))
 
     assignments = StudentTeacherAssignment.query.filter_by(teacher_id=current_user.id).all()
-    return render_template("teachers/my_students.html", profile=profile, assignments=assignments)
+    # Group by class: this teacher's Year 7s and Year 8s are separate groups.
+    by_class = {}
+    for a in assignments:
+        sp = a.student.student_profile
+        by_class.setdefault(sp.school_class if sp and sp.school_class else None, []).append(a)
+    groups = sorted(by_class.items(), key=lambda kv: (kv[0] is None, kv[0].sort_order if kv[0] else 0,
+                                                       kv[0].name if kv[0] else ""))
+    return render_template("teachers/my_students.html", profile=profile, assignments=assignments,
+                           groups=groups)
+
+
+@teachers_bp.route("/teachers/me/sessions")
+@login_required
+def my_sessions():
+    """The sessions this teacher hosts: timetabled lessons for their classes and
+    sessions the admin set up for them. They open the room and admit the guests."""
+    if not current_user.is_approved_teacher:
+        abort(403)
+    upcoming = Meeting.query.filter(
+        Meeting.host_id == current_user.id, Meeting.status.in_(["scheduled", "live"])
+    ).all()
+    upcoming.sort(key=lambda m: m.scheduled_time or m.created_at)
+    past = (
+        Meeting.query.filter(Meeting.host_id == current_user.id, Meeting.status == "ended")
+        .order_by(Meeting.ended_at.desc()).limit(15).all()
+    )
+    return render_template("teachers/my_sessions.html", upcoming=upcoming, past=past)

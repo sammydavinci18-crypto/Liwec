@@ -2206,3 +2206,69 @@ button, input, textarea, select { font-family: inherit; }
 .toast { background: var(--paper-raised); border: 1px solid var(--line); border-left-width: 4px; box-shadow: var(--shadow-card); }
 .toast.lvl-urgent { border-left-color: var(--danger); }
 .toast.lvl-warn { border-left-color: var(--amber); }
+
+/* =========================================================
+   Classes, timetable and teacher-hosted sessions
+   ========================================================= */
+.class-pill { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: .74rem; font-weight: 600; background: var(--teal-tint); color: var(--teal-deep); white-space: nowrap; }
+.class-pill-none { background: var(--amber-tint); color: #6b5410; }
+.class-filter { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 22px; }
+.class-chip { padding: 5px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--paper-raised); color: var(--ink-soft); font-size: .86rem; text-decoration: none; }
+.class-chip:hover { border-color: var(--teal); color: var(--teal-deep); }
+.class-chip.is-on { background: var(--teal); border-color: var(--teal); color: #fff; }
+.inline-class-form { margin-top: 6px; }
+.inline-class-form select { font-size: .85rem; padding: 3px 8px; }
+.inline-form { display: flex; gap: 8px; align-items: center; }
+.inline-form input[type="text"] { flex: 1; min-width: 0; }
+.filter-bar { display: flex; flex-wrap: wrap; gap: 16px; margin: 0 0 22px; }
+.filter-bar label { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--ink-soft); }
+.radio-line { display: block; font-weight: 400; margin: 4px 0; }
+.is-archived { opacity: .6; }
+.roster { margin-top: 6px; font-size: .86rem; }
+.roster summary { cursor: pointer; color: var(--teal-deep); }
+.roster ul { margin: 6px 0 0 18px; padding: 0; }
+
+/* Compulsory lessons, automatic recording, silent observer */
+.attendance-notice { font-size: .78rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--amber-tint); color: #6b5410; }
+.observer-notice { font-size: .78rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: #1f2d36; color: #d7e5ec; border: 1px dashed #5b7686; }
+.attendance-overlay { z-index: 9999; }
+.controls-bar.is-observer .ctrl-btn:not(#btn-view-mode):not(#btn-chat):not(#btn-participants):not(#btn-leave) { display: none; }
+.controls-bar.is-observer .reaction-picker { display: none; }
+.is-observer ~ .chat-panel .chat-form, .chat-panel .chat-form.is-readonly { display: none; }
+.observe-btn { border-color: #5b7686; }
+
+/* ---------- Whiteboard + enlarged screen share ---------- */
+.wb-overlay, .focus-overlay {
+  position: fixed; inset: 0; z-index: 120; display: none;
+  flex-direction: column; background: #0E1A22;
+}
+.wb-overlay.show, .focus-overlay.show { display: flex; }
+.wb-toolbar, .focus-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 8px 12px; background: #16262f; color: #fff; flex: 0 0 auto;
+}
+.wb-toolbar-view, .focus-bar { justify-content: space-between; }
+.wb-btn {
+  background: rgba(255,255,255,.08); color: #fff; border: 1px solid rgba(255,255,255,.2);
+  border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; min-height: 36px;
+}
+.wb-btn.is-on { background: rgba(201,162,39,.25); border-color: var(--amber); color: #F0D676; }
+.wb-btn.wb-close { margin-left: auto; background: rgba(196,90,74,.25); border-color: var(--danger); }
+.wb-swatch {
+  width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(255,255,255,.4); cursor: pointer; padding: 0;
+}
+.wb-swatch.is-on { border-color: #fff; box-shadow: 0 0 0 2px var(--amber); }
+.wb-sep { width: 1px; height: 24px; background: rgba(255,255,255,.2); }
+.wb-stage {
+  position: relative; flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 8px;
+}
+#wb-canvas {
+  background: #fff; max-width: 100%; max-height: 100%; aspect-ratio: 16 / 9;
+  width: auto; height: auto; touch-action: none; cursor: crosshair; border-radius: 6px;
+}
+#wb-canvas.wb-readonly { cursor: default; pointer-events: none; }
+#wb-text-input {
+  display: none; position: absolute; z-index: 2; min-width: 160px; background: rgba(255,255,255,.9);
+  border: 1px dashed #888; padding: 0; margin: 0; resize: both; font-family: "Segoe UI", Arial, sans-serif; line-height: 1.25;
+}
+.focus-overlay video { flex: 1 1 auto; min-height: 0; width: 100%; object-fit: contain; background: #000; }

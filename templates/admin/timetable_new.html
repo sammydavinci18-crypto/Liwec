@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Add to timetable · Admin · Light-Way{% endblock %}
+{% block page_class %}auth-page{% endblock %}
+
+{% block content %}
+<div class="auth-card auth-card-wide">
+  <span class="auth-eyebrow">Admin</span>
+  <h1>Add a lesson to the timetable</h1>
+  <p class="sub">The lesson is for one class and one teacher. Its guest list is the students of that class who are placed with that teacher. The teacher hosts; you don't need to be there.</p>
+
+  <form method="POST">
+    <div class="field-row field-row-2">
+      <div class="field">
+        <label for="class_id">Class</label>
+        <select id="class_id" name="class_id" required>
+          <option value="">— Choose —</option>
+          {% for c in classes %}<option value="{{ c.id }}" {{ 'selected' if form.get('class_id')|string == c.id|string }}>{{ c.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="teacher_id">Teacher</label>
+        <select id="teacher_id" name="teacher_id" required>
+          <option value="">— Choose —</option>
+          {% for t in teachers %}<option value="{{ t.id }}" data-subjects="{{ t.teacher_profile.subjects or '' }}" {{ 'selected' if form.get('teacher_id')|string == t.id|string }}>{{ t.name }}{% if t.teacher_profile.subjects %} — {{ t.teacher_profile.subjects }}{% endif %}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label for="subject">Subject</label>
+      <input type="text" id="subject" name="subject" maxlength="120" required value="{{ form.get('subject', '') }}" placeholder="e.g. Physics">
+    </div>
+    <div class="field">
+      <label for="title">Title <span class="sub">(optional — defaults to "Subject · Class")</span></label>
+      <input type="text" id="title" name="title" maxlength="200" value="{{ form.get('title', '') }}">
+    </div>
+    <div class="field-row field-row-2">
+      <div class="field">
+        <label for="scheduled_time">First lesson (your local time)</label>
+        <input type="datetime-local" data-utc id="scheduled_time" name="scheduled_time" required value="{{ form.get('scheduled_time', '') }}">
+      </div>
+      <div class="field">
+        <label for="duration_minutes">Length (minutes)</label>
+        <input type="number" id="duration_minutes" name="duration_minutes" min="15" max="480" value="{{ form.get('duration_minutes') or default_minutes }}">
+      </div>
+    </div>
+    <div class="field">
+      <label for="repeat_weeks">Repeat weekly for <span class="sub">(1 = just this one lesson, up to {{ max_weeks }})</span></label>
+      <input type="number" id="repeat_weeks" name="repeat_weeks" min="1" max="{{ max_weeks }}" value="{{ form.get('repeat_weeks') or 1 }}">
+    </div>
+    <div class="field">
+      <label for="description">Notes for the class (optional)</label>
+      <textarea id="description" name="description" rows="2">{{ form.get('description', '') }}</textarea>
+    </div>
+    <p class="sub">Clashes are refused: a teacher can't be in two lessons at once and neither can a class.</p>
+    <button type="submit" class="btn btn-primary btn-block">Add to timetable</button>
+  </form>
+  <p class="auth-switch"><a href="{{ url_for('admin.timetable') }}">&larr; Timetable</a></p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  // Suggest the teacher's first listed subject, unless the admin already typed one.
+  var teacher = document.getElementById("teacher_id"), subject = document.getElementById("subject");
+  teacher.addEventListener("change", function () {
+    var opt = teacher.options[teacher.selectedIndex];
+    var first = ((opt && opt.dataset.subjects) || "").split(",")[0].trim();
+    if (first && !subject.value) subject.value = first;
+  });
+})();
+</script>
+{% endblock %}

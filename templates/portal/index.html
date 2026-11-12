@@ -34,7 +34,7 @@
     <div>
       <h2>{{ s.student.name }}{% if s.is_self %} <span class="status-pill status-confirmed">You</span>{% endif %}</h2>
       {% if s.profile %}
-        <span class="appt-time">{{ s.profile.stage_label() }}</span>
+        <span class="appt-time">{{ s.profile.stage_label() }} · {{ s.profile.class_label() }}</span>
       {% endif %}
     </div>
     {% if s.profile %}

@@ -73,6 +73,19 @@ function drawFrame() {
       ctx.strokeRect(x, y, cellW, cellH);
     });
   }
+  drawWhiteboard();
+}
+
+// While the whiteboard is open it covers everyone's screen, so it also covers
+// the recording: the board is painted over the normal layout.
+function drawWhiteboard() {
+  const wb = window.Whiteboard;
+  if (!wb || !wb.isOpen()) return;
+  const scale = Math.min(CANVAS_W / wb.canvas.width, CANVAS_H / wb.canvas.height);
+  const w = wb.canvas.width * scale, h = wb.canvas.height * scale;
+  ctx.fillStyle = "#0E1A22";
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.drawImage(wb.canvas, (CANVAS_W - w) / 2, (CANVAS_H - h) / 2, w, h);
 }
 
 function pickMimeType() {
@@ -130,6 +143,7 @@ function startRecording() {
 
   const mimeType = pickMimeType();
   recorder = new MediaRecorder(combined, mimeType ? { mimeType } : undefined);
+  recorder.onerror = () => window.dispatchEvent(new CustomEvent("recording-failed"));
   recorder.ondataavailable = (e) => {
     if (e.data && e.data.size > 0) uploadChunk(e.data);
   };
@@ -161,24 +175,35 @@ window.stopRecordingAndWait = function () {
   });
 };
 
-// The host decides whether to record (via a consent prompt shown on entry,
-// or the Record button in the control bar at any point during the call) —
-// recording no longer starts automatically just because the host joined.
+// Recording is automatic: main.js calls start() the moment the host is let into
+// their own room, and nothing in the UI can stop it — only ending the session
+// (stopRecordingAndWait, called from "End lesson"). If this browser can't
+// record, "recording-failed" blocks the room rather than letting a session run
+// unrecorded.
 window.RecordingControl = {
   start() {
+    if (typeof MediaRecorder === "undefined" || !canvas.captureStream) {
+      window.dispatchEvent(new CustomEvent("recording-failed"));
+      return;
+    }
+    const go = () => {
+      try {
+        startRecording();
+      } catch (err) {
+        console.error("Recording failed to start:", err);
+        window.dispatchEvent(new CustomEvent("recording-failed"));
+      }
+    };
     // Camera/mic stream is set by webrtc.js; wait for it if it isn't ready yet.
     if (window._localStreamRef) {
-      startRecording();
+      go();
     } else {
       const wait = () => {
-        if (window._localStreamRef) startRecording();
+        if (window._localStreamRef) go();
         else setTimeout(wait, 300);
       };
       wait();
     }
-  },
-  stop() {
-    return window.stopRecordingAndWait();
   },
   isActive() {
     return recordingActive;

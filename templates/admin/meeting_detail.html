@@ -10,19 +10,23 @@
     <div class="profile-badges">
       <span class="status-pill status-{{ 'approved' if meeting.status == 'live' else ('cancelled' if meeting.status == 'cancelled' else ('completed' if meeting.status == 'ended' else 'pending')) }}">{{ meeting.status|capitalize }}</span>
       <span class="vertical-pill vertical-education">{{ meeting.type_label() }}</span>
+      {% if meeting.school_class %}<span class="class-pill">{{ meeting.school_class.name }}</span>{% endif %}
     </div>
-    <p><strong>When:</strong> {{ meeting.scheduled_time|dt }}</p>
+    <p><strong>When:</strong> {{ meeting.scheduled_time|dt }} <span class="sub">({{ meeting.length_minutes() }} min)</span></p>
+    <p><strong>Host:</strong> {{ meeting.host.name }}{% if meeting.led_by_teacher() %} <span class="sub">(teacher — opens the room and admits guests; you're not part of it)</span>{% endif %}</p>
+    {% if meeting.subject %}<p><strong>Subject:</strong> {{ meeting.subject }}</p>{% endif %}
+    {% if meeting.is_timetabled %}<p class="sub">Timetabled lesson: the guest list is the {{ meeting.school_class.name }} students placed with {{ meeting.host.name }}, and follows placement and class changes automatically.</p>{% endif %}
     {% if meeting.description %}<p><strong>Agenda:</strong> {{ meeting.description }}</p>{% endif %}
 
     <h3>Guest list ({{ meeting.invites|length }})</h3>
-    <p class="sub">Only these people can enter, and only once you admit them from the lobby.</p>
+    <p class="sub">Only these people can enter, and only once {{ 'the host admits' if meeting.led_by_teacher() else 'you admit' }} them from the lobby.</p>
     {% if meeting.invites %}
     <div class="appointment-list">
       {% for inv in meeting.invites %}
       <div class="appointment-row">
         <div>
           <strong>{{ inv.user.name }}</strong>
-          <span class="appt-time">{{ inv.user.email }}</span>
+          <span class="appt-time">{{ inv.user.email }}{% if inv.user.student_profile %} · {{ inv.user.student_profile.class_label() }}{% endif %}{% if inv.source == 'roster' %} · class list{% endif %}</span>
         </div>
         {% if meeting.status in ('scheduled', 'live') %}
         <form method="POST" action="{{ url_for('admin.meeting_uninvite', meeting_id=meeting.id, user_id=inv.user_id) }}">
@@ -33,7 +37,33 @@
       {% endfor %}
     </div>
     {% else %}
-    <div class="empty-state">Nobody is invited yet — only you can enter.</div>
+    <div class="empty-state">Nobody is invited yet — only {{ meeting.host.name if meeting.led_by_teacher() else 'you' }} can enter.</div>
+    {% endif %}
+
+    {% if attendance or absent %}
+    <h3>Attendance</h3>
+    <p class="sub">{% if meeting.attendance_required() %}Compulsory lesson: "Away" is time spent off the lesson screen (other tab, left full screen, camera off).{% else %}Who came into the room, and when.{% endif %}</p>
+    <div class="appointment-list">
+      {% for r in attendance %}
+      <div class="appointment-row">
+        <div>
+          <strong>{{ r.user.name }}</strong>
+          <span class="appt-time">Joined {{ r.joined_at|dt }}{% if r.left_at %} · left {{ r.left_at|dt }} ({{ ((r.left_at - r.joined_at).total_seconds() // 60)|int }} min){% else %} · still in{% endif %}</span>
+        </div>
+        {% if meeting.attendance_required() %}
+        <span class="status-pill status-{{ 'cancelled' if r.away_count else 'approved' }}">
+          {% if r.away_count %}Away {{ r.away_count }}&times; · {{ (r.away_seconds // 60)|int }}m {{ r.away_seconds % 60 }}s{% else %}Stayed on screen{% endif %}
+        </span>
+        {% endif %}
+      </div>
+      {% endfor %}
+      {% for u in absent %}
+      <div class="appointment-row">
+        <div><strong>{{ u.name }}</strong><span class="appt-time">{{ 'Has not joined' if meeting.status == 'live' else 'Absent' }}</span></div>
+        <span class="status-pill status-{{ 'pending' if meeting.status == 'live' else 'cancelled' }}">{{ 'Not yet' if meeting.status == 'live' else 'Absent' }}</span>
+      </div>
+      {% endfor %}
+    </div>
     {% endif %}
   </div>
 
@@ -41,9 +71,16 @@
     {% if meeting.status in ('scheduled', 'live') %}
     <div class="booking-card">
       <h3>Room</h3>
+      {% if meeting.is_hosted_by(current_user) %}
       <a class="btn btn-primary btn-block" href="{{ url_for('meetings.room', room_code=meeting.room_code) }}">
         {{ 'Return to room' if meeting.status == 'live' else 'Open room' }}
       </a>
+      {% elif meeting.status == 'live' %}
+      <a class="btn btn-ghost btn-block observe-btn" href="{{ url_for('meetings.observe', room_code=meeting.room_code) }}">&#128065; Observe this session</a>
+      <p class="sub">You watch and listen without being seen or heard. Nobody in the session is told you are there, and you don't appear in the attendance list.</p>
+      {% else %}
+      <p class="sub">{{ meeting.host.name }} hosts this session and opens it when it is time. You can observe it once it is live, and reschedule, cancel or change the guest list here.</p>
+      {% endif %}
     </div>
 
     <div class="booking-card">
@@ -69,6 +106,10 @@
         <div class="field">
           <input type="datetime-local" data-utc name="scheduled_time" required value="{{ meeting.scheduled_time.strftime('%Y-%m-%dT%H:%M') if meeting.scheduled_time else '' }}">
         </div>
+        <div class="field">
+          <label for="duration_minutes">Length (minutes)</label>
+          <input type="number" id="duration_minutes" name="duration_minutes" min="15" max="480" value="{{ meeting.length_minutes() }}">
+        </div>
         <button type="submit" class="btn btn-ghost btn-block">Save new time</button>
       </form>
     </div>
@@ -79,6 +120,11 @@
       <form method="POST" action="{{ url_for('admin.meeting_cancel', meeting_id=meeting.id) }}">
         <button type="submit" class="btn btn-danger btn-block">Cancel this session</button>
       </form>
+      {% if meeting.series_id %}
+      <form method="POST" action="{{ url_for('admin.meeting_cancel_series', meeting_id=meeting.id) }}" onsubmit="return confirm('Cancel this lesson and every later one in the weekly series?');" style="margin-top:8px;">
+        <button type="submit" class="btn btn-ghost btn-block">Cancel this and all later lessons in the series</button>
+      </form>
+      {% endif %}
     </div>
     {% endif %}
 

@@ -22,7 +22,7 @@ document.addEventListener("DOMContentLoaded", () => {
       waitingOverlay.innerHTML = `
         <div class="waiting-box">
           <h3>Access denied</h3>
-          <p>The administrator didn't admit you to this session.</p>
+          <p>The host didn't admit you to this session.</p>
           <a class="btn btn-primary btn-sm" href="/dashboard">Back to dashboard</a>
         </div>`;
       waitingOverlay.classList.add("show");
@@ -84,7 +84,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!participantsList) return;
     participantsList.innerHTML = "";
 
-    const entries = [{ sid: "local", name: `${userName} (you)`, isHost }];
+    // An observing admin is invisible, so doesn't list themselves either.
+    const entries = window.ROOM_CONFIG.isObserver ? [] : [{ sid: "local", name: `${userName} (you)`, isHost }];
     Object.entries(window.peerMeta || {}).forEach(([sid, meta]) => {
       entries.push({ sid, name: meta.name, isHost: meta.isHost });
     });
@@ -250,6 +251,7 @@ document.addEventListener("DOMContentLoaded", () => {
      ========================================================= */
   socket.on("screen_share", ({ sid, sharing }) => {
     if (window.setTileScreenSharing) window.setTileScreenSharing(sid, sharing);
+    window.dispatchEvent(new CustomEvent("screen-share-changed", { detail: { sid, sharing } }));
   });
 
   /* =========================================================
@@ -271,16 +273,25 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   socket.on("removed_by_host", () => {
-    alert("The administrator has removed you from this meeting.");
+    window.__sessionOver = true;
+    alert("The host has removed you from this meeting.");
     window.location.href = "/dashboard";
   });
 
   // The admin ended the session — everyone (including the lobby) goes home.
   socket.on("meeting_ended", () => {
     if (isHost) return; // the host's own End button handles its redirect
-    alert("The administrator has ended this session.");
+    window.__sessionOver = true;
+    alert("The host has ended this session.");
     window.location.href = "/dashboard";
   });
+
+  // Teacher is told when a student leaves / returns to the lesson screen.
+  if (isHost) {
+    socket.on("student_away", ({ name, away }) => {
+      showReactionToast(name, away ? "⚠️ left the lesson screen" : "✅ is back on the lesson screen");
+    });
+  }
 
   /* =========================================================
      Call time limit (server-enforced — see sockets.py)
@@ -292,6 +303,7 @@ document.addEventListener("DOMContentLoaded", () => {
   socket.on("time_limit_reached", async () => {
     if (isHost) {
       alert("This call has reached its time limit and is ending now.");
+      window.__sessionOver = true;
       try {
         if (window.stopRecordingAndWait) await window.stopRecordingAndWait();
         const res = await fetch(`/room/${roomCode}/end`, { method: "POST" });
@@ -301,6 +313,7 @@ document.addEventListener("DOMContentLoaded", () => {
         window.location.href = "/dashboard";
       }
     } else {
+      window.__sessionOver = true;
       alert("This call has reached its time limit and the host is ending it now.");
       window.location.href = "/dashboard";
     }

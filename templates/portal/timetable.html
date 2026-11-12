@@ -22,10 +22,10 @@
           <div class="tt-item">
             <div>
               <strong>{{ m.title }}</strong>
-              <span class="appt-time">{{ m.scheduled_time.strftime('%H:%M') + ' UTC' if m.scheduled_time else '' }} · {{ m.type_label() }}{% if child %} · for {{ child.name }}{% endif %}</span>
+              <span class="appt-time">{{ m.scheduled_time.strftime('%H:%M') + ' UTC' if m.scheduled_time else '' }} · {{ m.type_label() }}{% if m.school_class %} · {{ m.school_class.name }}{% endif %}{% if m.subject %} · {{ m.subject }}{% endif %}{% if m.host_id != current_user.id %} · with {{ m.host.name }}{% endif %}{% if child %} · for {{ child.name }}{% endif %}</span>
             </div>
             {% if not child %}
-            <a class="btn btn-ghost btn-sm" href="{{ url_for('meetings.room', room_code=m.room_code) }}">{{ 'Open room' if current_user.is_admin else 'Waiting room' }}</a>
+            <a class="btn btn-ghost btn-sm" href="{{ url_for('meetings.room', room_code=m.room_code) }}">{{ 'Start session' if m.host_id == current_user.id else 'Waiting room' }}</a>
             {% endif %}
           </div>
           {% endfor %}

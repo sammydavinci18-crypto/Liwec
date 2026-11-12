@@ -56,6 +56,13 @@
 
     <div id="student-fields">
       <div class="field">
+        <label for="class_id">Class (year group) <span class="sub">(optional now, needed before placing)</span></label>
+        <select id="class_id" name="class_id">
+          <option value="">— Set later —</option>
+          {% for c in classes %}<option value="{{ c.id }}" {{ 'selected' if form.get('class_id')|string == c.id|string }}>{{ c.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
         <label for="desired_stage">Programme <span class="sub">(optional)</span></label>
         <select id="desired_stage" name="desired_stage">
           <option value="">— Not set —</option>

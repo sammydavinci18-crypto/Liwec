@@ -6,7 +6,7 @@
   <div>
     <span class="eyebrow eyebrow-dark">Teacher</span>
     <h1>My students</h1>
-    <p>Students an admin has placed with you.</p>
+    <p>Students an admin has placed with you, grouped by class. Each class has its own lessons.</p>
   </div>
 </div>
 
@@ -15,8 +15,10 @@
 {% endif %}
 
 {% if assignments %}
+{% for cls, items in groups %}
+<h3 class="section-heading">{{ cls.name if cls else 'No class yet' }} <span class="sub">({{ items|length }})</span></h3>
 <div class="appointment-list">
-  {% for a in assignments %}
+  {% for a in items %}
   <div class="appointment-row">
     <div>
       <strong>{{ a.student.name }}</strong>
@@ -33,6 +35,7 @@
   </div>
   {% endfor %}
 </div>
+{% endfor %}
 {% else %}
 <div class="empty-state">No students placed with you yet.</div>
 {% endif %}

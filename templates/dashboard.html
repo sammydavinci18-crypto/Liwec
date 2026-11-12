@@ -5,14 +5,15 @@
 {% macro session_card(m, show_host=True) %}
 <div class="meeting-card">
   <h3>{{ m.title }}</h3>
-  <span class="code">{{ m.type_label() }}</span>
+  <span class="code">{{ m.type_label() }}{% if m.school_class %} · {{ m.school_class.name }}{% endif %}{% if m.subject %} · {{ m.subject }}{% endif %}</span>
   <span class="meta">
     {{ m.scheduled_time|dt }}
     {% if m.status == 'live' %}· <strong>Live now</strong>{% endif %}
   </span>
   {% if show_host %}<span class="meta">With {{ m.host.name }}</span>{% endif %}
+  {% if m.host_id == current_user.id %}<span class="meta">{{ m.invites|length }} guest{{ '' if m.invites|length == 1 else 's' }} on the list</span>{% endif %}
   <a href="{{ url_for('meetings.room', room_code=m.room_code) }}" class="btn btn-primary btn-sm">
-    {% if current_user.is_admin %}{% if m.status == 'live' %}Return to room{% else %}Open room{% endif %}
+    {% if m.host_id == current_user.id %}{% if m.status == 'live' %}Return to room{% else %}Start session{% endif %}
     {% else %}Enter waiting room{% endif %}
   </a>
 </div>
@@ -22,12 +23,13 @@
   <div>
     <span class="eyebrow eyebrow-dark">Administrator</span>
     <h1>Your control room</h1>
-    <p>Every consultation, class and meeting on Light-Way is scheduled by you. Nobody can start one, or enter one, without your approval.</p>
+    <p>You schedule every session on Light-Way: consultations and meetings you host yourself, and teacher-led lessons from the class timetable. Nobody can enter a session they haven't been invited to.</p>
   </div>
   <div class="dash-actions">
     <a href="{{ url_for('admin.requests_queue') }}" class="btn btn-ghost">
       Requests{% if pending_count %} ({{ pending_count }} waiting){% endif %}
     </a>
+    <a href="{{ url_for('admin.timetable') }}" class="btn btn-ghost">Class timetable</a>
     <a href="{{ url_for('admin.new_meeting') }}" class="btn btn-primary">+ Schedule a session</a>
   </div>
 </div>
@@ -49,6 +51,10 @@
   <a class="attention-card {{ 'is-hot' if unplaced_count else 'is-clear' }}" href="{{ url_for('admin.placements') }}">
     <span class="attention-num">{{ unplaced_count }}</span>
     <span class="attention-label">Approved students awaiting a teacher</span>
+  </a>
+  <a class="attention-card {{ 'is-hot' if unclassed_count else 'is-clear' }}" href="{{ url_for('admin.placements', class_id=-1) }}">
+    <span class="attention-num">{{ unclassed_count }}</span>
+    <span class="attention-label">Students with no class yet</span>
   </a>
 </div>
 {% if not attention_total %}<p class="meta">All caught up. Nothing is waiting for you.</p>{% endif %}
@@ -91,9 +97,32 @@
   <div class="empty-state">Nothing scheduled. Approve a request or schedule a session to get started.</div>
 {% endif %}
 
+<div class="section-label">Teacher-led sessions{% if teacher_led_total %} ({{ teacher_led_total }}){% endif %}</div>
+{% if teacher_led %}
+  <div class="meeting-grid">
+    {% for m in teacher_led %}
+      <div class="meeting-card">
+        <h3>{{ m.title }}</h3>
+        <span class="code">{{ m.type_label() }}{% if m.school_class %} · {{ m.school_class.name }}{% endif %}{% if m.subject %} · {{ m.subject }}{% endif %}</span>
+        <span class="meta">{{ m.scheduled_time|dt }} · {{ m.status|capitalize }}</span>
+        <span class="meta">Hosted by {{ m.host.name }} · {{ m.invites|length }} guest{{ '' if m.invites|length == 1 else 's' }}</span>
+        <div class="appt-actions">
+          {% if m.status == 'live' %}<a href="{{ url_for('meetings.observe', room_code=m.room_code) }}" class="btn btn-primary btn-sm" title="Watch unseen">&#128065; Observe</a>{% endif %}
+          <a href="{{ url_for('admin.meeting_detail', meeting_id=m.id) }}" class="btn btn-ghost btn-sm">Manage</a>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+  {% if teacher_led_total > teacher_led|length %}<p><a href="{{ url_for('admin.meetings') }}">All sessions &rarr;</a></p>{% endif %}
+{% else %}
+  <div class="empty-state">No teacher-led sessions coming up. <a href="{{ url_for('admin.timetable_new') }}">Add a lesson to the timetable</a>.</div>
+{% endif %}
+
 <div class="section-label">Quick actions</div>
 <div class="quick-actions">
-  <a class="quick-action" href="{{ url_for('admin.new_meeting') }}">Schedule a session<small>Class, consultation or meeting</small></a>
+  <a class="quick-action" href="{{ url_for('admin.timetable_new') }}">Add a lesson<small>Class timetable, hosted by a teacher</small></a>
+  <a class="quick-action" href="{{ url_for('admin.classes') }}">Classes<small>Year groups and Bridging</small></a>
+  <a class="quick-action" href="{{ url_for('admin.new_meeting') }}">Schedule a session<small>Consultation, meeting or teacher session</small></a>
   <a class="quick-action" href="{{ url_for('admin.announcements') }}">Post an announcement<small>Notices and calendar dates</small></a>
   <a class="quick-action" href="{{ url_for('admin.placements') }}">Place a student<small>Match with a teacher</small></a>
   <a class="quick-action" href="{{ url_for('admin.users') }}">All users<small>Accounts and roles</small></a>
@@ -126,11 +155,21 @@
 </div>
 {% endif %}
 
-<div class="section-label">Upcoming sessions</div>
+{% if hosting %}
+<div class="section-label">Sessions you're hosting</div>
+<p class="meta">You open the room and admit your guests. <a href="{{ url_for('teachers.my_sessions') }}">Full teaching schedule &rarr;</a></p>
+<div class="meeting-grid">
+  {% for m in hosting %}{{ session_card(m, show_host=False) }}{% endfor %}
+</div>
+{% endif %}
+
+<div class="section-label">{{ 'Sessions you attend' if hosting else 'Upcoming sessions' }}</div>
 {% if upcoming %}
   <div class="meeting-grid">
     {% for m in upcoming %}{{ session_card(m) }}{% endfor %}
   </div>
+{% elif hosting %}
+  <div class="empty-state">You're not invited to any other sessions.</div>
 {% else %}
   <div class="empty-state">No sessions scheduled for you yet. To meet the administrator, <a href="{{ url_for('consult.new') }}">send a request</a>.</div>
 {% endif %}

@@ -6,9 +6,25 @@
 <div class="auth-card auth-card-wide">
   <span class="auth-eyebrow">Admin</span>
   <h1>Schedule a session</h1>
-  <p class="sub">Only the guests you pick below will be able to enter. They wait in a lobby until you let them in.</p>
+  <p class="sub">Only the guests you pick below will be able to enter. They wait in a lobby until the host lets them in. For a regular class, use the <a href="{{ url_for('admin.timetable') }}">class timetable</a> instead.</p>
 
   <form method="POST">
+    {% set mode = form.get('host_mode', 'admin') %}
+    <div class="field">
+      <label>Who hosts this session?</label>
+      <label class="radio-line"><input type="radio" name="host_mode" value="admin" {{ 'checked' if mode != 'teacher' }}> Me — a consultation or meeting I run</label>
+      <label class="radio-line"><input type="radio" name="host_mode" value="teacher" {{ 'checked' if mode == 'teacher' }}> A teacher — a session for that teacher and chosen students or guests (I'm not part of it)</label>
+    </div>
+    <div class="field" id="teacher-host-field">
+      <label for="host_teacher_id">Teacher (host)</label>
+      <select id="host_teacher_id" name="host_teacher_id">
+        <option value="">— Choose an approved teacher —</option>
+        {% for t in teachers %}
+        <option value="{{ t.id }}" {{ 'selected' if form.get('host_teacher_id')|string == t.id|string }}>{{ t.name }}{% if t.teacher_profile.subjects %} ({{ t.teacher_profile.subjects }}){% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+
     <div class="field">
       <label for="title">Title</label>
       <input type="text" id="title" name="title" maxlength="200" required value="{{ form.get('title', '') }}" placeholder="e.g. Year 7 Mathematics — Bridging class">
@@ -28,30 +44,42 @@
       </div>
     </div>
     <div class="field">
+      <label for="duration_minutes">Length (minutes)</label>
+      <input type="number" id="duration_minutes" name="duration_minutes" min="15" max="480" value="{{ form.get('duration_minutes') or 60 }}">
+    </div>
+    <div class="field">
       <label for="description">Agenda / notes for guests (optional)</label>
       <textarea id="description" name="description" rows="3">{{ form.get('description', '') }}</textarea>
     </div>
 
-    {% if teachers %}
-    <div class="field">
+    <div class="field" id="admin-shortcut-field">
+      {% if teachers %}
       <label for="class_teacher_id">Class shortcut — invite a teacher and all the students you've placed with them</label>
       <select id="class_teacher_id" name="class_teacher_id">
         <option value="">— None —</option>
         {% for t in teachers %}
-        <option value="{{ t.user_id }}">{{ t.user.name }}{% if t.subjects %} ({{ t.subjects }}){% endif %}</option>
+        <option value="{{ t.id }}">{{ t.name }}{% if t.teacher_profile.subjects %} ({{ t.teacher_profile.subjects }}){% endif %}</option>
         {% endfor %}
       </select>
+      {% endif %}
     </div>
-    {% endif %}
+    <div class="field" id="teacher-shortcut-field">
+      <label for="bulk_students">Add the teacher's students</label>
+      <select id="bulk_students" name="bulk_students">
+        <option value="">— Only the guests I tick below —</option>
+        <option value="all" {{ 'selected' if form.get('bulk_students') == 'all' }}>All students placed with this teacher</option>
+        {% for c in classes %}<option value="{{ c.id }}" {{ 'selected' if form.get('bulk_students') == c.id|string }}>Only {{ c.name }} students placed with this teacher</option>{% endfor %}
+      </select>
+    </div>
 
     <div class="field">
       <label>Guests</label>
       <input type="text" id="guest-filter" placeholder="Filter by name or email…" autocomplete="off">
       <div class="guest-list" id="guest-list">
         {% for u in users %}
-        <label class="guest-option" data-search="{{ (u.name ~ ' ' ~ u.email)|lower }}">
+        <label class="guest-option" data-search="{{ (u.name ~ ' ' ~ u.email ~ ' ' ~ (u.student_profile.class_label() if u.student_profile else ''))|lower }}">
           <input type="checkbox" name="guests" value="{{ u.id }}">
-          <span><strong>{{ u.name }}</strong> <span class="guest-email">{{ u.email }}</span></span>
+          <span><strong>{{ u.name }}</strong>{% if u.student_profile and u.student_profile.status == 'approved' %} <span class="class-pill">{{ u.student_profile.class_label() }}</span>{% elif u.is_approved_teacher %} <span class="class-pill class-pill-none">Teacher</span>{% endif %} <span class="guest-email">{{ u.email }}</span></span>
         </label>
         {% else %}
         <p class="sub">No other users yet.</p>
@@ -67,6 +95,20 @@
 {% block scripts %}
 <script>
   (function () {
+    // Show the fields that belong to the chosen host.
+    var radios = document.querySelectorAll('input[name="host_mode"]');
+    var typeSel = document.getElementById("meeting_type");
+    function sync(initial) {
+      var teacher = document.querySelector('input[name="host_mode"]:checked').value === "teacher";
+      document.getElementById("teacher-host-field").style.display = teacher ? "" : "none";
+      document.getElementById("teacher-shortcut-field").style.display = teacher ? "" : "none";
+      document.getElementById("admin-shortcut-field").style.display = teacher ? "none" : "";
+      document.getElementById("host_teacher_id").required = teacher;
+      if (teacher && !initial && typeSel.value === "consultation") typeSel.value = "tutorial";
+    }
+    radios.forEach(function (r) { r.addEventListener("change", function () { sync(false); }); });
+    sync(true);
+
     var filter = document.getElementById("guest-filter");
     var items = document.querySelectorAll("#guest-list .guest-option");
     if (!filter) return;

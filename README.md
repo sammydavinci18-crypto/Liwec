@@ -32,6 +32,24 @@ unless the administrator records a session.
 The **class shortcut** on the schedule form invites a teacher plus every student the admin
 has placed with them, in one click.
 
+## Classes, timetable and teacher-hosted sessions
+
+* **Classes** (Admin > Classes): year groups such as Year 6-13 and Bridging (seeded on first start; rename, add or archive them). Every student is in one class, set when approving them, when creating the account, or on the Placements page.
+* **Placements** stay admin-only (teacher <-> student). A teacher can have any number of students, from several classes. "Place a whole class" places a class with a teacher in one step.
+* **Timetable** (Admin > Timetable): add a lesson = class + teacher + subject + time (+ length, + repeat weekly). It becomes a session **hosted by the teacher**; its guest list is only the students *of that class* placed with *that teacher*, and it updates automatically when placements, classes or bans change. Year 7 and Year 8 Physics with the same teacher are therefore separate lessons, and Bridging is its own class. A teacher or class can't be booked twice at the same time.
+* **Teacher sessions**: Admin > Schedule a session > "A teacher" lets the admin set up a session for one teacher and any chosen students/guests. The teacher hosts; the admin is not part of it.
+* Teachers open the room and admit guests from the waiting room (My teaching). The admin can reschedule, cancel or review recordings but cannot enter a live teacher-hosted room unless invited.
+
+Upgrading: run `flask db upgrade` (or just start the app: missing columns are repaired and default classes seeded). Existing students have no class yet, so set it under Placements before timetabling.
+
+## Compulsory lessons, automatic recording, silent oversight
+
+* **Recording is automatic and can't be stopped.** It starts when the host enters the room; there is no Record/Stop button and the server announces "Recording" to everyone. Only *End lesson / End meeting* stops it. If a browser can't record, the host is blocked with a message instead of running an unrecorded session.
+* **Compulsory attendance** (teacher-led lessons and teacher sessions): students have no Leave/Back button, can't turn their camera off, are asked to go full screen, and get a closing-the-tab warning. Leaving the lesson screen (other tab, minimised, left full screen, camera off) covers the lesson with a "return to the lesson" screen, tells the teacher, and is logged as "Away" (count + time) in the attendance list on the session page. A web page cannot physically stop someone closing a browser, so it blocks, logs and alerts rather than prevents.
+* **Admin observe** (Observe button on live sessions in Sessions, Timetable, the dashboard and the session page): the admin receives everyone's audio and video but sends nothing (no camera/mic is even requested), is not listed to anyone, causes no join/leave notice, and has no attendance row. Each observation is written to the server log.
+
+Upgrading: `flask db upgrade` (adds `meeting_participants.away_count/away_seconds`).
+
 ## Everything is free and built in
 - No plans or tiers: no premium flag, no call-time limit by default (`CALL_LIMIT_MINUTES=0`),
   recordings kept 90 days by default (`RECORDING_RETENTION_DAYS`, `0` = forever).
@@ -84,3 +102,8 @@ Home Schooling) are on the landing page. Students apply to one of those three pr
 
 ### Deploying this update
 Run `flask db upgrade` (or let your Render start command do it). Two additive migrations apply: `b7e4a91c5d20` (admin-controlled sessions) and `c3f1d8a2e611` (portal features). Nothing is dropped.
+
+## Whiteboard and enlarged screen share
+
+- **Whiteboard (host only).** The *Whiteboard* button opens a board that covers the whole screen for everyone in the session. The teacher can write/draw (finger, pen or mouse), type text, change colour and thickness, erase, undo, clear, and *Close board* to return to the lesson. Students and an observing admin only watch. The board is kept server-side for the session, so reopening continues where it left off and late joiners see it. While it is open it is also painted into the session recording. Files: `static/js/whiteboard.js`, handlers `wb_open/wb_close/wb_op` in `sockets.py`.
+- **Enlarge a shared screen.** When someone else shares their screen it fills the window; anyone can close it (✕, Esc or the *Enlarge* button) and reopen it while the share continues. File: `static/js/focusview.js`.

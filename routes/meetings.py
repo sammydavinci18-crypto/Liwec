@@ -50,7 +50,7 @@ def room(room_code):
     if state == "forbidden":
         abort(404)
     if state == "cancelled":
-        flash("This session was cancelled by the administrator.", "info")
+        flash("This session was cancelled.", "info")
         return redirect(url_for("main.dashboard"))
     if state == "not_open":
         return render_template("meeting_not_open.html", meeting=meeting)
@@ -85,7 +85,38 @@ def room(room_code):
         "meeting_room.html",
         meeting=meeting,
         is_host=is_host,
+        is_observer=False,
+        attendance_required=(not is_host) and meeting.attendance_required(),
         call_limit_minutes=call_limit_minutes,
+        ice_servers=_ice_servers(),
+        local_socketio=_local_socketio_available(),
+    )
+
+
+@meetings_bp.route("/room/<room_code>/observe")
+@login_required
+def observe(room_code):
+    """Admin-only silent oversight of a LIVE session. The admin gets everyone's
+    audio and video but sends nothing, is not listed to anyone, and leaves no
+    attendance row. Anyone who isn't an admin gets a 404."""
+    if not current_user.is_admin:
+        abort(404)
+    meeting = _meeting_or_404(room_code)
+    if meeting.is_hosted_by(current_user):
+        return redirect(url_for("meetings.room", room_code=room_code))
+    if meeting.status != "live":
+        flash("Only a live session can be observed.", "info")
+        return redirect(url_for("admin.meeting_detail", meeting_id=meeting.id))
+
+    # Admin-only audit trail (never shown in the room).
+    current_app.logger.info(f"Admin {current_user.id} is observing meeting {meeting.id} ({meeting.room_code})")
+    return render_template(
+        "meeting_room.html",
+        meeting=meeting,
+        is_host=False,
+        is_observer=True,
+        attendance_required=False,
+        call_limit_minutes=current_app.config["CALL_LIMIT_MINUTES"],
         ice_servers=_ice_servers(),
         local_socketio=_local_socketio_available(),
     )
@@ -236,6 +267,9 @@ def end_meeting(room_code):
     for waiting_sid in list(sockets.WAITING.pop(meeting.room_code, {})):
         socketio.emit("meeting_ended", {}, room=waiting_sid)
     sockets.ADMITTED.pop(meeting.room_code, None)
+    sockets.OBSERVERS.pop(meeting.room_code, None)
+    sockets.WHITEBOARD.pop(meeting.room_code, None)
+    sockets.RECORDING.pop(meeting.room_code, None)
 
     return jsonify(ok=True, redirect=url_for("main.dashboard"))
 

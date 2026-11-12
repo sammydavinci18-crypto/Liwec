@@ -10,7 +10,7 @@ from models import (
     User, Meeting, MeetingParticipant, MeetingInvite, MeetingRequest, ConsultationNote, Recording,
     Announcement, ProgressReport,
     TeacherProfile, TeacherVerificationDocument, ParentStudentLink,
-    StudentProfile, StudentVerificationDocument, StudentTeacherAssignment,
+    StudentProfile, StudentVerificationDocument, StudentTeacherAssignment, SchoolClass,
 )  # noqa: F401
 # ^ every model is imported explicitly (not just User) so db.create_all()
 #   below actually knows about every table, not just whichever one
@@ -233,7 +233,8 @@ def create_app():
         from flask_login import current_user
         from models import StudentProfile, TeacherProfile, StudentTeacherAssignment
         counts = {"pending_requests_count": 0, "pending_students_count": 0,
-                  "pending_teachers_count": 0, "unplaced_count": 0, "attention_total": 0}
+                  "pending_teachers_count": 0, "unplaced_count": 0, "unclassed_count": 0,
+                  "attention_total": 0}
         try:
             if current_user.is_authenticated and current_user.is_admin:
                 placed = db.session.query(StudentTeacherAssignment.student_id)
@@ -243,6 +244,11 @@ def create_app():
                 counts["unplaced_count"] = (
                     StudentProfile.query.filter_by(status="approved")
                     .filter(~StudentProfile.user_id.in_(placed)).count()
+                )
+                # Enrolled students with no class can't be on any timetabled lesson.
+                counts["unclassed_count"] = (
+                    StudentProfile.query.filter_by(status="approved")
+                    .filter(StudentProfile.class_id.is_(None)).count()
                 )
                 counts["attention_total"] = sum(counts.values())
         except Exception:
@@ -297,6 +303,14 @@ def create_app():
             _ensure_schema_up_to_date(app)
         except Exception as exc:  # e.g. DB briefly unreachable during a cold start
             print(f"[startup] Schema sync failed — could not reach the database: {exc}", file=sys.stderr)
+
+    with app.app_context():
+        try:
+            from school import seed_default_classes
+            seed_default_classes()
+        except Exception as exc:
+            db.session.rollback()
+            print(f"[startup] Default classes not seeded (non-fatal): {exc}", file=sys.stderr)
 
     _seed_admin_from_env(app)
     _start_recording_cleanup_thread(app)

@@ -18,6 +18,7 @@
     <h3>Application</h3>
     <p><strong>Date of birth:</strong> {{ profile.date_of_birth.strftime('%b %-d, %Y') if profile.date_of_birth else "—" }}</p>
     <p><strong>Programme:</strong> {{ profile.stage_label() }}</p>
+    <p><strong>Class:</strong> {{ profile.class_label() }}</p>
     <p><strong>Subjects:</strong> {{ profile.subjects_of_interest or "—" }}</p>
     <p><strong>Notes:</strong> {{ profile.notes or "—" }}</p>
 
@@ -42,6 +43,13 @@
     <div class="booking-card">
       <h3>Decision</h3>
       <form method="POST" action="{{ url_for('admin.student_approve', profile_id=profile.id) }}">
+        <div class="field">
+          <label for="class_id">Class (year group)</label>
+          <select id="class_id" name="class_id">
+            <option value="">— Set later —</option>
+            {% for c in classes %}<option value="{{ c.id }}" {{ 'selected' if suggested_class_id == c.id }}>{{ c.name }}</option>{% endfor %}
+          </select>
+        </div>
         <button type="submit" class="btn btn-primary btn-block">Approve &amp; enroll</button>
       </form>
       <form method="POST" action="{{ url_for('admin.student_reject', profile_id=profile.id) }}" class="reject-form">
@@ -55,7 +63,7 @@
     {% elif profile.status == 'approved' %}
     <div class="booking-card">
       <h3>Next step</h3>
-      <p class="sub">This student is enrolled but can't pick their own teacher — you place them.</p>
+      <p class="sub">This student is enrolled in <strong>{{ profile.class_label() }}</strong> but can't pick their own teacher — you place them.</p>
       <a class="btn btn-primary btn-block" href="{{ url_for('admin.placements') }}">Go to placements</a>
     </div>
     {% endif %}

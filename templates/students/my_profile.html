@@ -33,6 +33,7 @@
 
 <div class="profile-summary-card">
   <p><strong>Programme:</strong> {{ profile.stage_label() }}</p>
+  <p><strong>Class:</strong> {{ profile.class_label() }}</p>
   <p><strong>Subjects:</strong> {{ profile.subjects_of_interest or "—" }}</p>
   <p><strong>Date of birth:</strong> {{ profile.date_of_birth.strftime('%d %b %Y') if profile.date_of_birth else "—" }}</p>
   <p><strong>Documents on file:</strong> {{ profile.documents|length }}</p>

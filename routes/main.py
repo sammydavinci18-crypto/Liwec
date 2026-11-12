@@ -3,7 +3,8 @@ from datetime import datetime
 from flask import Blueprint, render_template, redirect, url_for
 from flask_login import login_required, current_user
 
-from models import Meeting, MeetingInvite, MeetingRequest
+from extensions import db
+from models import Meeting, MeetingInvite, MeetingRequest, User
 from school import visible_announcements
 
 main_bp = Blueprint("main", __name__)
@@ -26,9 +27,19 @@ def dashboard():
             Meeting.host_id == current_user.id, Meeting.status.in_(["scheduled", "live"])
         ).all()
         upcoming.sort(key=lambda m: m.scheduled_time or m.created_at)
+        # Sessions a teacher hosts (timetabled lessons, teacher sessions): the admin
+        # oversees them here but doesn't open or attend them.
+        teacher_led = (
+            Meeting.query.join(User, User.id == Meeting.host_id)
+            .filter(Meeting.status.in_(["scheduled", "live"]), User.role != "admin")
+            .all()
+        )
+        teacher_led.sort(key=lambda m: m.scheduled_time or m.created_at)
         pending_count = MeetingRequest.query.filter_by(status="pending").count()
         return render_template("dashboard.html", upcoming=upcoming, pending_count=pending_count,
-                               past=[], my_requests=[], announcements=visible_announcements(current_user, limit=3))
+                               teacher_led=teacher_led[:12], teacher_led_total=len(teacher_led),
+                               hosting=[], past=[], my_requests=[],
+                               announcements=visible_announcements(current_user, limit=3))
 
     invited = (
         Meeting.query.join(MeetingInvite, MeetingInvite.meeting_id == Meeting.id)
@@ -41,5 +52,12 @@ def dashboard():
         MeetingRequest.query.filter_by(requester_id=current_user.id)
         .order_by(MeetingRequest.created_at.desc()).limit(5).all()
     )
+    hosting = []
+    if current_user.is_approved_teacher:
+        hosting = Meeting.query.filter(
+            Meeting.host_id == current_user.id, Meeting.status.in_(["scheduled", "live"])
+        ).all()
+        hosting.sort(key=lambda m: m.scheduled_time or m.created_at)
     return render_template("dashboard.html", upcoming=upcoming, past=past, my_requests=my_requests,
+                           hosting=hosting, teacher_led=[], teacher_led_total=0,
                            pending_count=0, announcements=visible_announcements(current_user, limit=3))

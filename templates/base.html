@@ -24,6 +24,9 @@
       <a class="topnav-link" href="{{ url_for('main.dashboard') }}">Home</a>
       <a class="topnav-link" href="{{ url_for('main.dashboard') }}">My sessions</a>
       <a class="topnav-link" href="{{ url_for('portal.timetable') }}">Timetable</a>
+      {% if current_user.is_approved_teacher and not current_user.is_admin %}
+      <a class="topnav-link" href="{{ url_for('teachers.my_sessions') }}">My teaching</a>
+      {% endif %}
       {% if not current_user.is_admin %}
       <a class="topnav-link" href="{{ url_for('portal.index') }}">My school</a>
       <a class="topnav-link" href="{{ url_for('consult.new') }}">Consultation</a>
@@ -35,11 +38,13 @@
       {% if current_user.is_admin %}
       <a class="topnav-link topnav-admin" href="{{ url_for('admin.requests_queue') }}">Requests{% if pending_requests_count %}<span class="nav-badge">{{ pending_requests_count }}</span>{% endif %}</a>
       <a class="topnav-link topnav-admin" href="{{ url_for('admin.meetings') }}">Sessions</a>
+      <a class="topnav-link topnav-admin" href="{{ url_for('admin.timetable') }}">Timetable</a>
       <details class="nav-menu">
-        <summary class="topnav-link topnav-admin">People &amp; admissions{% set pp = pending_students_count + pending_teachers_count + unplaced_count %}{% if pp %}<span class="nav-badge">{{ pp }}</span>{% endif %}</summary>
+        <summary class="topnav-link topnav-admin">People &amp; admissions{% set pp = pending_students_count + pending_teachers_count + unplaced_count + unclassed_count %}{% if pp %}<span class="nav-badge">{{ pp }}</span>{% endif %}</summary>
         <div class="nav-menu-panel">
           <a href="{{ url_for('admin.student_queue') }}">Student review{% if pending_students_count %}<span class="nav-badge">{{ pending_students_count }}</span>{% endif %}</a>
           <a href="{{ url_for('admin.teacher_queue') }}">Teacher review{% if pending_teachers_count %}<span class="nav-badge">{{ pending_teachers_count }}</span>{% endif %}</a>
+          <a href="{{ url_for('admin.classes') }}">Classes{% if unclassed_count %}<span class="nav-badge">{{ unclassed_count }}</span>{% endif %}</a>
           <a href="{{ url_for('admin.placements') }}">Placements{% if unplaced_count %}<span class="nav-badge">{{ unplaced_count }}</span>{% endif %}</a>
           <a href="{{ url_for('family.registrar_dashboard') }}">Parent links (registrar)</a>
           <a href="{{ url_for('admin.users') }}">All users</a>

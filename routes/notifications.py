@@ -36,29 +36,36 @@ def build_notifications(user, now=None):
     items = []
 
     # ---- Meetings -----------------------------------------------------
-    if user.is_admin:
-        meetings = Meeting.query.filter(
-            Meeting.host_id == user.id, Meeting.status == "scheduled"
-        ).all()
-    else:
-        meetings = (
-            Meeting.query.join(MeetingInvite, MeetingInvite.meeting_id == Meeting.id)
-            .filter(MeetingInvite.user_id == user.id, Meeting.status.in_(["scheduled", "live"]))
-            .all()
-        )
+    # Sessions this person hosts (the admin's own, or a teacher's lessons) that
+    # haven't started, plus sessions they're invited to.
+    meetings = []
+    seen = set()
+    if user.can_host:
+        for m in Meeting.query.filter(Meeting.host_id == user.id, Meeting.status == "scheduled").all():
+            meetings.append(m)
+            seen.add(m.id)
+    for m in (
+        Meeting.query.join(MeetingInvite, MeetingInvite.meeting_id == Meeting.id)
+        .filter(MeetingInvite.user_id == user.id, Meeting.status.in_(["scheduled", "live"]))
+        .all()
+    ):
+        if m.id not in seen:
+            meetings.append(m)
 
     joined_ids = set()
-    if not user.is_admin and meetings:
+    guest_meetings = [m for m in meetings if m.host_id != user.id]
+    if guest_meetings:
         joined_ids = {
             mp.meeting_id for mp in MeetingParticipant.query.filter(
                 MeetingParticipant.user_id == user.id,
-                MeetingParticipant.meeting_id.in_([m.id for m in meetings]),
+                MeetingParticipant.meeting_id.in_([m.id for m in guest_meetings]),
             ).all()
         }
 
     for m in meetings:
         room = url_for("meetings.room", room_code=m.room_code)
         label = m.type_label()
+        is_host = m.host_id == user.id
 
         if m.status == "live":
             # Already begun. Only worth interrupting someone who hasn't joined.
@@ -84,13 +91,13 @@ def build_notifications(user, now=None):
             items.append({
                 "id": f"meeting-{m.id}-soon", "kind": "meeting_soon", "level": "warn",
                 "title": f"{m.title} is about to start", "body": body,
-                "url": room, "action": "Open room" if not user.is_admin else "Start session",
+                "url": room, "action": "Start session" if is_host else "Open room",
                 "at": _iso(m.scheduled_time),
             })
         elif -timedelta(minutes=OVERDUE_MINUTES) <= delta < timedelta(0):
             late = abs(minutes)
-            if user.is_admin:
-                body = f"Scheduled {late} minute{'s' if late != 1 else ''} ago and not started. Guests are waiting."
+            if is_host:
+                body = f"Scheduled {late} minute{'s' if late != 1 else ''} ago and not started. Your guests are waiting."
                 action = "Start session"
             else:
                 body = f"Was due {late} minute{'s' if late != 1 else ''} ago. The host hasn't opened the room yet."

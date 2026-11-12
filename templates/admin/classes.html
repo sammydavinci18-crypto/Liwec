@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Classes · Admin · Light-Way{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Admin</span>
+    <h1>Classes</h1>
+    <p>Each student belongs to one class (a year group, or Bridging). Lessons on the timetable are for one class at a time, so classes that share a teacher and a subject never end up in the same lesson.</p>
+  </div>
+  <div class="dash-actions">
+    <a class="btn btn-ghost" href="{{ url_for('admin.placements') }}">Placements</a>
+    <a class="btn btn-primary" href="{{ url_for('admin.timetable') }}">Timetable</a>
+  </div>
+</div>
+
+<div class="booking-card" style="max-width: 560px; margin-bottom: 24px;">
+  <h3>Add a class</h3>
+  <form method="POST" action="{{ url_for('admin.class_create') }}" class="inline-form">
+    <input type="text" name="name" maxlength="60" required placeholder='e.g. "Year 8" or "Bridging A"'>
+    <button type="submit" class="btn btn-primary">Add</button>
+  </form>
+</div>
+
+<div class="appointment-list">
+  {% for c in classes %}
+  <div class="appointment-row {{ 'is-archived' if not c.is_active }}">
+    <div>
+      <form method="POST" action="{{ url_for('admin.class_rename', class_id=c.id) }}" class="inline-form">
+        <input type="text" name="name" value="{{ c.name }}" maxlength="60" required aria-label="Class name">
+        <button type="submit" class="btn btn-ghost btn-sm">Rename</button>
+      </form>
+      <span class="appt-time">
+        {{ student_counts.get(c.id, 0) }} student{{ 's' if student_counts.get(c.id, 0) != 1 }}
+        · {{ lesson_counts.get(c.id, 0) }} upcoming lesson{{ 's' if lesson_counts.get(c.id, 0) != 1 }}
+        {% if not c.is_active %}· <strong>archived</strong> (hidden from pickers){% endif %}
+      </span>
+    </div>
+    <div class="appt-actions">
+      <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.placements', class_id=c.id) }}">Students</a>
+      <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.timetable', class_id=c.id) }}">Timetable</a>
+      <form method="POST" action="{{ url_for('admin.class_toggle', class_id=c.id) }}">
+        <button type="submit" class="btn btn-ghost btn-sm">{{ 'Restore' if not c.is_active else 'Archive' }}</button>
+      </form>
+    </div>
+  </div>
+  {% else %}
+  <div class="empty-state">No classes yet.</div>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -73,77 +73,42 @@ document.addEventListener("DOMContentLoaded", () => {
     btnCam.querySelector(".ctrl-label").textContent = camOn ? "Stop video" : "Start video";
   });
 
-  /* ---------------- Recording: host decides, everyone sees status live ---------------- */
+  /* ---------------- Recording: automatic and compulsory ----------------
+     The server announces "Recording" the moment the host is in the room, and
+     the banner is always visible to everyone. There is no Record / Stop
+     control: only ending the session stops the recording. */
   const recordingNotice = document.getElementById("recording-notice");
+  const recordFailedOverlay = document.getElementById("record-failed-overlay");
 
   function setRecordingBanner(isRecording) {
     if (!recordingNotice) return;
-    recordingNotice.style.display = isRecording ? "inline-flex" : "none";
+    recordingNotice.style.display = "inline-flex"; // always on: every session is recorded
   }
+  setRecordingBanner(true);
 
-  // Late joiners learn the current status from webrtc.js's existing_peers payload.
-  window.addEventListener("recording-status", (e) => setRecordingBanner(e.detail.recording));
-
-  if (window._socket) {
-    window._socket.on("recording_status", ({ recording }) => setRecordingBanner(recording));
-  }
-
-  const btnRecord = document.getElementById("btn-record");
-  const recordConsentOverlay = document.getElementById("record-consent-overlay");
-  const btnConsentRecord = document.getElementById("btn-consent-record");
-  const btnConsentSkip = document.getElementById("btn-consent-skip");
-
-  function setRecordButtonUI(isRecording) {
-    if (!btnRecord) return;
-    const icon = btnRecord.querySelector(".icon");
-    const label = btnRecord.querySelector(".ctrl-label");
-    if (icon && window.ICONS) icon.innerHTML = window.ICONS[isRecording ? "stopRecord" : "record"];
-    if (label) label.textContent = isRecording ? "Stop" : "Record";
-    btnRecord.classList.toggle("active-on", isRecording);
-    btnRecord.title = isRecording ? "Stop recording" : "Start recording";
-  }
-
-  function beginRecording() {
-    if (window.RecordingControl) window.RecordingControl.start();
-    window._socket.emit("recording_status", { room_code: window.ROOM_CONFIG.roomCode, recording: true });
-    setRecordingBanner(true);
-    setRecordButtonUI(true);
-  }
-
-  async function endRecording() {
-    if (window.RecordingControl) await window.RecordingControl.stop();
-    window._socket.emit("recording_status", { room_code: window.ROOM_CONFIG.roomCode, recording: false });
-    setRecordingBanner(false);
-    setRecordButtonUI(false);
-  }
-
-  if (btnRecord) {
-    btnRecord.addEventListener("click", () => {
-      const isActive = window.RecordingControl && window.RecordingControl.isActive();
-      if (isActive) endRecording();
-      else beginRecording();
+  if (window.ROOM_CONFIG.isHost) {
+    // Start as soon as the host is let into their own room.
+    window.addEventListener("admitted", () => {
+      if (window.RecordingControl) window.RecordingControl.start();
+    }, { once: true });
+    window.addEventListener("recording-failed", () => {
+      if (recordFailedOverlay) recordFailedOverlay.classList.add("show");
     });
   }
 
-  if (recordConsentOverlay) {
-    // Host sees this once, right after being let into their own room.
-    window.addEventListener("admitted", () => recordConsentOverlay.classList.add("show"), { once: true });
-
-    if (btnConsentRecord) {
-      btnConsentRecord.addEventListener("click", () => {
-        beginRecording();
-        recordConsentOverlay.classList.remove("show");
-      });
+  // Closing the tab mid-lesson (host) or mid-lesson as a student would drop the
+  // recording / the attendance, so the browser is asked to confirm first.
+  window.addEventListener("beforeunload", (e) => {
+    if (window.__sessionOver) return;
+    if (window.ROOM_CONFIG.isHost || window.ROOM_CONFIG.attendanceRequired) {
+      e.preventDefault();
+      e.returnValue = "";
     }
-    if (btnConsentSkip) {
-      btnConsentSkip.addEventListener("click", () => {
-        recordConsentOverlay.classList.remove("show");
-      });
-    }
-  }
+  });
 
   if (btnLeave) {
     btnLeave.addEventListener("click", () => {
+      window.__sessionOver = true;
       window.location.href = "/dashboard";
     });
   }
@@ -158,9 +123,11 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         const res = await fetch(`/room/${window.ROOM_CONFIG.roomCode}/end`, { method: "POST" });
         const data = await res.json();
+        window.__sessionOver = true;
         window.location.href = data.redirect || "/dashboard";
       } catch (err) {
         console.error("Failed to end meeting cleanly:", err);
+        window.__sessionOver = true;
         window.location.href = "/dashboard";
       }
     });

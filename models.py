@@ -66,36 +66,83 @@ class User(UserMixin, db.Model):
     def is_registrar(self):
         return self.role == "registrar"
 
+    @property
+    def is_approved_teacher(self):
+        """Being a teacher is not a role value — it's an approved TeacherProfile."""
+        profile = self.teacher_profile
+        return bool(profile and profile.status == "approved")
+
+    @property
+    def can_host(self):
+        """Who may host a session: the admin, or a teacher the admin approved."""
+        return self.is_admin or self.is_approved_teacher
+
 
 MEETING_TYPES = [
     ("consultation", "Consultation"),
     ("class", "Live class"),
+    ("tutorial", "Teacher session"),
     ("meeting", "Meeting"),
 ]
 
 # How long before the scheduled start invited people may wait in the lobby.
 LOBBY_OPENS_MINUTES_BEFORE = 15
 
+# Timetabled lessons and teacher sessions get a length so the timetable can
+# refuse a teacher or a class being booked into two places at once.
+DEFAULT_SESSION_MINUTES = 60
+MIN_SESSION_MINUTES = 15
+MAX_SESSION_MINUTES = 480
+
+
+# =============================================================================
+# Classes (year groups). A student belongs to one class; a timetabled lesson is
+# for ONE class taught by ONE teacher, so two classes that happen to share a
+# teacher and a subject (Year 7 Physics, Year 8 Physics) never share a lesson.
+# =============================================================================
+
+class SchoolClass(db.Model):
+    __tablename__ = "school_classes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(60), unique=True, nullable=False)   # e.g. "Year 8", "Bridging"
+    sort_order = db.Column(db.Integer, default=0, nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 
 class Meeting(db.Model):
-    """Every meeting on the platform is created by the admin (directly, or by
-    approving a MeetingRequest). Nobody else can create or host one, and only
-    people the admin has invited can enter the room."""
+    """A live session. The admin creates every consultation and meeting and is
+    its host. Teacher sessions are different: a timetabled lesson (one class,
+    one teacher) or an ad-hoc session the admin sets up for a teacher and some
+    people. In those the TEACHER is the host — they open the room and admit
+    the guests, and the admin is not part of it. Either way only people on the
+    invite list can enter."""
     __tablename__ = "meetings"
 
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
     room_code = db.Column(db.String(16), unique=True, nullable=False, default=generate_room_code, index=True)
-    # Always an admin account. Kept as a plain FK so older rows still load.
+    # The admin, or an approved teacher (see User.can_host / is_hosted_by).
     host_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     scheduled_time = db.Column(db.DateTime, nullable=True)
     # scheduled, live, ended, cancelled
     status = db.Column(db.String(20), default="scheduled")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # consultation | class | meeting — see MEETING_TYPES.
+    # consultation | class | tutorial | meeting — see MEETING_TYPES.
     meeting_type = db.Column(db.String(20), default="consultation", nullable=False, server_default="consultation")
     description = db.Column(db.Text)
+
+    # Timetable fields. A timetabled lesson has a class_id; its guest list is the
+    # students of THAT class placed with the host teacher (see school.py).
+    class_id = db.Column(db.Integer, db.ForeignKey("school_classes.id"), nullable=True, index=True)
+    subject = db.Column(db.String(120))
+    duration_minutes = db.Column(db.Integer, nullable=True)  # None = DEFAULT_SESSION_MINUTES
+    # Lessons created together by "repeat weekly" share a series id.
+    series_id = db.Column(db.String(16), nullable=True, index=True)
+
+    school_class = db.relationship("SchoolClass", foreign_keys=[class_id])
 
     # Set when the host actually joins (not when the row is created) — this
     # is what the server-side call-length limit counts from. See sockets.py.
@@ -112,7 +159,30 @@ class Meeting(db.Model):
         return dict(MEETING_TYPES).get(self.meeting_type, "Meeting")
 
     def is_hosted_by(self, user):
-        return bool(user and user.is_authenticated and user.is_admin and user.id == self.host_id)
+        # The recorded host AND still allowed to host (a teacher whose approval
+        # has been withdrawn loses the room).
+        return bool(user and user.is_authenticated and user.id == self.host_id and user.can_host)
+
+    def length_minutes(self):
+        return self.duration_minutes or DEFAULT_SESSION_MINUTES
+
+    def ends_at(self):
+        if not self.scheduled_time:
+            return None
+        return self.scheduled_time + timedelta(minutes=self.length_minutes())
+
+    @property
+    def is_timetabled(self):
+        """A lesson on the class timetable (one class, one teacher)."""
+        return self.class_id is not None
+
+    def led_by_teacher(self):
+        return bool(self.host and not self.host.is_admin)
+
+    def attendance_required(self):
+        """Lessons and teacher sessions are compulsory: students can't leave,
+        must keep their camera on and stay on the lesson screen."""
+        return self.led_by_teacher()
 
     def is_invited(self, user):
         return bool(user and user.is_authenticated and any(i.user_id == user.id for i in self.invites))
@@ -160,6 +230,9 @@ class MeetingInvite(db.Model):
     meeting_id = db.Column(db.Integer, db.ForeignKey("meetings.id"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     invited_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # "roster": added automatically from the class list of a timetabled lesson
+    # (kept in step with placements). "manual": added by the admin by hand.
+    source = db.Column(db.String(10), nullable=False, default="manual", server_default="manual")
 
     user = db.relationship("User")
 
@@ -172,6 +245,10 @@ class MeetingParticipant(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     joined_at = db.Column(db.DateTime, default=datetime.utcnow)
     left_at = db.Column(db.DateTime, nullable=True)
+    # Attendance in teacher-led lessons: how often the student left the lesson
+    # screen (switched tab / left full screen) and for how long in total.
+    away_count = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    away_seconds = db.Column(db.Integer, nullable=False, default=0, server_default="0")
 
     user = db.relationship("User")
 
@@ -370,9 +447,17 @@ class StudentProfile(db.Model):
     reviewed_at = db.Column(db.DateTime)
     reviewed_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
 
+    # The student's class / year group, set by the admin. It decides which
+    # timetabled lessons the student is on (see Meeting.class_id).
+    class_id = db.Column(db.Integer, db.ForeignKey("school_classes.id"), nullable=True, index=True)
+    school_class = db.relationship("SchoolClass", backref="student_profiles", foreign_keys=[class_id])
+
     documents = db.relationship(
         "StudentVerificationDocument", backref="profile", lazy=True, cascade="all, delete-orphan"
     )
+
+    def class_label(self):
+        return self.school_class.name if self.school_class else "No class yet"
 
     def stage_label(self):
         return dict(STUDENT_PROGRAMS + CAMBRIDGE_STAGES).get(self.desired_stage, self.desired_stage or "—")
