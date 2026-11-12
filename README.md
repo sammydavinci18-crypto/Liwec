@@ -107,3 +107,16 @@ Run `flask db upgrade` (or let your Render start command do it). Two additive mi
 
 - **Whiteboard (host only).** The *Whiteboard* button opens a board that covers the whole screen for everyone in the session. The teacher can write/draw (finger, pen or mouse), type text, change colour and thickness, erase, undo, clear, and *Close board* to return to the lesson. Students and an observing admin only watch. The board is kept server-side for the session, so reopening continues where it left off and late joiners see it. While it is open it is also painted into the session recording. Files: `static/js/whiteboard.js`, handlers `wb_open/wb_close/wb_op` in `sockets.py`.
 - **Enlarge a shared screen.** When someone else shares their screen it fills the window; anyone can close it (✕, Esc or the *Enlarge* button) and reopen it while the share continues. File: `static/js/focusview.js`.
+
+## Interface conventions (usability)
+
+Shared behaviour lives in `static/js/ui.js` (loaded on every page) and the "Usability pass" block at the end of `static/css/style.css`.
+
+- **Confirm risky actions** by adding attributes to the `<form>`; no extra JavaScript is needed:
+  `data-confirm="What will happen."` `data-confirm-title="Cancel this session?"` `data-confirm-action="Yes, cancel"` `data-confirm-tone="danger"` (red button, focus starts on "Go back").
+  Use it for anything that removes access, cancels, bans, rejects or deletes.
+- **Double-submit protection** is automatic for every POST form (buttons show "Working…"). Opt out with `data-no-lock` on the form.
+- **Guest/people pickers**: wrap in `data-picker`, mark rows `data-picker-item`, and add `data-picker-all`, `data-picker-none`, `data-picker-count` for the Select/Clear buttons and live count.
+- **Navigation**: `templates/base.html` highlights the current page from `request.endpoint`. When you add an admin page, add its endpoint to the matching link (or to `people_eps` for the People menu).
+- **Dates**: any admin `datetime-local` field must carry `data-utc` so it is typed in local time and stored as UTC.
+- Hints under a field: `<span class="field-hint">…</span>`. Group long forms with `<fieldset class="form-section"><legend>…</legend>`.

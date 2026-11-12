@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}My sessions · Light-Way{% endblock %}
+{% block title %}{{ 'Dashboard' if current_user.is_admin else 'My sessions' }} · Light-Way{% endblock %}
 
 {% block content %}
 {% macro session_card(m, show_host=True) %}
@@ -22,17 +22,30 @@
 <div class="dash-head">
   <div>
     <span class="eyebrow eyebrow-dark">Administrator</span>
-    <h1>Your control room</h1>
-    <p>You schedule every session on Light-Way: consultations and meetings you host yourself, and teacher-led lessons from the class timetable. Nobody can enter a session they haven't been invited to.</p>
+    <h1>Dashboard</h1>
+    <p>Welcome back, {{ current_user.name }}. Here is what needs you today and what is coming up.</p>
   </div>
   <div class="dash-actions">
-    <a href="{{ url_for('admin.requests_queue') }}" class="btn btn-ghost">
-      Requests{% if pending_count %} ({{ pending_count }} waiting){% endif %}
-    </a>
-    <a href="{{ url_for('admin.timetable') }}" class="btn btn-ghost">Class timetable</a>
     <a href="{{ url_for('admin.new_meeting') }}" class="btn btn-primary">+ Schedule a session</a>
   </div>
 </div>
+
+{% set live_now = (upcoming + teacher_led)|selectattr('status', 'equalto', 'live')|list %}
+{% if live_now %}
+<section class="live-banner" aria-label="Sessions live now">
+  <div class="live-banner-head"><span class="live-dot" aria-hidden="true"></span> Live now ({{ live_now|length }})</div>
+  {% for m in live_now %}
+  <div class="live-row">
+    <div><strong>{{ m.title }}</strong><small>{{ m.type_label() }}{% if m.school_class %} · {{ m.school_class.name }}{% endif %} · Host: {{ m.host.name }}</small></div>
+    {% if m.host_id == current_user.id %}
+    <a href="{{ url_for('meetings.room', room_code=m.room_code) }}" class="btn btn-primary btn-sm">Return to room</a>
+    {% else %}
+    <a href="{{ url_for('meetings.observe', room_code=m.room_code) }}" class="btn btn-primary btn-sm" title="Watch and listen without being seen">Observe</a>
+    {% endif %}
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
 
 <div class="section-label">Needs your attention</div>
 <div class="attention-grid">
@@ -57,7 +70,17 @@
     <span class="attention-label">Students with no class yet</span>
   </a>
 </div>
-{% if not attention_total %}<p class="meta">All caught up. Nothing is waiting for you.</p>{% endif %}
+{% if not attention_total %}<p class="meta">&#10003; All caught up. Nothing is waiting for you.</p>{% endif %}
+
+<details class="guide-card" style="margin-top: 20px;">
+  <summary>How the school runs: from application to first lesson</summary>
+  <ol class="guide-steps">
+    <li><a href="{{ url_for('admin.student_queue') }}">Review applications</a><small>Approve students and teachers. Students can be given a class as you approve them.</small></li>
+    <li><a href="{{ url_for('admin.classes') }}">Set up classes</a><small>Year groups such as Year 7 or Bridging. Every student needs one.</small></li>
+    <li><a href="{{ url_for('admin.placements') }}">Place students with teachers</a><small>A student sees only the lessons of their class and teacher.</small></li>
+    <li><a href="{{ url_for('admin.timetable_new') }}">Add lessons to the timetable</a><small>Teachers open the room and admit students. You can observe any live lesson.</small></li>
+  </ol>
+</details>
 
 {% if announcements %}
 <div class="section-label">Announcements</div>
@@ -107,7 +130,7 @@
         <span class="meta">{{ m.scheduled_time|dt }} · {{ m.status|capitalize }}</span>
         <span class="meta">Hosted by {{ m.host.name }} · {{ m.invites|length }} guest{{ '' if m.invites|length == 1 else 's' }}</span>
         <div class="appt-actions">
-          {% if m.status == 'live' %}<a href="{{ url_for('meetings.observe', room_code=m.room_code) }}" class="btn btn-primary btn-sm" title="Watch unseen">&#128065; Observe</a>{% endif %}
+          {% if m.status == 'live' %}<a href="{{ url_for('meetings.observe', room_code=m.room_code) }}" class="btn btn-primary btn-sm" title="Watch and listen without being seen">Observe</a>{% endif %}
           <a href="{{ url_for('admin.meeting_detail', meeting_id=m.id) }}" class="btn btn-ghost btn-sm">Manage</a>
         </div>
       </div>
@@ -208,7 +231,11 @@
 </div>
 {% endif %}
 
+{% set is_student = current_user.student_profile is not none %}
+{% set is_teacher = current_user.teacher_profile is not none %}
+{% if not (is_student and is_teacher) %}
 <div class="section-label">Light-Way Virtual School</div>
+{% if is_student or not is_teacher %}
 <div class="marketplace-promo">
   <div>
     <h3>Student admissions</h3>
@@ -224,6 +251,8 @@
   </div>
 </div>
 
+{% endif %}
+{% if is_teacher or not is_student %}
 <div class="marketplace-promo">
   <div>
     <h3>Teach with Light-Way</h3>
@@ -239,6 +268,8 @@
   </div>
 </div>
 
+{% endif %}
+{% if not is_student and not is_teacher %}
 <div class="marketplace-promo">
   <div>
     <h3>Parent or guardian?</h3>
@@ -249,5 +280,7 @@
     <a class="btn btn-primary" href="{{ url_for('family.dashboard') }}">Manage family links</a>
   </div>
 </div>
+{% endif %}
+{% endif %}
 {% endif %}
 {% endblock %}

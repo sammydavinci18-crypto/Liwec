@@ -2272,3 +2272,163 @@ button, input, textarea, select { font-family: inherit; }
   border: 1px dashed #888; padding: 0; margin: 0; resize: both; font-family: "Segoe UI", Arial, sans-serif; line-height: 1.25;
 }
 .focus-overlay video { flex: 1 1 auto; min-height: 0; width: 100%; object-fit: contain; background: #000; }
+
+
+/* =========================================================
+   Usability pass: navigation, confirmations, admin guidance
+   ========================================================= */
+
+/* ---- Accessibility basics ---- */
+.skip-link {
+  position: absolute; left: -9999px; top: 0; z-index: 200;
+  background: var(--teal); color: #fff; padding: 10px 16px;
+  border-radius: 0 0 var(--radius-sm) 0; font-weight: 600;
+}
+.skip-link:focus { left: 0; text-decoration: none; }
+
+/* ---- Top bar: stays in reach while scrolling ---- */
+.topbar { position: sticky; top: 0; z-index: 60; flex-wrap: wrap; gap: 8px 20px; }
+.topnav { margin-left: auto; justify-content: flex-end; gap: 6px 20px; }
+.topbar-tools { display: flex; align-items: center; gap: 8px; }
+.topnav-sep { width: 1px; height: 20px; background: var(--line); }
+
+.topnav-link { padding: 8px 2px; }
+/* Admin links used gold text on white (about 2.4:1, hard to read). Navy reads clearly;
+   dark mode keeps gold, which is bright enough on a dark background. */
+.topnav-admin { color: var(--teal); }
+.topnav-link.is-current { color: var(--ink); box-shadow: inset 0 -2px 0 var(--amber); }
+.nav-menu-panel a.is-current { background: var(--teal-tint); }
+
+.nav-toggle {
+  display: none; align-items: center; gap: 10px; min-height: 40px; padding: 0 12px;
+  background: transparent; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  color: var(--ink); font: inherit; font-size: 0.88rem; font-weight: 600; cursor: pointer;
+}
+.nav-toggle:hover { border-color: var(--teal); }
+.nav-toggle-bars, .nav-toggle-bars::before, .nav-toggle-bars::after {
+  display: block; width: 16px; height: 2px; background: currentColor; border-radius: 2px;
+}
+.nav-toggle-bars { position: relative; }
+.nav-toggle-bars::before, .nav-toggle-bars::after { content: ""; position: absolute; left: 0; }
+.nav-toggle-bars::before { top: -5px; }
+.nav-toggle-bars::after { top: 5px; }
+
+/* Mid-size screens: the signed-in name is the first thing to give way (Account stays). */
+@media (max-width: 1399px) { .topnav-user, .topnav-sep { display: none; } }
+
+/* Below this width the links fold into a Menu button next to the logo. */
+@media (max-width: 1100px) {
+  .nav-toggle { display: inline-flex; }
+  .topbar-tools { order: 2; margin-left: auto; }
+  .topnav { order: 3; flex-basis: 100%; margin-left: 0; justify-content: flex-start; }
+  .js .topnav { display: none; flex-direction: column; align-items: stretch; gap: 0; padding-top: 6px; }
+  .js .topnav.is-open { display: flex; }
+  .topnav > .topnav-link, .nav-menu > summary { padding: 13px 4px; border-bottom: 1px solid var(--line); }
+  .topnav-link.is-current { box-shadow: inset 3px 0 0 var(--amber); padding-left: 12px; }
+  .topnav > .btn { margin-top: 10px; min-height: 44px; }
+  .nav-menu-panel { position: static; box-shadow: none; border: 0; padding: 0 0 0 12px; }
+  .nav-menu-panel a { padding: 12px; }
+  .topnav-user { display: block; padding: 10px 4px 0; }
+}
+
+/* Dashboard counters: five in a row on desktop, two on a phone, never an orphan row. */
+.attention-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+
+/* ---- Buttons: comfortable to hit ---- */
+.btn-sm { min-height: 36px; }
+@media (pointer: coarse) { .btn { min-height: 44px; } }
+
+/* ---- Messages ---- */
+.flash-stack { max-width: 640px; }
+.flash-stack .flash { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; transition: opacity 0.2s ease; }
+.flash.is-leaving { opacity: 0; }
+.flash-close {
+  flex: none; background: none; border: 0; color: inherit; cursor: pointer;
+  font-size: 1.3rem; line-height: 1; padding: 0 4px; opacity: 0.7;
+}
+.flash-close:hover { opacity: 1; }
+:root[data-theme="dark"] .flash-error { background: #3A1F22; color: #F2A39A; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .flash-error { background: #3A1F22; color: #F2A39A; } }
+
+/* ---- Confirmation dialog ---- */
+.confirm-dialog {
+  border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 0;
+  background: var(--paper-raised); color: var(--ink); width: min(440px, 92vw); box-shadow: var(--shadow-card);
+}
+.confirm-dialog::backdrop { background: rgba(10, 20, 38, 0.55); }
+.confirm-body { padding: 24px 26px 20px; }
+.confirm-body h3 { margin: 0 0 8px; font-size: 1.2rem; }
+.confirm-body p { margin: 0 0 22px; color: var(--ink-soft); line-height: 1.5; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+
+/* ---- Admin: live-now banner and setup guide ---- */
+.live-banner {
+  display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; margin: 0 0 22px;
+  border: 1px solid var(--amber); border-left-width: 4px; border-radius: var(--radius-md);
+  background: var(--amber-tint); color: var(--ink);
+}
+.live-banner-head { display: flex; align-items: center; gap: 10px; font-weight: 700; }
+.live-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--danger); animation: live-pulse 1.8s ease-out infinite; }
+@keyframes live-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(180, 69, 58, 0.55); }
+  70% { box-shadow: 0 0 0 9px rgba(180, 69, 58, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(180, 69, 58, 0); }
+}
+@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
+.live-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.live-row small { display: block; color: var(--ink-soft); }
+
+.guide-card { border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--paper-raised); margin: 0 0 8px; }
+.guide-card > summary {
+  cursor: pointer; padding: 14px 18px; font-weight: 600; list-style: none;
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+}
+.guide-card > summary::-webkit-details-marker { display: none; }
+.guide-card > summary::after { content: "Show"; font-weight: 500; color: var(--ink-soft); font-size: 0.85rem; }
+.guide-card[open] > summary::after { content: "Hide"; }
+.guide-steps {
+  counter-reset: step; list-style: none; margin: 0; padding: 4px 18px 18px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px;
+}
+.guide-steps li {
+  counter-increment: step; position: relative; padding: 14px 14px 14px 52px;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+}
+.guide-steps li::before {
+  content: counter(step); position: absolute; left: 14px; top: 14px; width: 26px; height: 26px;
+  border-radius: 50%; background: var(--teal); color: #fff; font-weight: 700; font-size: 0.85rem;
+  display: flex; align-items: center; justify-content: center;
+}
+.guide-steps a { font-weight: 600; }
+.guide-steps small { display: block; margin-top: 2px; color: var(--ink-soft); line-height: 1.4; }
+
+/* ---- Forms: grouped, with hints ---- */
+.form-section { border: 0; padding: 0; margin: 0 0 24px; min-width: 0; }
+.form-section > legend {
+  font-family: var(--font-display); font-weight: 600; font-size: 1.05rem;
+  width: 100%; padding: 0 0 8px; margin-bottom: 10px; border-bottom: 1px solid var(--line);
+}
+.field-hint { display: block; margin-top: 4px; font-size: 0.82rem; font-weight: 400; color: var(--ink-soft); line-height: 1.4; }
+.picker-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
+.picker-count { margin-left: auto; font-size: 0.85rem; font-weight: 600; color: var(--ink-soft); }
+.search-clear { font-size: 0.85rem; margin-left: 6px; }
+
+/* ---- Form controls: dropdowns match the text fields; radios/checkboxes stay their own size ---- */
+main.page select {
+  appearance: none; -webkit-appearance: none;
+  padding: 10px 34px 10px 12px; max-width: 100%;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background-color: var(--paper); color: var(--ink); font-size: 0.95rem; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%;
+  background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+}
+main.page select:focus { border-color: var(--teal); }
+.field select { width: 100%; }
+.inline-class-form select { padding: 4px 28px 4px 8px; }
+.field input[type="checkbox"], .field input[type="radio"] {
+  width: auto; padding: 0; margin: 0 8px 0 0; flex: none; accent-color: var(--teal);
+  vertical-align: -2px; background: none;
+}
+.radio-line { display: flex; align-items: flex-start; gap: 2px; padding: 6px 0; font-weight: 400; color: var(--ink); font-size: 0.93rem; line-height: 1.4; }
+.radio-line input { margin-top: 3px; }

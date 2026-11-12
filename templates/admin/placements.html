@@ -112,7 +112,8 @@
       {% if a.notes %}<p class="appt-note">"{{ a.notes }}"</p>{% endif %}
     </div>
     <div class="appt-actions">
-      <form method="POST" action="{{ url_for('admin.remove_placement', assignment_id=a.id) }}" onsubmit="return confirm('Remove this placement? They will come off this teacher\'s upcoming lessons.');">
+      <form method="POST" action="{{ url_for('admin.remove_placement', assignment_id=a.id) }}" data-confirm="{{ a.student.name }} will come off {{ a.teacher.name }}'s upcoming lessons."
+            data-confirm-title="Remove this placement?" data-confirm-action="Remove placement" data-confirm-tone="danger">
         <button type="submit" class="btn btn-ghost btn-sm">Remove</button>
       </form>
     </div>

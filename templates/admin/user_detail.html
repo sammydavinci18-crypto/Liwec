@@ -48,7 +48,8 @@
     <div class="booking-card">
       <h3>Login details</h3>
       <p class="sub">Passwords are stored securely and can't be viewed. To give {{ user.name }} login details, set a new temporary password and share it with them.</p>
-      <form method="POST" action="{{ url_for('admin.reset_password', user_id=user.id) }}" onsubmit="return confirm('Set a new password for {{ user.name|replace("'", "") }}? Their old password will stop working.');">
+      <form method="POST" action="{{ url_for('admin.reset_password', user_id=user.id) }}" data-confirm="Their current password will stop working straight away. You will see the new one once, on the next page."
+            data-confirm-title="Set a new password for {{ user.name }}?" data-confirm-action="Set new password">
         <button type="submit" class="btn btn-ghost btn-block">Set new password &amp; show details</button>
       </form>
     </div>
@@ -75,7 +76,9 @@
         <button type="submit" class="btn btn-primary btn-block">Reinstate account</button>
       </form>
       {% else %}
-      <form method="POST" action="{{ url_for('admin.ban_user', user_id=user.id) }}">
+      <form method="POST" action="{{ url_for('admin.ban_user', user_id=user.id) }}"
+            data-confirm="{{ user.name }} will be unable to log in and will be removed from class lessons until you reinstate the account."
+            data-confirm-title="Ban this account?" data-confirm-action="Ban account" data-confirm-tone="danger">
         <div class="field">
           <label for="ban_reason">Reason (admin-only record — e.g. for legal/abuse tracking)</label>
           <textarea id="ban_reason" name="ban_reason" rows="3" required></textarea>

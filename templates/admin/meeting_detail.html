@@ -29,8 +29,10 @@
           <span class="appt-time">{{ inv.user.email }}{% if inv.user.student_profile %} · {{ inv.user.student_profile.class_label() }}{% endif %}{% if inv.source == 'roster' %} · class list{% endif %}</span>
         </div>
         {% if meeting.status in ('scheduled', 'live') %}
-        <form method="POST" action="{{ url_for('admin.meeting_uninvite', meeting_id=meeting.id, user_id=inv.user_id) }}">
-          <button type="submit" class="btn btn-ghost btn-sm">Remove</button>
+        <form method="POST" action="{{ url_for('admin.meeting_uninvite', meeting_id=meeting.id, user_id=inv.user_id) }}"
+              data-confirm="{{ inv.user.name }} will no longer be able to enter this session."
+              data-confirm-title="Remove from guest list?" data-confirm-action="Remove">
+          <button type="submit" class="btn btn-ghost btn-sm" aria-label="Remove {{ inv.user.name }} from the guest list">Remove</button>
         </form>
         {% endif %}
       </div>
@@ -76,7 +78,7 @@
         {{ 'Return to room' if meeting.status == 'live' else 'Open room' }}
       </a>
       {% elif meeting.status == 'live' %}
-      <a class="btn btn-ghost btn-block observe-btn" href="{{ url_for('meetings.observe', room_code=meeting.room_code) }}">&#128065; Observe this session</a>
+      <a class="btn btn-ghost btn-block observe-btn" href="{{ url_for('meetings.observe', room_code=meeting.room_code) }}">Observe this session</a>
       <p class="sub">You watch and listen without being seen or heard. Nobody in the session is told you are there, and you don't appear in the attendance list.</p>
       {% else %}
       <p class="sub">{{ meeting.host.name }} hosts this session and opens it when it is time. You can observe it once it is live, and reschedule, cancel or change the guest list here.</p>
@@ -117,11 +119,15 @@
     <div class="booking-card moderation-card">
       <h3>Cancel session</h3>
       <p class="sub">Guests will no longer be able to enter.</p>
-      <form method="POST" action="{{ url_for('admin.meeting_cancel', meeting_id=meeting.id) }}">
+      <form method="POST" action="{{ url_for('admin.meeting_cancel', meeting_id=meeting.id) }}"
+            data-confirm="Everyone on the guest list will lose access to this session. This cannot be undone."
+            data-confirm-title="Cancel this session?" data-confirm-action="Yes, cancel session" data-confirm-tone="danger">
         <button type="submit" class="btn btn-danger btn-block">Cancel this session</button>
       </form>
       {% if meeting.series_id %}
-      <form method="POST" action="{{ url_for('admin.meeting_cancel_series', meeting_id=meeting.id) }}" onsubmit="return confirm('Cancel this lesson and every later one in the weekly series?');" style="margin-top:8px;">
+      <form method="POST" action="{{ url_for('admin.meeting_cancel_series', meeting_id=meeting.id) }}"
+              data-confirm="This lesson and every later lesson in the weekly series will be cancelled."
+              data-confirm-title="Cancel the whole series?" data-confirm-action="Cancel series" data-confirm-tone="danger" style="margin-top:8px;">
         <button type="submit" class="btn btn-ghost btn-block">Cancel this and all later lessons in the series</button>
       </form>
       {% endif %}

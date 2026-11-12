@@ -38,8 +38,10 @@
         </div>
         <button type="submit" class="btn btn-primary btn-sm">Approve &amp; schedule</button>
       </form>
-      <form method="POST" action="{{ url_for('admin.request_decline', request_id=r.id) }}" class="request-decline">
-        <input type="text" name="admin_note" maxlength="500" placeholder="Reason (optional)">
+      <form method="POST" action="{{ url_for('admin.request_decline', request_id=r.id) }}" class="request-decline"
+            data-confirm="The request will show as declined to {{ r.requester.name }}, with your reason if you gave one."
+            data-confirm-title="Decline this request?" data-confirm-action="Decline request" data-confirm-tone="danger">
+        <input type="text" name="admin_note" maxlength="500" placeholder="Reason (optional)" aria-label="Reason for declining (optional)">
         <button type="submit" class="btn btn-ghost btn-sm">Decline</button>
       </form>
     </div>

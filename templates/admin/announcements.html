@@ -28,8 +28,9 @@
         </select>
       </div>
       <div class="field">
-        <label for="event_date">Calendar date (optional, UTC)</label>
-        <input type="datetime-local" id="event_date" name="event_date">
+        <label for="event_date">Calendar date <span class="sub">(optional, your local time)</span></label>
+        <input type="datetime-local" data-utc id="event_date" name="event_date">
+        <span class="field-hint">Adds the notice to the school calendar on this date.</span>
       </div>
     </div>
     <button type="submit" class="btn btn-primary">Post announcement</button>
@@ -46,7 +47,9 @@
       <span class="appt-time">{{ a.audience_label() }} · {{ a.created_at|dt }}{% if a.event_date %} · Calendar: {{ a.event_date|dt }}{% endif %}</span>
       {% if a.body %}<p class="appt-note">{{ a.body }}</p>{% endif %}
     </div>
-    <form method="POST" action="{{ url_for('admin.announcement_delete', announcement_id=a.id) }}">
+    <form method="POST" action="{{ url_for('admin.announcement_delete', announcement_id=a.id) }}"
+          data-confirm="It will disappear for everyone who can currently see it."
+          data-confirm-title="Remove “{{ a.title|truncate(40) }}”?" data-confirm-action="Remove" data-confirm-tone="danger">
       <button type="submit" class="btn btn-ghost btn-sm">Remove</button>
     </form>
   </div>

@@ -13,7 +13,7 @@
   </div>
   <div class="appt-actions">
     <span class="status-pill status-{{ 'approved' if m.status == 'live' else ('cancelled' if m.status == 'cancelled' else ('completed' if m.status == 'ended' else 'pending')) }}">{{ m.status|capitalize }}</span>
-    {% if m.status == 'live' %}<a class="btn btn-primary btn-sm" href="{{ url_for('meetings.observe', room_code=m.room_code) }}" title="Watch unseen">&#128065; Observe</a>{% endif %}
+    {% if m.status == 'live' %}<a class="btn btn-primary btn-sm" href="{{ url_for('meetings.observe', room_code=m.room_code) }}" title="Watch and listen without being seen">Observe</a>{% endif %}
     <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.meeting_detail', meeting_id=m.id) }}">{{ 'Details' if past else 'Manage' }}</a>
   </div>
 </div>

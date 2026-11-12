@@ -6,12 +6,16 @@
   <title>{% block title %}Light-Way{% endblock %}</title>
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/favicon.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-  <script>try{var t=localStorage.getItem("lw-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+  <script>document.documentElement.className+=" js";try{var t=localStorage.getItem("lw-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
   {% block head %}{% endblock %}
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to main content</a>
   {% block topheader %}
   {% if current_user.is_authenticated %}
+  {% set ep = request.endpoint or '' %}
+  {% set people_eps = ['admin.student_queue', 'admin.student_review', 'admin.teacher_queue', 'admin.teacher_review', 'admin.classes', 'admin.placements', 'admin.users', 'admin.user_detail', 'admin.create_account', 'admin.account_credentials', 'family.registrar_dashboard', 'teachers.directory'] %}
+  {% set people_count = pending_students_count + pending_teachers_count + unplaced_count + unclassed_count %}
   <header class="topbar">
     <a class="brand-block" href="{{ url_for('main.dashboard') }}">
       <span class="brand">
@@ -20,38 +24,46 @@
       </span>
       <span class="brand-tagline">Lighting paths. Empowering futures.</span>
     </a>
-    <nav class="topnav">
-      <a class="topnav-link" href="{{ url_for('main.dashboard') }}">Home</a>
-      <a class="topnav-link" href="{{ url_for('main.dashboard') }}">My sessions</a>
-      <a class="topnav-link" href="{{ url_for('portal.timetable') }}">Timetable</a>
-      {% if current_user.is_approved_teacher and not current_user.is_admin %}
-      <a class="topnav-link" href="{{ url_for('teachers.my_sessions') }}">My teaching</a>
-      {% endif %}
-      {% if not current_user.is_admin %}
-      <a class="topnav-link" href="{{ url_for('portal.index') }}">My school</a>
-      <a class="topnav-link" href="{{ url_for('consult.new') }}">Consultation</a>
-      {% endif %}
-      <a class="topnav-link" href="{{ url_for('teachers.directory') }}">Our teachers</a>
-      {% if current_user.is_registrar and not current_user.is_admin %}
-      <a class="topnav-link topnav-admin" href="{{ url_for('family.registrar_dashboard') }}">Registrar</a>
-      {% endif %}
+
+    <nav class="topnav" id="site-nav" aria-label="Main">
       {% if current_user.is_admin %}
-      <a class="topnav-link topnav-admin" href="{{ url_for('admin.requests_queue') }}">Requests{% if pending_requests_count %}<span class="nav-badge">{{ pending_requests_count }}</span>{% endif %}</a>
-      <a class="topnav-link topnav-admin" href="{{ url_for('admin.meetings') }}">Sessions</a>
-      <a class="topnav-link topnav-admin" href="{{ url_for('admin.timetable') }}">Timetable</a>
+      <a class="topnav-link topnav-admin{{ ' is-current' if ep == 'main.dashboard' }}" href="{{ url_for('main.dashboard') }}"{% if ep == 'main.dashboard' %} aria-current="page"{% endif %}>Dashboard</a>
+      <a class="topnav-link topnav-admin{{ ' is-current' if ep == 'admin.requests_queue' }}" href="{{ url_for('admin.requests_queue') }}"{% if ep == 'admin.requests_queue' %} aria-current="page"{% endif %}>Requests{% if pending_requests_count %}<span class="nav-badge" title="{{ pending_requests_count }} waiting">{{ pending_requests_count }}</span>{% endif %}</a>
+      <a class="topnav-link topnav-admin{{ ' is-current' if ep in ['admin.meetings', 'admin.meeting_detail', 'admin.new_meeting'] }}" href="{{ url_for('admin.meetings') }}"{% if ep in ['admin.meetings', 'admin.meeting_detail', 'admin.new_meeting'] %} aria-current="page"{% endif %}>Sessions</a>
+      <a class="topnav-link topnav-admin{{ ' is-current' if ep in ['admin.timetable', 'admin.timetable_new'] }}" href="{{ url_for('admin.timetable') }}"{% if ep in ['admin.timetable', 'admin.timetable_new'] %} aria-current="page"{% endif %}>Timetable</a>
       <details class="nav-menu">
-        <summary class="topnav-link topnav-admin">People &amp; admissions{% set pp = pending_students_count + pending_teachers_count + unplaced_count + unclassed_count %}{% if pp %}<span class="nav-badge">{{ pp }}</span>{% endif %}</summary>
+        <summary class="topnav-link topnav-admin{{ ' is-current' if ep in people_eps }}">People{% if people_count %}<span class="nav-badge" title="{{ people_count }} item(s) need attention">{{ people_count }}</span>{% endif %}</summary>
         <div class="nav-menu-panel">
-          <a href="{{ url_for('admin.student_queue') }}">Student review{% if pending_students_count %}<span class="nav-badge">{{ pending_students_count }}</span>{% endif %}</a>
-          <a href="{{ url_for('admin.teacher_queue') }}">Teacher review{% if pending_teachers_count %}<span class="nav-badge">{{ pending_teachers_count }}</span>{% endif %}</a>
-          <a href="{{ url_for('admin.classes') }}">Classes{% if unclassed_count %}<span class="nav-badge">{{ unclassed_count }}</span>{% endif %}</a>
-          <a href="{{ url_for('admin.placements') }}">Placements{% if unplaced_count %}<span class="nav-badge">{{ unplaced_count }}</span>{% endif %}</a>
-          <a href="{{ url_for('family.registrar_dashboard') }}">Parent links (registrar)</a>
-          <a href="{{ url_for('admin.users') }}">All users</a>
+          <a href="{{ url_for('admin.student_queue') }}"{% if ep in ['admin.student_queue', 'admin.student_review'] %} class="is-current"{% endif %}>Student applications{% if pending_students_count %}<span class="nav-badge">{{ pending_students_count }}</span>{% endif %}</a>
+          <a href="{{ url_for('admin.teacher_queue') }}"{% if ep in ['admin.teacher_queue', 'admin.teacher_review'] %} class="is-current"{% endif %}>Teacher applications{% if pending_teachers_count %}<span class="nav-badge">{{ pending_teachers_count }}</span>{% endif %}</a>
+          <a href="{{ url_for('admin.classes') }}"{% if ep == 'admin.classes' %} class="is-current"{% endif %}>Classes{% if unclassed_count %}<span class="nav-badge" title="Students with no class">{{ unclassed_count }}</span>{% endif %}</a>
+          <a href="{{ url_for('admin.placements') }}"{% if ep == 'admin.placements' %} class="is-current"{% endif %}>Placements{% if unplaced_count %}<span class="nav-badge" title="Students waiting for a teacher">{{ unplaced_count }}</span>{% endif %}</a>
+          <a href="{{ url_for('admin.users') }}"{% if ep in ['admin.users', 'admin.user_detail', 'admin.create_account', 'admin.account_credentials'] %} class="is-current"{% endif %}>All users</a>
+          <a href="{{ url_for('family.registrar_dashboard') }}"{% if ep == 'family.registrar_dashboard' %} class="is-current"{% endif %}>Parent links</a>
+          <a href="{{ url_for('teachers.directory') }}"{% if ep == 'teachers.directory' %} class="is-current"{% endif %}>Teacher directory</a>
         </div>
       </details>
-      <a class="topnav-link topnav-admin" href="{{ url_for('admin.announcements') }}">Announcements</a>
+      <a class="topnav-link topnav-admin{{ ' is-current' if ep == 'admin.announcements' }}" href="{{ url_for('admin.announcements') }}"{% if ep == 'admin.announcements' %} aria-current="page"{% endif %}>Announcements</a>
+      {% else %}
+      <a class="topnav-link{{ ' is-current' if ep == 'main.dashboard' }}" href="{{ url_for('main.dashboard') }}"{% if ep == 'main.dashboard' %} aria-current="page"{% endif %}>My sessions</a>
+      <a class="topnav-link{{ ' is-current' if ep == 'portal.timetable' }}" href="{{ url_for('portal.timetable') }}"{% if ep == 'portal.timetable' %} aria-current="page"{% endif %}>Timetable</a>
+      {% if current_user.is_approved_teacher %}
+      <a class="topnav-link{{ ' is-current' if ep == 'teachers.my_sessions' }}" href="{{ url_for('teachers.my_sessions') }}"{% if ep == 'teachers.my_sessions' %} aria-current="page"{% endif %}>My teaching</a>
       {% endif %}
+      <a class="topnav-link{{ ' is-current' if ep == 'portal.index' }}" href="{{ url_for('portal.index') }}"{% if ep == 'portal.index' %} aria-current="page"{% endif %}>My school</a>
+      <a class="topnav-link{{ ' is-current' if ep in ['consult.new', 'consult.mine'] }}" href="{{ url_for('consult.new') }}"{% if ep in ['consult.new', 'consult.mine'] %} aria-current="page"{% endif %}>Request a consultation</a>
+      <a class="topnav-link{{ ' is-current' if ep in ['teachers.directory', 'teachers.profile'] }}" href="{{ url_for('teachers.directory') }}"{% if ep in ['teachers.directory', 'teachers.profile'] %} aria-current="page"{% endif %}>Our teachers</a>
+      {% if current_user.is_registrar %}
+      <a class="topnav-link topnav-admin{{ ' is-current' if ep == 'family.registrar_dashboard' }}" href="{{ url_for('family.registrar_dashboard') }}">Registrar</a>
+      {% endif %}
+      {% endif %}
+      <span class="topnav-sep" aria-hidden="true"></span>
+      <span class="topnav-user" title="Signed in as {{ current_user.email }}">{{ current_user.name }}</span>
+      <a class="topnav-link{{ ' is-current' if ep == 'auth.account' }}" href="{{ url_for('auth.account') }}"{% if ep == 'auth.account' %} aria-current="page"{% endif %}>Account</a>
+      <a class="btn btn-ghost btn-sm" href="{{ url_for('auth.logout') }}">Log out</a>
+    </nav>
+
+    <div class="topbar-tools">
       <div class="notif" id="notif-root" data-feed="{{ url_for('notifications.feed') }}">
         <button type="button" class="notif-bell" id="notif-bell" aria-label="Notifications" aria-expanded="false" title="Notifications">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
@@ -63,20 +75,24 @@
           <button type="button" class="notif-link notif-desktop" id="notif-desktop" hidden>Turn on desktop alerts</button>
         </div>
       </div>
-      <span class="topnav-user">{{ current_user.name }}</span>
-      <a class="topnav-link" href="{{ url_for('auth.account') }}">Account</a>
-      <a class="btn btn-ghost btn-sm" href="{{ url_for('auth.logout') }}">Log out</a>
-    </nav>
+      <button type="button" class="nav-toggle" id="nav-toggle" aria-expanded="false" aria-controls="site-nav">
+        <span class="nav-toggle-bars" aria-hidden="true"></span>
+        <span class="nav-toggle-label">Menu</span>
+      </button>
+    </div>
   </header>
   {% endif %}
   {% endblock %}
 
-  <main class="page {% block page_class %}{% endblock %}">
+  <main class="page {% block page_class %}{% endblock %}" id="main">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         <div class="flash-stack">
           {% for category, message in messages %}
-            <div class="flash flash-{{ category }}">{{ message }}</div>
+            <div class="flash flash-{{ category }}" role="{{ 'alert' if category == 'error' else 'status' }}">
+              <span>{{ message }}</span>
+              <button type="button" class="flash-close" aria-label="Dismiss message">&times;</button>
+            </div>
           {% endfor %}
         </div>
       {% endif %}
@@ -93,6 +109,7 @@
   {% endblock %}
   <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
   <script src="{{ url_for('static', filename='js/localtime.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
   {% if current_user.is_authenticated %}<script src="{{ url_for('static', filename='js/notifications.js') }}"></script>{% endif %}
   {% block scripts %}{% endblock %}
 </body>

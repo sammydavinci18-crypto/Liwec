@@ -39,7 +39,9 @@
     <div class="appt-actions">
       <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.placements', class_id=c.id) }}">Students</a>
       <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.timetable', class_id=c.id) }}">Timetable</a>
-      <form method="POST" action="{{ url_for('admin.class_toggle', class_id=c.id) }}">
+      <form method="POST" action="{{ url_for('admin.class_toggle', class_id=c.id) }}"
+            {% if c.is_active %}data-confirm="Archived classes are hidden from pickers. Students and lessons already in it are not deleted; you can restore it any time."
+            data-confirm-title="Archive {{ c.name }}?" data-confirm-action="Archive"{% endif %}>
         <button type="submit" class="btn btn-ghost btn-sm">{{ 'Restore' if not c.is_active else 'Archive' }}</button>
       </form>
     </div>

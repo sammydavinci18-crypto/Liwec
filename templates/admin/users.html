@@ -22,8 +22,9 @@
 
 <form method="GET" class="user-search-form">
   <input type="hidden" name="category" value="{{ category }}">
-  <input type="text" name="q" value="{{ q }}" placeholder="Search by name or email…">
+  <input type="text" name="q" value="{{ q }}" placeholder="Search by name or email…" aria-label="Search users by name or email">
   <button type="submit" class="btn btn-ghost btn-sm">Search</button>
+  {% if q %}<a class="search-clear" href="{{ url_for('admin.users', category=category) }}">Clear search</a>{% endif %}
 </form>
 
 <div class="appointment-list">

@@ -44,7 +44,9 @@
       <form method="POST" action="{{ url_for('admin.teacher_approve', profile_id=profile.id) }}">
         <button type="submit" class="btn btn-primary btn-block">Approve</button>
       </form>
-      <form method="POST" action="{{ url_for('admin.teacher_reject', profile_id=profile.id) }}" class="reject-form">
+      <form method="POST" action="{{ url_for('admin.teacher_reject', profile_id=profile.id) }}" class="reject-form"
+            data-confirm="The applicant will see your reason, if you gave one."
+            data-confirm-title="Reject this application?" data-confirm-action="Reject application" data-confirm-tone="danger">
         <div class="field">
           <label for="review_note">Rejection reason (shown to the teacher)</label>
           <textarea id="review_note" name="review_note" rows="3"></textarea>
