@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_guest_link.html" import button as guest_link_button %}
 {% block title %}{{ 'Dashboard' if current_user.is_admin else 'My sessions' }} · Light-Way{% endblock %}
 
 {% block content %}
@@ -11,11 +12,14 @@
     {% if m.status == 'live' %}· <strong>Live now</strong>{% endif %}
   </span>
   {% if show_host %}<span class="meta">With {{ m.host.name }}</span>{% endif %}
-  {% if m.host_id == current_user.id %}<span class="meta">{{ m.invites|length }} guest{{ '' if m.invites|length == 1 else 's' }} on the list</span>{% endif %}
-  <a href="{{ url_for('meetings.room', room_code=m.room_code) }}" class="btn btn-primary btn-sm">
-    {% if m.host_id == current_user.id %}{% if m.status == 'live' %}Return to room{% else %}Start session{% endif %}
-    {% else %}Enter waiting room{% endif %}
-  </a>
+  {% if m.host_id == current_user.id and m.invites %}<span class="meta">{{ m.invites|length }} invited by name</span>{% endif %}
+  <div class="appt-actions">
+    {% if m.host_id == current_user.id %}{{ guest_link_button(m) }}{% endif %}
+    <a href="{{ url_for('meetings.room', room_code=m.room_code) }}" class="btn btn-primary btn-sm">
+      {% if m.host_id == current_user.id %}{% if m.status == 'live' %}Return to room{% else %}Start session{% endif %}
+      {% else %}Enter waiting room{% endif %}
+    </a>
+  </div>
 </div>
 {% endmacro %}
 {% if current_user.is_admin %}
@@ -47,38 +51,24 @@
 </section>
 {% endif %}
 
+{% if pending_requests_count %}
 <div class="section-label">Needs your attention</div>
 <div class="attention-grid">
-  <a class="attention-card {{ 'is-hot' if pending_requests_count else 'is-clear' }}" href="{{ url_for('admin.requests_queue') }}">
+  <a class="attention-card is-hot" href="{{ url_for('admin.requests_queue') }}">
     <span class="attention-num">{{ pending_requests_count }}</span>
     <span class="attention-label">Consultation &amp; meeting requests</span>
   </a>
-  <a class="attention-card {{ 'is-hot' if pending_students_count else 'is-clear' }}" href="{{ url_for('admin.student_queue') }}">
-    <span class="attention-num">{{ pending_students_count }}</span>
-    <span class="attention-label">Student applications to review</span>
-  </a>
-  <a class="attention-card {{ 'is-hot' if pending_teachers_count else 'is-clear' }}" href="{{ url_for('admin.teacher_queue') }}">
-    <span class="attention-num">{{ pending_teachers_count }}</span>
-    <span class="attention-label">Teacher applications to review</span>
-  </a>
-  <a class="attention-card {{ 'is-hot' if unplaced_count else 'is-clear' }}" href="{{ url_for('admin.placements') }}">
-    <span class="attention-num">{{ unplaced_count }}</span>
-    <span class="attention-label">Approved students awaiting a teacher</span>
-  </a>
-  <a class="attention-card {{ 'is-hot' if unclassed_count else 'is-clear' }}" href="{{ url_for('admin.placements', class_id=-1) }}">
-    <span class="attention-num">{{ unclassed_count }}</span>
-    <span class="attention-label">Students with no class yet</span>
-  </a>
 </div>
-{% if not attention_total %}<p class="meta">&#10003; All caught up. Nothing is waiting for you.</p>{% endif %}
+{% else %}
+<p class="meta">&#10003; Nothing is waiting for you.</p>
+{% endif %}
 
 <details class="guide-card" style="margin-top: 20px;">
-  <summary>How the school runs: from application to first lesson</summary>
+  <summary>How a lesson runs</summary>
   <ol class="guide-steps">
-    <li><a href="{{ url_for('admin.student_queue') }}">Review applications</a><small>Approve students and teachers. Students can be given a class as you approve them.</small></li>
-    <li><a href="{{ url_for('admin.classes') }}">Set up classes</a><small>Year groups such as Year 7 or Bridging. Every student needs one.</small></li>
-    <li><a href="{{ url_for('admin.placements') }}">Place students with teachers</a><small>A student sees only the lessons of their class and teacher.</small></li>
-    <li><a href="{{ url_for('admin.timetable_new') }}">Add lessons to the timetable</a><small>Teachers open the room and admit students. You can observe any live lesson.</small></li>
+    <li><a href="{{ url_for('admin.timetable_new') }}">Add it to the timetable</a><small>Pick the class, teacher, subject and time. Repeat it weekly if you like.</small></li>
+    <li><a href="{{ url_for('admin.timetable') }}">The teacher starts it and shares the student link</a><small>Students open the link, type their name and join. No accounts.</small></li>
+    <li><a href="{{ url_for('admin.recordings') }}">Review the recording</a><small>Every lesson is recorded automatically. You can also observe a live lesson unseen.</small></li>
   </ol>
 </details>
 
@@ -106,8 +96,9 @@
         <span class="meta">
           {{ m.scheduled_time|dt }} · {{ m.status|capitalize }}
         </span>
-        <span class="meta">{{ m.invites|length }} guest{{ '' if m.invites|length == 1 else 's' }} invited</span>
+        {% if m.invites %}<span class="meta">{{ m.invites|length }} invited by name</span>{% endif %}
         <div class="appt-actions">
+          {{ guest_link_button(m) }}
           <a href="{{ url_for('meetings.room', room_code=m.room_code) }}" class="btn btn-primary btn-sm">
             {{ 'Return to room' if m.status == 'live' else 'Open room' }}
           </a>
@@ -128,7 +119,7 @@
         <h3>{{ m.title }}</h3>
         <span class="code">{{ m.type_label() }}{% if m.school_class %} · {{ m.school_class.name }}{% endif %}{% if m.subject %} · {{ m.subject }}{% endif %}</span>
         <span class="meta">{{ m.scheduled_time|dt }} · {{ m.status|capitalize }}</span>
-        <span class="meta">Hosted by {{ m.host.name }} · {{ m.invites|length }} guest{{ '' if m.invites|length == 1 else 's' }}</span>
+        <span class="meta">Hosted by {{ m.host.name }}</span>
         <div class="appt-actions">
           {% if m.status == 'live' %}<a href="{{ url_for('meetings.observe', room_code=m.room_code) }}" class="btn btn-primary btn-sm" title="Watch and listen without being seen">Observe</a>{% endif %}
           <a href="{{ url_for('admin.meeting_detail', meeting_id=m.id) }}" class="btn btn-ghost btn-sm">Manage</a>
@@ -144,13 +135,24 @@
 <div class="section-label">Quick actions</div>
 <div class="quick-actions">
   <a class="quick-action" href="{{ url_for('admin.timetable_new') }}">Add a lesson<small>Class timetable, hosted by a teacher</small></a>
-  <a class="quick-action" href="{{ url_for('admin.classes') }}">Classes<small>Year groups and Bridging</small></a>
   <a class="quick-action" href="{{ url_for('admin.new_meeting') }}">Schedule a session<small>Consultation, meeting or teacher session</small></a>
-  <a class="quick-action" href="{{ url_for('admin.announcements') }}">Post an announcement<small>Notices and calendar dates</small></a>
-  <a class="quick-action" href="{{ url_for('admin.placements') }}">Place a student<small>Match with a teacher</small></a>
-  <a class="quick-action" href="{{ url_for('admin.users') }}">All users<small>Accounts and roles</small></a>
-  <a class="quick-action" href="{{ url_for('family.registrar_dashboard') }}">Parent links<small>Confirm family links</small></a>
+  <a class="quick-action" href="{{ url_for('admin.recordings') }}">Recordings<small>Review finished lessons</small></a>
+  <a class="quick-action" href="{{ url_for('admin.requests_queue') }}">Consultation requests<small>Approve or decline</small></a>
 </div>
+
+<details class="guide-card more-tools" style="margin-top: 28px;">
+  <summary>Other school tools (set aside for now)</summary>
+  <p class="meta" style="margin:8px 0 12px;">Students and their records now live on another platform, so none of this is needed to run lessons. It is all still here if you want it again.</p>
+  <div class="quick-actions">
+    <a class="quick-action" href="{{ url_for('admin.student_queue') }}">Student applications{% if pending_students_count %} ({{ pending_students_count }}){% endif %}<small>Review and approve</small></a>
+    <a class="quick-action" href="{{ url_for('admin.teacher_queue') }}">Teacher applications{% if pending_teachers_count %} ({{ pending_teachers_count }}){% endif %}<small>Approve teachers</small></a>
+    <a class="quick-action" href="{{ url_for('admin.classes') }}">Classes<small>Year groups and Bridging</small></a>
+    <a class="quick-action" href="{{ url_for('admin.placements') }}">Placements<small>Match students with teachers</small></a>
+    <a class="quick-action" href="{{ url_for('admin.users') }}">All users<small>Accounts and roles</small></a>
+    <a class="quick-action" href="{{ url_for('family.registrar_dashboard') }}">Parent links<small>Confirm family links</small></a>
+    <a class="quick-action" href="{{ url_for('admin.announcements') }}">Announcements<small>Notices and calendar dates</small></a>
+  </div>
+</details>
 
 {% else %}
 <div class="dash-head">

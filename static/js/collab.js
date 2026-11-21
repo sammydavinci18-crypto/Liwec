@@ -1,6 +1,9 @@
 document.addEventListener("DOMContentLoaded", () => {
   const socket = window._socket;
   const { roomCode, isHost, userName } = window.ROOM_CONFIG;
+  // Where "leave / ended / removed" sends this person: their dashboard, or for a
+  // guest who came in by the share link, back to that link's page.
+  const HOME = window.ROOM_CONFIG.homeUrl || "/dashboard";
 
   /* =========================================================
      Waiting room / lobby
@@ -23,7 +26,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <div class="waiting-box">
           <h3>Access denied</h3>
           <p>The host didn't admit you to this session.</p>
-          <a class="btn btn-primary btn-sm" href="/dashboard">Back to dashboard</a>
+          <a class="btn btn-primary btn-sm" href="${HOME}">${window.ROOM_CONFIG.isGuest ? "Back" : "Back to dashboard"}</a>
         </div>`;
       waitingOverlay.classList.add("show");
     }
@@ -65,6 +68,11 @@ document.addEventListener("DOMContentLoaded", () => {
   if (isHost) {
     window.addEventListener("join-request", (e) => {
       pendingRequests.set(e.detail.sid, e.detail.name);
+      renderPendingList();
+    });
+    // A waiting guest was let in automatically: drop them from the waiting list.
+    window.addEventListener("join-request-cleared", (e) => {
+      pendingRequests.delete(e.detail.sid);
       renderPendingList();
     });
   }
@@ -275,7 +283,7 @@ document.addEventListener("DOMContentLoaded", () => {
   socket.on("removed_by_host", () => {
     window.__sessionOver = true;
     alert("The host has removed you from this meeting.");
-    window.location.href = "/dashboard";
+    window.location.href = HOME;
   });
 
   // The admin ended the session — everyone (including the lobby) goes home.
@@ -283,7 +291,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (isHost) return; // the host's own End button handles its redirect
     window.__sessionOver = true;
     alert("The host has ended this session.");
-    window.location.href = "/dashboard";
+    window.location.href = HOME;
   });
 
   // Teacher is told when a student leaves / returns to the lesson screen.
@@ -308,14 +316,14 @@ document.addEventListener("DOMContentLoaded", () => {
         if (window.stopRecordingAndWait) await window.stopRecordingAndWait();
         const res = await fetch(`/room/${roomCode}/end`, { method: "POST" });
         const data = await res.json();
-        window.location.href = data.redirect || "/dashboard";
+        window.location.href = data.redirect || HOME;
       } catch (err) {
-        window.location.href = "/dashboard";
+        window.location.href = HOME;
       }
     } else {
       window.__sessionOver = true;
       alert("This call has reached its time limit and the host is ending it now.");
-      window.location.href = "/dashboard";
+      window.location.href = HOME;
     }
   });
 

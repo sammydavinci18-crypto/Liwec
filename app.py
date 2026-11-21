@@ -11,6 +11,7 @@ from models import (
     Announcement, ProgressReport,
     TeacherProfile, TeacherVerificationDocument, ParentStudentLink,
     StudentProfile, StudentVerificationDocument, StudentTeacherAssignment, SchoolClass,
+    MeetingGuest,
 )  # noqa: F401
 # ^ every model is imported explicitly (not just User) so db.create_all()
 #   below actually knows about every table, not just whichever one
@@ -204,9 +205,32 @@ def _start_recording_cleanup_thread(app, interval_seconds=3600):
     threading.Thread(target=loop, daemon=True).start()
 
 
+def _backfill_guest_tokens(app):
+    """Every session gets a student link. Sessions created before this feature
+    existed have no token yet; give them one so their links work too."""
+    from models import generate_guest_token
+    with app.app_context():
+        try:
+            missing = Meeting.query.filter(Meeting.guest_token.is_(None)).all()
+            for m in missing:
+                m.guest_token = generate_guest_token()
+            if missing:
+                db.session.commit()
+                print(f"[startup] Gave {len(missing)} session(s) a student link.", file=sys.stderr)
+        except Exception as exc:
+            db.session.rollback()
+            print(f"[startup] Student-link backfill skipped (non-fatal): {exc}", file=sys.stderr)
+
+
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+
+    # Behind Render's proxy the app would otherwise build http:// links; the
+    # student link must come out as https://your-site/join/... so it works when
+    # pasted anywhere. (No effect when the proxy headers are absent, e.g. local dev.)
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     db.init_app(app)
     migrate.init_app(app, db)
@@ -255,6 +279,12 @@ def create_app():
             db.session.rollback()
         return counts
 
+    @app.template_global("guest_link")
+    def guest_link(meeting):
+        """The full student link for a session ('' if it has none)."""
+        from flask import url_for
+        return url_for("guest.join", token=meeting.guest_token, _external=True) if meeting.guest_token else ""
+
     @app.template_filter("dt")
     def format_datetime(value):
         """Portable date/time display (the platform stores and shows UTC)."""
@@ -277,6 +307,7 @@ def create_app():
     from routes.family import family_bp
     from routes.students import students_bp
     from routes.notifications import notifications_bp
+    from routes.guest import guest_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
@@ -289,6 +320,7 @@ def create_app():
     app.register_blueprint(family_bp)
     app.register_blueprint(students_bp)
     app.register_blueprint(notifications_bp)
+    app.register_blueprint(guest_bp)
 
     # Registers the Socket.IO event handlers defined in sockets.py
     import sockets  # noqa: F401
@@ -312,6 +344,7 @@ def create_app():
             db.session.rollback()
             print(f"[startup] Default classes not seeded (non-fatal): {exc}", file=sys.stderr)
 
+    _backfill_guest_tokens(app)
     _seed_admin_from_env(app)
     _start_recording_cleanup_thread(app)
 

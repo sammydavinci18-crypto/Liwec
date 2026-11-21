@@ -1,10 +1,10 @@
-from flask import request, current_app
+from flask import request, current_app, session
 from flask_login import current_user
 from flask_socketio import join_room, leave_room, emit
 from datetime import datetime
 
 from extensions import socketio, db
-from models import Meeting, MeetingParticipant
+from models import Meeting, MeetingParticipant, MeetingGuest
 
 # Tracks which socket id belongs to which (room_code, user) so we can
 # tell everyone else in the room when someone disconnects.
@@ -36,6 +36,10 @@ OBSERVERS = {}
 WHITEBOARD = {}
 MAX_WHITEBOARD_OPS = 20000
 
+# Sockets that belong to people who came in through a lesson's share link (no
+# account). sid -> MeetingGuest id.
+GUEST_SIDS = {}
+
 # sid -> when a student left the lesson screen (switched tab / left full screen).
 AWAY_SINCE = {}
 
@@ -43,6 +47,53 @@ AWAY_SINCE = {}
 # scheduling a duplicate if the host's client re-emits "join" (e.g. a
 # reconnect) partway through a call.
 TIMED_ROOMS = set()
+
+
+def connected_guest_count(room_code):
+    return sum(1 for s, info in CONNECTED.items()
+               if info["room_code"] == room_code and info.get("guest_id"))
+
+
+def emit_to_members(room_code, event, data):
+    """Send to everyone in the room who has an account. Guests who came in
+    through the share link are skipped (used for private things like notes)."""
+    for sid, info in list(CONNECTED.items()):
+        if info["room_code"] == room_code and not info.get("guest_id"):
+            socketio.emit(event, data, room=sid)
+
+
+def _guest_identity(room_code, meeting):
+    """The MeetingGuest behind this socket (registered through /join/<token> in
+    this browser), or None. People who already belong through an account use
+    the normal path instead."""
+    if meeting is None or meeting.status in ("ended", "cancelled"):
+        return None
+    gid = (session.get("guests") or {}).get(room_code)
+    if not gid:
+        return None
+    if current_user.is_authenticated and meeting.entry_state(current_user) in ("host", "ok"):
+        return None
+    guest = MeetingGuest.query.get(gid)
+    if not guest or guest.meeting_id != meeting.id or guest.removed_at:
+        return None
+    return guest
+
+
+def admit_waiting_guests(room_code):
+    """Let every waiting link-guest in (used when the host arrives, or switches
+    to 'let guests in automatically'). Needs the host to be in the room: guests
+    never run ahead of their teacher."""
+    if not _host_sid_for_room(room_code):
+        return
+    for sid in list(WAITING.get(room_code, {})):
+        if sid in GUEST_SIDS:
+            WAITING[room_code].pop(sid, None)
+            ADMITTED.setdefault(room_code, set()).add(sid)
+            socketio.emit("join_approved", {}, room=sid)
+            # Tell the host the 'waiting' request is resolved.
+            host_sid = _host_sid_for_room(room_code)
+            if host_sid:
+                socketio.emit("join_request_cleared", {"sid": sid}, room=host_sid)
 
 
 def _host_sid_for_room(room_code):
@@ -101,6 +152,16 @@ def _open_participant(meeting_id, user_id):
     )
 
 
+def _attendance_row(info):
+    """The attendance row for a connected socket: a MeetingGuest for a link
+    guest, otherwise the open MeetingParticipant row. Both carry
+    away_count / away_seconds / left_at."""
+    if info.get("guest_id"):
+        return MeetingGuest.query.get(info["guest_id"])
+    meeting = Meeting.query.filter_by(room_code=info["room_code"]).first()
+    return _open_participant(meeting.id, info["user_id"]) if meeting else None
+
+
 def _close_away(sid, row):
     """A student is back (or gone): add the time they were away to their row."""
     since = AWAY_SINCE.pop(sid, None)
@@ -116,15 +177,31 @@ def _may_be_here(meeting, user):
 
 @socketio.on("request_to_join")
 def handle_request_to_join(data):
-    """First thing a client does on page load. The admin host is let in
-    straight away. Every guest waits for the admin to admit them — including
-    when the admin hasn't arrived yet (guests queue up and the admin sees
-    them the moment they open the room). Nobody is ever auto-admitted."""
+    """First thing a client does on page load. The host is let in straight
+    away. Account holders wait for the host to admit them. Guests who came in
+    through the share link are admitted automatically (the default) once the
+    host is in the room, or wait to be admitted if the host turned that off."""
     room_code = data.get("room_code")
-    if not current_user.is_authenticated:
+    meeting = Meeting.query.filter_by(room_code=room_code).first()
+
+    guest = None if data.get("observe") else _guest_identity(room_code, meeting)
+    if guest:
+        sid = request.sid
+        GUEST_SIDS[sid] = guest.id
+        host_sid = _host_sid_for_room(room_code)
+        if meeting.guest_auto_admit and host_sid:
+            ADMITTED.setdefault(room_code, set()).add(sid)
+            emit("join_approved", {})
+            return
+        WAITING.setdefault(room_code, {})[sid] = guest.name
+        emit("waiting_for_host", {})
+        # With auto-admit on and no host yet, they are let in the moment the host arrives.
+        if host_sid and not meeting.guest_auto_admit:
+            emit("join_request", {"sid": sid, "name": guest.name}, room=host_sid)
         return
 
-    meeting = Meeting.query.filter_by(room_code=room_code).first()
+    if not current_user.is_authenticated:
+        return
 
     if data.get("observe"):
         # Silent oversight: straight in, no lobby, nobody is told.
@@ -195,24 +272,30 @@ def handle_deny_participant(data):
 @socketio.on("join")
 def handle_join(data):
     room_code = data.get("room_code")
-    if not current_user.is_authenticated:
-        return
-
     meeting = Meeting.query.filter_by(room_code=room_code).first()
     sid = request.sid
-    observing = sid in OBSERVERS.get(room_code, set())
 
-    if observing:
+    guest = _guest_identity(room_code, meeting) if sid in GUEST_SIDS else None
+    if guest is None and not current_user.is_authenticated:
+        return
+
+    observing = guest is None and sid in OBSERVERS.get(room_code, set())
+
+    if guest:
+        pass  # checked in _guest_identity
+    elif observing:
         if not _may_observe(meeting, current_user):
             return
     elif not _may_be_here(meeting, current_user):
         return
 
-    is_host = (not observing) and meeting.is_hosted_by(current_user)
+    is_host = guest is None and (not observing) and meeting.is_hosted_by(current_user)
 
-    # Must have been through the lobby (admitted by the host) — or be an admin observer.
+    # Must have been through the lobby (admitted) — or be an admin observer.
     if sid not in ADMITTED.get(room_code, set()):
         return
+
+    name = guest.name if guest else current_user.name
 
     # Observers are invisible: never listed to anyone as a peer.
     existing_peers = [
@@ -223,13 +306,20 @@ def handle_join(data):
 
     CONNECTED[sid] = {
         "room_code": room_code,
-        "user_id": current_user.id,
-        "name": current_user.name,
+        "user_id": None if guest else current_user.id,
+        "guest_id": guest.id if guest else None,
+        "name": name,
         "is_host": is_host,
         "observer": observing,
     }
 
     join_room(room_code)
+
+    if guest:
+        if not guest.entered_at:
+            guest.entered_at = datetime.utcnow()
+        guest.left_at = None
+        db.session.commit()
 
     # Whoever arrives (guest, observer, or the host reloading) sees the current board.
     board = WHITEBOARD.get(room_code)
@@ -261,13 +351,16 @@ def handle_join(data):
     emit("existing_peers", {"peers": existing_peers, "recording": RECORDING.get(room_code, False)})
     emit(
         "peer_joined",
-        {"sid": sid, "name": current_user.name, "is_host": is_host},
+        {"sid": sid, "name": name, "is_host": is_host},
         room=room_code,
         include_self=False,
     )
 
-    # Guests who arrived before the admin are queued — show them to the admin now.
+    # People who arrived before the host are queued. Link guests walk in if the
+    # host allows it; everyone else is shown to the host to admit or deny.
     if is_host:
+        if meeting.guest_auto_admit:
+            admit_waiting_guests(room_code)
         for waiting_sid, waiting_name in WAITING.get(room_code, {}).items():
             emit("join_request", {"sid": waiting_sid, "name": waiting_name})
 
@@ -387,7 +480,7 @@ def handle_attendance_away(data):
         return
 
     away = bool(data.get("away"))
-    row = _open_participant(meeting.id, info["user_id"])
+    row = _attendance_row(info)
     if away and sid not in AWAY_SINCE:
         AWAY_SINCE[sid] = datetime.utcnow()
         if row:
@@ -532,6 +625,13 @@ def handle_host_remove_participant(data):
         return
     # Removed guests lose their admission and must be let in again by the admin.
     ADMITTED.get(room_code, set()).discard(target_sid)
+    gid = GUEST_SIDS.get(target_sid)
+    if gid:
+        # A removed link guest can't simply click the link again.
+        removed = MeetingGuest.query.get(gid)
+        if removed and removed.meeting_id == meeting.id:
+            removed.removed_at = datetime.utcnow()
+            db.session.commit()
     emit("removed_by_host", {}, room=target_sid)
 
 
@@ -548,6 +648,8 @@ def handle_disconnect():
         pending.pop(sid, None)
     for admitted in ADMITTED.values():
         admitted.discard(sid)
+
+    GUEST_SIDS.pop(sid, None)
 
     info = CONNECTED.pop(sid, None)
     if not info:
@@ -566,6 +668,14 @@ def handle_disconnect():
 
     if info["is_host"]:
         RECORDING.pop(room_code, None)
+
+    if info.get("guest_id"):
+        row = MeetingGuest.query.get(info["guest_id"])
+        if row:
+            _close_away(sid, row)
+            row.left_at = datetime.utcnow()
+            db.session.commit()
+        return
 
     if not info["is_host"]:
         meeting = Meeting.query.filter_by(room_code=room_code).first()

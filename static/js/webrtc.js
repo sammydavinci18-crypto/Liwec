@@ -88,6 +88,10 @@ socket.on("join_request", (data) => {
   window.dispatchEvent(new CustomEvent("join-request", { detail: data }));
 });
 
+socket.on("join_request_cleared", (data) => {
+  window.dispatchEvent(new CustomEvent("join-request-cleared", { detail: data }));
+});
+
 function createPeerConnection(targetSid, meta) {
   const pc = new RTCPeerConnection(ICE_SERVERS);
   peerConnections[targetSid] = pc;

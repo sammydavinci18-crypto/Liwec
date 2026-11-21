@@ -134,6 +134,11 @@ class Config:
     CALL_LIMIT_MINUTES = int(os.environ.get("CALL_LIMIT_MINUTES", 0))
     RECORDING_RETENTION_DAYS = int(os.environ.get("RECORDING_RETENTION_DAYS", 90))
 
+    # Most people who may be in one lesson at once through the student link
+    # (0 = no limit). Calls are peer-to-peer, so every extra camera makes every
+    # browser in the room work harder; see README "Class size".
+    GUEST_LIMIT = int(os.environ.get("GUEST_LIMIT", 30))
+
     # NAT-traversal servers the browsers use to find each other for video.
     # Comma-separated. The default is a free public STUN server; for a fully
     # self-hosted setup run your own coturn and list it here, e.g.

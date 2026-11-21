@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Recordings · Admin · Light-Way{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Admin</span>
+    <h1>Recordings</h1>
+    <p>Every lesson and session is recorded automatically from the moment its host enters the room. Review them here.{% if config.RECORDING_RETENTION_DAYS %} Recordings are kept for {{ config.RECORDING_RETENTION_DAYS }} days.{% else %} Recordings are kept until deleted.{% endif %}</p>
+  </div>
+</div>
+
+{% if stuck %}
+<section class="live-banner" aria-label="Sessions that need closing">
+  <div class="live-banner-head">Needs closing ({{ stuck|length }})</div>
+  <p class="meta" style="margin:0 0 8px;">These sessions still say "live" but their host is no longer connected (closed the tab or lost connection without pressing End). Close them so the recording is saved. If the host is just reconnecting, give them a minute first.</p>
+  {% for m in stuck %}
+  <div class="live-row">
+    <div><strong>{{ m.title }}</strong><small>{{ m.type_label() }} · Host: {{ m.host.name }} · {{ m.scheduled_time|dt }}</small></div>
+    <form method="POST" action="{{ url_for('admin.meeting_force_end', meeting_id=m.id) }}"
+          data-confirm="Everyone is disconnected and what was recorded is saved."
+          data-confirm-title="Close this session?" data-confirm-action="Close and save recording" data-confirm-tone="danger">
+      <button type="submit" class="btn btn-primary btn-sm">Close &amp; save recording</button>
+    </form>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+<h3 class="section-heading">Finished sessions ({{ ended|length }})</h3>
+{% if ended %}
+<div class="appointment-list">
+  {% for m in ended %}
+  {% set st = state(m) %}
+  <div class="appointment-row">
+    <div>
+      <strong>{{ m.title }}</strong>
+      <span class="appt-time">{{ m.type_label() }}{% if m.school_class %} · <span class="class-pill">{{ m.school_class.name }}</span>{% endif %}{% if m.subject %} · {{ m.subject }}{% endif %} · {{ m.scheduled_time|dt }}</span>
+      <span class="appt-time">Host: {{ m.host.name }} · {{ came(m) }} attended{% if m.call_started_at and m.ended_at %} · {{ ((m.ended_at - m.call_started_at).total_seconds() // 60)|int }} min{% endif %}</span>
+    </div>
+    <div class="appt-actions">
+      {% if st == 'ready' %}
+        <span class="status-pill status-approved">Saved</span>
+        <a class="btn btn-primary btn-sm" href="{{ url_for('meetings.room', room_code=m.room_code) }}">Watch</a>
+      {% elif st == 'expired' %}
+        <span class="status-pill status-cancelled">Expired</span>
+      {% else %}
+        <span class="status-pill status-cancelled" title="The session ended but no recording reached the server.">No recording</span>
+      {% endif %}
+      <a class="btn btn-ghost btn-sm" href="{{ url_for('admin.meeting_detail', meeting_id=m.id) }}">Details</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">No finished sessions yet. Recordings appear here as soon as a lesson ends.</div>
+{% endif %}
+{% endblock %}

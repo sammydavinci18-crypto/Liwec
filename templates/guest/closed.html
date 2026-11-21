@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}{{ meeting.title if meeting else 'Lesson link' }} · Light-Way{% endblock %}
+{% block page_class %}auth-page{% endblock %}
+{% block themetoggle %}{% endblock %}
+{% block head %}
+{% if state == 'early' %}<meta http-equiv="refresh" content="30">{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="auth-card">
+  <img src="{{ url_for('static', filename='img/logo-crest-small.png') }}" alt="" class="guest-crest">
+  {% if state == 'early' %}
+    <span class="auth-eyebrow">Not open yet</span>
+    <h1>{{ meeting.title }}</h1>
+    <p class="sub">This lesson starts <strong>{{ meeting.scheduled_time|dt }}</strong>. The room opens 15 minutes before. This page checks again by itself, so you can leave it open.</p>
+  {% elif state == 'ended' %}
+    <span class="auth-eyebrow">Finished</span>
+    <h1>{{ meeting.title }}</h1>
+    <p class="sub">This lesson has ended. Thank you for joining.</p>
+  {% elif state == 'cancelled' %}
+    <span class="auth-eyebrow">Cancelled</span>
+    <h1>{{ meeting.title }}</h1>
+    <p class="sub">This lesson was cancelled. Please ask your teacher for the new details.</p>
+  {% elif state == 'closed' %}
+    <span class="auth-eyebrow">Link closed</span>
+    <h1>{{ meeting.title }}</h1>
+    <p class="sub">Your teacher has closed this link to new people. Ask them to send it again or let you in.</p>
+  {% elif state == 'full' %}
+    <span class="auth-eyebrow">Lesson full</span>
+    <h1>{{ meeting.title }}</h1>
+    <p class="sub">This lesson has reached its limit of people. Please tell your teacher.</p>
+  {% elif state == 'removed' %}
+    <span class="auth-eyebrow">Not allowed in</span>
+    <h1>{{ meeting.title }}</h1>
+    <p class="sub">Your teacher has removed you from this lesson. Please speak to them if this is a mistake.</p>
+  {% else %}
+    <span class="auth-eyebrow">Link not found</span>
+    <h1>This link doesn't work</h1>
+    <p class="sub">It may have been replaced by a newer one. Ask your teacher to send you the latest link.</p>
+  {% endif %}
+</div>
+{% endblock %}

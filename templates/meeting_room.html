@@ -13,6 +13,8 @@
   <div class="room-header-right">
     {% if is_observer %}
     <span class="observer-notice" title="Only you can see this. Nobody in the session is told you are here.">&#128065; Observing &middot; unseen</span>
+    {% elif is_guest and not attendance_required %}
+    {# Guests have no dashboard to go back to; they use the Leave button below. #}
     {% elif not attendance_required %}
     <a class="btn btn-ghost btn-sm" href="{{ url_for('main.dashboard') }}" onclick="return confirm('Leave this session and go back to your dashboard?');">&larr; Back to dashboard</a>
     {% else %}
@@ -68,6 +70,9 @@
   <button class="ctrl-btn" id="btn-whiteboard" title="Open the whiteboard">
     <span class="icon" data-icon="whiteboard"></span><span class="ctrl-label">Whiteboard</span>
   </button>
+  <button class="ctrl-btn" id="btn-invite" title="Copy the link students use to join">
+    <span class="icon" data-icon="users"></span><span class="ctrl-label">Invite</span>
+  </button>
   {% endif %}
   <button class="ctrl-btn" id="btn-enlarge" title="Enlarge the shared screen" hidden>
     <span class="icon" data-icon="enlarge"></span><span class="ctrl-label">Enlarge</span>
@@ -96,7 +101,7 @@
     <span class="icon" data-icon="users"></span><span class="ctrl-label">People</span>
     <span class="badge-count" id="pending-count" style="display:none;">0</span>
   </button>
-  <button class="ctrl-btn notes-toggle" id="btn-notes" title="Session notes">
+  <button class="ctrl-btn notes-toggle" id="btn-notes" title="Session notes"{% if is_guest %} style="display:none"{% endif %}>
     <span class="icon" data-icon="notes"></span><span class="ctrl-label">Notes</span>
     <span class="badge-count" id="notes-unread" style="display:none;">0</span>
   </button>
@@ -175,12 +180,40 @@
 <div class="waiting-overlay" id="waiting-overlay">
   <div class="waiting-box">
     <h3>You're in the waiting room…</h3>
+    {% if is_guest and meeting.guest_auto_admit %}
+    <p>Waiting for {{ meeting.host.name }} to start the lesson. Keep this page open — you'll join automatically.</p>
+    {% else %}
     <p>{{ meeting.host.name }} will let you in shortly. You'll join automatically.</p>
+    {% endif %}
   </div>
 </div>
 
+{% if is_host and guest_url %}
+<!-- Invite students: the link they open to join (no account needed). -->
+<div class="notes-panel invite-panel" id="invite-panel" data-url="{{ url_for('meetings.guest_link_settings', room_code=meeting.room_code) }}">
+  <div class="notes-header">
+    <h3>Invite students</h3>
+    <button class="notes-close" id="invite-close" data-icon="close"></button>
+  </div>
+  <div class="invite-body">
+    <p class="invite-help">Send this link to your students. They type their name and join. No account needed.</p>
+    <div class="invite-link-row">
+      <input type="text" id="invite-url" readonly value="{{ guest_url }}" aria-label="Student link">
+      <button class="btn btn-primary btn-sm" id="invite-copy" type="button">Copy</button>
+    </div>
+    <button class="btn btn-ghost btn-sm" id="invite-share" type="button" hidden>Share…</button>
+    <label class="toggle-row"><input type="checkbox" id="invite-auto" {{ 'checked' if meeting.guest_auto_admit }}>
+      <span><strong>Let students in automatically</strong><small>Untick to admit each person yourself.</small></span></label>
+    <label class="toggle-row"><input type="checkbox" id="invite-open" {{ 'checked' if meeting.guest_link_open }}>
+      <span><strong>Link is open</strong><small>Untick to stop anyone new joining with it.</small></span></label>
+    <button class="btn btn-ghost btn-sm" id="invite-new" type="button">Replace with a new link</button>
+    <p class="invite-note" id="invite-status" role="status"></p>
+  </div>
+</div>
+{% endif %}
+
 <!-- Consultation notes side panel -->
-<div class="notes-panel" id="notes-panel">
+<div class="notes-panel" id="notes-panel"{% if is_guest %} style="display:none"{% endif %}>
   <div class="notes-header">
     <h3>Session notes</h3>
     <button class="notes-close" id="notes-close" data-icon="close"></button>
@@ -235,9 +268,11 @@
   window.ROOM_CONFIG = {
     roomCode: {{ meeting.room_code|tojson }},
     isHost: {{ is_host|tojson }},
-    userName: {{ current_user.name|tojson }},
+    userName: {{ viewer_name|tojson }},
     hostName: {{ meeting.host.name|tojson }},
     isObserver: {{ is_observer|tojson }},
+    isGuest: {{ is_guest|tojson }},
+    homeUrl: {{ home_url|tojson }},
     attendanceRequired: {{ attendance_required|tojson }},
     callLimitMinutes: {{ call_limit_minutes|tojson }},
     iceServers: {{ ice_servers|tojson }}
@@ -247,6 +282,7 @@
 <script src="{{ url_for('static', filename='js/webrtc.js') }}"></script>
 {% if is_host %}
 <script src="{{ url_for('static', filename='js/recorder.js') }}"></script>
+<script src="{{ url_for('static', filename='js/invite.js') }}"></script>
 {% endif %}
 {% if attendance_required %}
 <script src="{{ url_for('static', filename='js/attendance.js') }}"></script>

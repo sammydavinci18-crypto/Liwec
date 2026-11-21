@@ -11,6 +11,12 @@ def generate_room_code():
     return secrets.token_urlsafe(6).replace("_", "").replace("-", "")[:8]
 
 
+def generate_guest_token():
+    """The secret in a lesson's shareable student link (/join/<token>).
+    Long and random: knowing the room code is not enough to get in."""
+    return secrets.token_urlsafe(16)
+
+
 class User(UserMixin, db.Model):
     __tablename__ = "users"
 
@@ -144,12 +150,21 @@ class Meeting(db.Model):
 
     school_class = db.relationship("SchoolClass", foreign_keys=[class_id])
 
+    # Shareable student link. Anyone holding /join/<guest_token> can enter by
+    # typing a name (no account). The host can stop new people using it,
+    # choose whether guests walk straight in or wait to be admitted, and
+    # replace the token to kill an old link. Older rows get a token at boot.
+    guest_token = db.Column(db.String(32), unique=True, nullable=True, index=True, default=generate_guest_token)
+    guest_link_open = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+    guest_auto_admit = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+
     # Set when the host actually joins (not when the row is created) — this
     # is what the server-side call-length limit counts from. See sockets.py.
     call_started_at = db.Column(db.DateTime, nullable=True)
     ended_at = db.Column(db.DateTime, nullable=True)
 
     participants = db.relationship("MeetingParticipant", backref="meeting", lazy=True, cascade="all, delete-orphan")
+    guests = db.relationship("MeetingGuest", backref="meeting", lazy=True, cascade="all, delete-orphan")
     notes = db.relationship("ConsultationNote", backref="meeting", lazy=True, cascade="all, delete-orphan")
     invites = db.relationship("MeetingInvite", backref="meeting", lazy=True, cascade="all, delete-orphan")
 
@@ -186,6 +201,24 @@ class Meeting(db.Model):
 
     def is_invited(self, user):
         return bool(user and user.is_authenticated and any(i.user_id == user.id for i in self.invites))
+
+    def guest_link_state(self):
+        """Why/whether a stranger with the share link may come in right now:
+        "ok" | "early" | "ended" | "cancelled" | "closed" | "none".
+        ("early" = before the waiting room opens and the host hasn't started.)"""
+        if not self.guest_token:
+            return "none"
+        if self.status == "cancelled":
+            return "cancelled"
+        if self.status == "ended":
+            return "ended"
+        if not self.guest_link_open:
+            return "closed"
+        if self.status != "live":
+            opens = self.lobby_opens_at()
+            if opens and datetime.utcnow() < opens:
+                return "early"
+        return "ok"
 
     def lobby_opens_at(self):
         if not self.scheduled_time:
@@ -251,6 +284,28 @@ class MeetingParticipant(db.Model):
     away_seconds = db.Column(db.Integer, nullable=False, default=0, server_default="0")
 
     user = db.relationship("User")
+
+
+class MeetingGuest(db.Model):
+    """Someone who came in through the lesson's share link: just a name, no
+    account. Doubles as their attendance row (the same fields an invited
+    user's MeetingParticipant row has), so the admin sees both together."""
+    __tablename__ = "meeting_guests"
+
+    id = db.Column(db.Integer, primary_key=True)
+    meeting_id = db.Column(db.Integer, db.ForeignKey("meetings.id"), nullable=False, index=True)
+    name = db.Column(db.String(60), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    entered_at = db.Column(db.DateTime, nullable=True)   # first time they were actually inside the room
+    left_at = db.Column(db.DateTime, nullable=True)
+    away_count = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    away_seconds = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    # Set when the host removes them; that browser can't come back in.
+    removed_at = db.Column(db.DateTime, nullable=True)
+
+    @property
+    def joined_at(self):
+        return self.entered_at or self.created_at
 
 
 class ConsultationNote(db.Model):

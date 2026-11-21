@@ -92,6 +92,9 @@ def login():
 
         login_user(user, remember=True)
         next_page = request.args.get("next")
+        if not next_page and not user.is_admin and user.is_approved_teacher:
+            # Teachers use this platform to run lessons, so that's where they land.
+            return redirect(url_for("teachers.my_sessions"))
         return redirect(next_page or url_for("main.dashboard"))
 
     return render_template("login.html")

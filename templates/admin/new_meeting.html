@@ -15,7 +15,7 @@
       <legend>1. Who hosts this session?</legend>
       <div class="field">
         <label class="radio-line"><input type="radio" name="host_mode" value="admin" {{ 'checked' if mode != 'teacher' }}> <span><strong>Me</strong> &mdash; a consultation or meeting I run myself</span></label>
-        <label class="radio-line"><input type="radio" name="host_mode" value="teacher" {{ 'checked' if mode == 'teacher' }}> <span><strong>A teacher</strong> &mdash; for that teacher and chosen students or guests (I am not part of it)</span></label>
+        <label class="radio-line"><input type="radio" name="host_mode" value="teacher" {{ 'checked' if mode == 'teacher' }}> <span><strong>A teacher</strong> &mdash; they host it and share a student link (I am not part of it)</span></label>
       </div>
       <div class="field" id="teacher-host-field">
         <label for="host_teacher_id">Teacher (host)</label>

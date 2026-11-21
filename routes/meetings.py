@@ -17,7 +17,7 @@ from flask_login import login_required, current_user
 
 import storage
 from extensions import db, socketio
-from models import Meeting, MeetingParticipant, ConsultationNote, Recording
+from models import Meeting, MeetingParticipant, ConsultationNote, Recording, generate_guest_token
 
 meetings_bp = Blueprint("meetings", __name__)
 
@@ -86,6 +86,11 @@ def room(room_code):
         meeting=meeting,
         is_host=is_host,
         is_observer=False,
+        is_guest=False,
+        viewer_name=current_user.name,
+        home_url=url_for("main.dashboard"),
+        guest_url=(url_for("guest.join", token=meeting.guest_token, _external=True)
+                   if is_host and meeting.guest_token else None),
         attendance_required=(not is_host) and meeting.attendance_required(),
         call_limit_minutes=call_limit_minutes,
         ice_servers=_ice_servers(),
@@ -115,6 +120,9 @@ def observe(room_code):
         meeting=meeting,
         is_host=False,
         is_observer=True,
+        is_guest=False,
+        viewer_name=current_user.name,
+        home_url=url_for("main.dashboard"),
         attendance_required=False,
         call_limit_minutes=current_app.config["CALL_LIMIT_MINUTES"],
         ice_servers=_ice_servers(),
@@ -156,14 +164,17 @@ def notes(room_code):
 
             # Push it to everyone else in the room right away, so people
             # don't have to close/reopen the panel to see new notes.
-            socketio.emit(
+            # Session notes are for account holders only: guests who came in
+            # through the share link never receive them.
+            import sockets
+            sockets.emit_to_members(
+                meeting.room_code,
                 "note_added",
                 {
                     "author": note.author.name,
                     "content": note.content,
                     "created_at": note.created_at.strftime("%b %d, %Y %I:%M %p"),
                 },
-                room=meeting.room_code,
             )
         return jsonify(
             notes=[
@@ -221,16 +232,11 @@ def upload_recording_chunk(room_code):
     return jsonify(ok=True)
 
 
-@meetings_bp.route("/room/<room_code>/end", methods=["POST"])
-@login_required
-def end_meeting(room_code):
-    """Host ends the meeting: locks it as 'ended', uploads the completed
-    recording to Storage (if any), and sets a retention expiry from the
-    configured retention period."""
-    meeting = _meeting_or_404(room_code)
-    if not meeting.is_hosted_by(current_user):
-        abort(403)
-
+def finish_meeting(meeting):
+    """Ends a session: locks it as 'ended', moves the finished recording into
+    Storage (if there is one) and sets its retention expiry, then tells
+    everyone still in the room or the lobby. Used by the host's End button and
+    by the admin's "close and save" for a session whose host vanished."""
     meeting.status = "ended"
     meeting.ended_at = datetime.utcnow()
 
@@ -260,8 +266,6 @@ def end_meeting(room_code):
 
     db.session.commit()
 
-    # Tell everyone still in the room (and anyone waiting in the lobby) the
-    # session is over, and forget who was admitted to it.
     import sockets
     socketio.emit("meeting_ended", {}, room=meeting.room_code)
     for waiting_sid in list(sockets.WAITING.pop(meeting.room_code, {})):
@@ -271,7 +275,62 @@ def end_meeting(room_code):
     sockets.WHITEBOARD.pop(meeting.room_code, None)
     sockets.RECORDING.pop(meeting.room_code, None)
 
+
+@meetings_bp.route("/room/<room_code>/end", methods=["POST"])
+@login_required
+def end_meeting(room_code):
+    """Host ends the meeting (this also stops the recording)."""
+    meeting = _meeting_or_404(room_code)
+    if not meeting.is_hosted_by(current_user):
+        abort(403)
+    finish_meeting(meeting)
     return jsonify(ok=True, redirect=url_for("main.dashboard"))
+
+
+# ---------------------------------------------------------------------------
+# The shareable student link. Only the host of a session manages it.
+# ---------------------------------------------------------------------------
+
+def guest_link_payload(meeting):
+    return {
+        "ok": True,
+        "url": url_for("guest.join", token=meeting.guest_token, _external=True),
+        "open": bool(meeting.guest_link_open),
+        "auto_admit": bool(meeting.guest_auto_admit),
+    }
+
+
+@meetings_bp.route("/room/<room_code>/guest-link", methods=["POST"])
+@login_required
+def guest_link_settings(room_code):
+    """Host controls for the student link: let guests walk in / admit each one,
+    stop new people using the link, or replace it with a fresh one."""
+    meeting = _meeting_or_404(room_code)
+    if not meeting.is_hosted_by(current_user):
+        abort(403)
+    if meeting.status in ("ended", "cancelled"):
+        return jsonify(ok=False, error="This session is over."), 400
+
+    action = request.form.get("action")
+    if action == "auto_admit_on":
+        meeting.guest_auto_admit = True
+    elif action == "auto_admit_off":
+        meeting.guest_auto_admit = False
+    elif action == "close":
+        meeting.guest_link_open = False
+    elif action == "open":
+        meeting.guest_link_open = True
+    elif action == "regenerate":
+        meeting.guest_token = generate_guest_token()
+        meeting.guest_link_open = True
+    else:
+        return jsonify(ok=False, error="Unknown action."), 400
+    db.session.commit()
+
+    if meeting.guest_auto_admit:
+        import sockets
+        sockets.admit_waiting_guests(meeting.room_code)
+    return jsonify(guest_link_payload(meeting))
 
 
 @meetings_bp.route("/recordings/<int:meeting_id>/file")

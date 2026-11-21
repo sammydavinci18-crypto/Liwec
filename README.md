@@ -6,6 +6,48 @@ One Flask app that serves the pages **and** handles live-video signalling. Video
 streams directly between browsers (WebRTC); the server never sees or stores it
 unless the administrator records a session.
 
+## What this platform is for now: live lessons, timetable, recordings
+
+Study materials and students live on other platforms. This one runs **live lessons**,
+the **timetable**, **consultations** and **recording review**. Its users are the admin and teachers.
+
+**A lesson, start to finish**
+1. Admin adds it to the **Timetable** (class + teacher + subject + time, optionally weekly).
+2. The teacher opens **My lessons**, presses **Start session**, and sends students the **student link**
+   (*Copy student link* on the lesson, or *Invite* inside the room).
+3. Students open the link on the other platform, type their name and are in. No account.
+4. The lesson is recorded automatically. Admin reviews it under **Recordings** (and can **Observe** a live lesson unseen).
+
+**The student link** (`/join/<token>`, `routes/guest.py`)
+- Every session has one, including ones created before this update (tokens are added on boot).
+  Admin-hosted consultations and meetings have one too.
+- The host controls it from **Invite** inside the room: *let students in automatically* (default) or
+  admit each person; *close* the link to new people; *replace* it with a new link.
+- Students arriving before the host wait and walk in when the host arrives. Early links show a "not open yet"
+  page that refreshes itself; the room opens 15 minutes before the start time.
+- A student the host removes cannot come back from that browser. A student whose connection dropped can
+  return even after the link is closed.
+- Guests are recorded like everyone else and appear in the session's **Attendance** (name, time in, time away).
+  They never receive session notes, and cannot see recordings.
+- `GUEST_LIMIT` (default 30) caps people connected through the link at once.
+
+**Recordings page** (`/admin/recordings`): finished sessions with Watch / Saved / Expired / No recording, and a
+**Needs closing** list for sessions whose host vanished without pressing End. *Close & save recording* saves what was received.
+
+**Set aside, not removed.** Student/teacher applications, classes, placements, users, parent links, teacher directory
+and announcements are under **More** in the admin menu and in "Other school tools" on the dashboard. Teachers
+have a smaller **More** menu. Nothing was deleted, so they can be brought back to the main menu any time
+(`templates/base.html`).
+
+**Class size.** Calls are peer-to-peer: every camera is sent to every other browser, so quality drops as
+more students turn their cameras on. It is fine for small groups; for whole classes of 15+ with video, plan to
+move to a media server (SFU) such as LiveKit or mediasoup. Only the room's media layer would need to change.
+
+Upgrading: `flask db upgrade` (or just start the app). Migration `f6c9d2e4b857` is additive.
+
+> The sections below describe the platform as built before this change. Where they say "no join-by-room-code"
+> and "only invited guests can enter", the student link is now the one deliberate exception.
+
 ## The core rule: the administrator controls everything live
 
 - **Only the admin hosts.** Every consultation, class and meeting is created by the admin.
@@ -88,7 +130,7 @@ Home Schooling) are on the landing page. Students apply to one of those three pr
 
 ## Configuration (env vars)
 `SECRET_KEY`, `DB_ENGINE` (`sqlite`|`postgres`|`mysql`), `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`,
-`CALL_LIMIT_MINUTES`, `RECORDING_RETENTION_DAYS`, `ICE_SERVERS`, `TURN_USERNAME`, `TURN_CREDENTIAL`,
+`CALL_LIMIT_MINUTES`, `RECORDING_RETENTION_DAYS`, `GUEST_LIMIT`, `ICE_SERVERS`, `TURN_USERNAME`, `TURN_CREDENTIAL`,
 `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`.
 
 ## School portal & public pages

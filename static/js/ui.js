@@ -170,4 +170,41 @@
     });
     update();
   });
+
+  /* ------------------------------------------------------------------
+     6. Copy / share a link: any <button data-copy="https://…"> copies it.
+        Add data-share-title / data-share-text and phones get the native
+        Share sheet (WhatsApp, SMS, email…) instead.
+     ------------------------------------------------------------------ */
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest && e.target.closest("[data-copy]");
+    if (!btn) return;
+    e.preventDefault();
+    var url = btn.getAttribute("data-copy");
+    var original = btn.getAttribute("data-label") || btn.textContent;
+    btn.setAttribute("data-label", original);
+    function done(msg) {
+      btn.textContent = msg;
+      setTimeout(function () { btn.textContent = original; }, 2000);
+    }
+    if (btn.hasAttribute("data-share") && navigator.share) {
+      navigator.share({
+        title: btn.getAttribute("data-share-title") || document.title,
+        text: btn.getAttribute("data-share-text") || "",
+        url: url
+      }).catch(function () {});
+      return;
+    }
+    function fallback() {
+      var t = document.createElement("textarea");
+      t.value = url; t.setAttribute("readonly", "");
+      t.style.position = "fixed"; t.style.opacity = "0";
+      document.body.appendChild(t); t.select();
+      try { document.execCommand("copy"); done("Copied \u2713"); } catch (err) { window.prompt("Copy this link:", url); }
+      document.body.removeChild(t);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(function () { done("Copied \u2713"); }, fallback);
+    } else { fallback(); }
+  });
 })();

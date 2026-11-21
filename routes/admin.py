@@ -12,7 +12,7 @@ from werkzeug.datastructures import MultiDict
 import storage
 from extensions import db
 from models import User, Meeting, MeetingInvite, MeetingRequest, MEETING_TYPES, SchoolClass
-from models import MeetingParticipant
+from models import MeetingParticipant, MeetingGuest, Recording
 from models import DEFAULT_SESSION_MINUTES, MIN_SESSION_MINUTES, MAX_SESSION_MINUTES
 from models import Announcement, ANNOUNCEMENT_AUDIENCES
 from models import TeacherProfile, TeacherVerificationDocument, CAMBRIDGE_STAGES, STUDENT_PROGRAMS
@@ -153,9 +153,8 @@ def new_meeting():
         valid_ids.discard(host.id)
 
         if host_mode == "teacher":
-            if not valid_ids:
-                flash("Pick at least one student or guest for the teacher to meet.", "error")
-                return _render_new_meeting(request.form)
+            # No guest list needed: the teacher shares the session's student
+            # link, and anyone with an account you tick below is invited too.
             found = find_conflict(scheduled_time, minutes, host_id=host.id)
             if found:
                 flash(_conflict_message(found), "error")
@@ -172,8 +171,8 @@ def new_meeting():
             db.session.add(MeetingInvite(meeting_id=meeting.id, user_id=uid, source="manual"))
         db.session.commit()
         if host_mode == "teacher":
-            flash(f"Session scheduled. {host.name} will host it for {len(valid_ids)} guest(s); "
-                  f"you are not part of it.", "success")
+            flash(f"Session scheduled. {host.name} will host it and share the student link "
+                  f"from My lessons; you are not part of it.", "success")
         else:
             flash(f"Session scheduled with {len(valid_ids)} guest(s).", "success")
         return redirect(url_for("admin.meeting_detail", meeting_id=meeting.id))
@@ -195,10 +194,15 @@ def meeting_detail(meeting_id):
     # Invited but never joined (only meaningful once the session has started).
     absent = [i.user for i in meeting.invites if i.user_id not in came] \
         if meeting.status in ("live", "ended") else []
+    link_guests = (
+        MeetingGuest.query.filter(MeetingGuest.meeting_id == meeting.id,
+                                  MeetingGuest.entered_at.isnot(None))
+        .order_by(MeetingGuest.entered_at).all()
+    )
     return render_template(
         "admin/meeting_detail.html", meeting=meeting,
         invitable=_invitable_users(exclude_ids=invited_ids),
-        attendance=attendance, absent=absent,
+        attendance=attendance, absent=absent, link_guests=link_guests,
     )
 
 
@@ -304,6 +308,56 @@ def meeting_cancel_series(meeting_id):
     db.session.commit()
     flash(f"Cancelled {len(later)} lesson(s) in this series.", "info")
     return redirect(url_for("admin.meeting_detail", meeting_id=meeting_id))
+
+
+# ---------------------------------------------------------------------------
+# Recordings. Every session is recorded automatically; this is where the admin
+# reviews them, and where a session whose host disappeared can be closed so
+# its recording is saved rather than left hanging.
+# ---------------------------------------------------------------------------
+
+@admin_bp.route("/admin/recordings")
+@login_required
+@admin_required
+def recordings():
+    import sockets
+    ended = (
+        Meeting.query.filter(Meeting.status == "ended")
+        .order_by(Meeting.ended_at.desc(), Meeting.id.desc()).limit(100).all()
+    )
+    live = Meeting.query.filter(Meeting.status == "live").all()
+    # "Live" in the database but nobody is hosting it any more (the teacher
+    # closed the tab / lost connection without pressing End).
+    stuck = [m for m in live if not sockets._host_sid_for_room(m.room_code)]
+
+    def came(m):
+        return len([g for g in m.guests if g.entered_at]) + len(m.participants)
+
+    def state(m):
+        rec = m.recording
+        if not rec or not rec.finalized:
+            return "missing"
+        return "expired" if (rec.is_expired or rec.deleted_at) else "ready"
+
+    return render_template("admin/recordings.html", ended=ended, stuck=stuck, came=came, state=state)
+
+
+@admin_bp.route("/admin/meetings/<int:meeting_id>/force-end", methods=["POST"])
+@login_required
+@admin_required
+def meeting_force_end(meeting_id):
+    """Close a live session whose host is gone and save what was recorded."""
+    meeting = Meeting.query.get_or_404(meeting_id)
+    if meeting.status != "live":
+        flash("Only a live session can be closed this way.", "error")
+        return redirect(url_for("admin.recordings"))
+    from routes.meetings import finish_meeting
+    finish_meeting(meeting)
+    if meeting.recording and meeting.recording.finalized:
+        flash(f"\"{meeting.title}\" was closed and its recording is saved.", "success")
+    else:
+        flash(f"\"{meeting.title}\" was closed, but no recording had been received for it.", "info")
+    return redirect(url_for("admin.recordings"))
 
 
 # ---------------------------------------------------------------------------
@@ -501,11 +555,10 @@ def timetable_new():
         db.session.commit()
 
         roster = class_roster(teacher.id, cls.id)
-        flash(f"Added {len(created)} lesson(s): {cls.name} · {subject} with {teacher.name}, "
-              f"{len(roster)} student(s) on the list.", "success")
-        if not roster:
-            flash(f"No {cls.name} students are placed with {teacher.name} yet. "
-                  f"Place them and they'll be added to these lessons automatically.", "info")
+        flash(f"Added {len(created)} lesson(s): {cls.name} · {subject} with {teacher.name}. "
+              f"{teacher.name} starts each lesson from My lessons and shares its student link.", "success")
+        if roster:
+            flash(f"{len(roster)} student account(s) placed with {teacher.name} are also on the guest list.", "info")
         return redirect(url_for("admin.timetable", class_id=cls.id))
     return render(form)
 

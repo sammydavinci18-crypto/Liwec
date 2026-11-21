@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Join {{ meeting.title }} · Light-Way{% endblock %}
+{% block page_class %}auth-page{% endblock %}
+{% block themetoggle %}{% endblock %}
+
+{% block content %}
+<div class="auth-card">
+  <img src="{{ url_for('static', filename='img/logo-crest-small.png') }}" alt="" class="guest-crest">
+  <span class="auth-eyebrow">{{ meeting.type_label() }}{% if meeting.status == 'live' %} · <strong>Live now</strong>{% endif %}</span>
+  <h1>{{ meeting.title }}</h1>
+  <p class="sub">
+    With {{ meeting.host.name }}{% if meeting.scheduled_time %} · {{ meeting.scheduled_time|dt }}{% endif %}.
+    Type your name to join. You don't need an account.
+  </p>
+
+  {% if error %}<div class="flash flash-error" role="alert"><span>{{ error }}</span></div>{% endif %}
+
+  <form method="POST" autocomplete="off">
+    <div class="field">
+      <label for="name">Your name</label>
+      <input type="text" id="name" name="name" value="{{ name }}" required minlength="2" maxlength="40"
+             autofocus autocapitalize="words" placeholder="First and last name">
+      <span class="field-hint">Your teacher sees this name in the lesson.</span>
+    </div>
+    <button type="submit" class="btn btn-primary btn-block">Join the lesson</button>
+  </form>
+
+  <p class="guest-note">
+    This lesson is recorded for safeguarding and is reviewed by the school. You'll be asked to allow
+    your camera and microphone. Use Chrome, Edge or Firefox for the best results.
+  </p>
+</div>
+{% endblock %}

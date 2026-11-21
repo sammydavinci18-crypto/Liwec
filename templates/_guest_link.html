@@ -1,0 +1,8 @@
+{# One-click copy of a session's student link. Use:
+   {% from "_guest_link.html" import button as guest_link_button %}
+   {{ guest_link_button(meeting) }} #}
+{% macro button(m, label="Copy student link") %}
+{%- if m.guest_token and m.status in ('scheduled', 'live') -%}
+<button type="button" class="btn btn-ghost btn-sm" data-copy="{{ guest_link(m) }}" title="Students open this link, type their name and join. No account needed.">{{ label }}</button>
+{%- endif -%}
+{% endmacro %}

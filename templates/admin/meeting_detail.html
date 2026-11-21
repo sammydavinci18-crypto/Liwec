@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_guest_link.html" import button as guest_link_button %}
 {% block title %}{{ meeting.title }} · Admin · Light-Way{% endblock %}
 
 {% block content %}
@@ -15,11 +16,11 @@
     <p><strong>When:</strong> {{ meeting.scheduled_time|dt }} <span class="sub">({{ meeting.length_minutes() }} min)</span></p>
     <p><strong>Host:</strong> {{ meeting.host.name }}{% if meeting.led_by_teacher() %} <span class="sub">(teacher — opens the room and admits guests; you're not part of it)</span>{% endif %}</p>
     {% if meeting.subject %}<p><strong>Subject:</strong> {{ meeting.subject }}</p>{% endif %}
-    {% if meeting.is_timetabled %}<p class="sub">Timetabled lesson: the guest list is the {{ meeting.school_class.name }} students placed with {{ meeting.host.name }}, and follows placement and class changes automatically.</p>{% endif %}
+    {% if meeting.is_timetabled %}<p class="sub">Timetabled lesson. Students come in through the student link ({{ meeting.host.name }} shares it). Any {{ meeting.school_class.name }} students with accounts who are placed with {{ meeting.host.name }} are on the guest list automatically.</p>{% endif %}
     {% if meeting.description %}<p><strong>Agenda:</strong> {{ meeting.description }}</p>{% endif %}
 
-    <h3>Guest list ({{ meeting.invites|length }})</h3>
-    <p class="sub">Only these people can enter, and only once {{ 'the host admits' if meeting.led_by_teacher() else 'you admit' }} them from the lobby.</p>
+    <h3>Account guest list ({{ meeting.invites|length }})</h3>
+    <p class="sub">People with an account who are invited by name. They wait in the lobby until {{ 'the host admits' if meeting.led_by_teacher() else 'you admit' }} them. Students using the student link are listed under Attendance once they join.</p>
     {% if meeting.invites %}
     <div class="appointment-list">
       {% for inv in meeting.invites %}
@@ -39,10 +40,10 @@
       {% endfor %}
     </div>
     {% else %}
-    <div class="empty-state">Nobody is invited yet — only {{ meeting.host.name if meeting.led_by_teacher() else 'you' }} can enter.</div>
+    <div class="empty-state">Nobody is invited by name. Students join with the student link.</div>
     {% endif %}
 
-    {% if attendance or absent %}
+    {% if attendance or absent or link_guests %}
     <h3>Attendance</h3>
     <p class="sub">{% if meeting.attendance_required() %}Compulsory lesson: "Away" is time spent off the lesson screen (other tab, left full screen, camera off).{% else %}Who came into the room, and when.{% endif %}</p>
     <div class="appointment-list">
@@ -59,6 +60,19 @@
         {% endif %}
       </div>
       {% endfor %}
+      {% for g in link_guests %}
+      <div class="appointment-row">
+        <div>
+          <strong>{{ g.name }}</strong> <span class="class-pill class-pill-none">Student link</span>
+          <span class="appt-time">Joined {{ g.joined_at|dt }}{% if g.left_at %} · left {{ g.left_at|dt }} ({{ ((g.left_at - g.joined_at).total_seconds() // 60)|int }} min){% elif meeting.status == 'ended' %} · until the end{% else %} · still in{% endif %}{% if g.removed_at %} · removed by host{% endif %}</span>
+        </div>
+        {% if meeting.attendance_required() %}
+        <span class="status-pill status-{{ 'cancelled' if g.away_count else 'approved' }}">
+          {% if g.away_count %}Away {{ g.away_count }}&times; · {{ (g.away_seconds // 60)|int }}m {{ g.away_seconds % 60 }}s{% else %}Stayed on screen{% endif %}
+        </span>
+        {% endif %}
+      </div>
+      {% endfor %}
       {% for u in absent %}
       <div class="appointment-row">
         <div><strong>{{ u.name }}</strong><span class="appt-time">{{ 'Has not joined' if meeting.status == 'live' else 'Absent' }}</span></div>
@@ -70,6 +84,20 @@
   </div>
 
   <div class="profile-side">
+    {% if meeting.status in ('scheduled', 'live') and meeting.guest_token %}
+    <div class="booking-card">
+      <h3>Student link</h3>
+      <p class="sub">Anyone with this link can join by typing their name. No account needed.</p>
+      <input type="text" class="link-box" readonly value="{{ guest_link(meeting) }}" onfocus="this.select()" aria-label="Student link">
+      <div style="margin-top:8px;">{{ guest_link_button(meeting, "Copy link") }}</div>
+      <p class="sub" style="margin-top:8px;">
+        {{ 'Open to new people' if meeting.guest_link_open else 'Closed to new people' }} ·
+        {{ 'students come straight in' if meeting.guest_auto_admit else 'host admits each student' }}.
+        {{ meeting.host.name }} can change this from inside the room.
+      </p>
+    </div>
+    {% endif %}
+
     {% if meeting.status in ('scheduled', 'live') %}
     <div class="booking-card">
       <h3>Room</h3>
@@ -82,6 +110,13 @@
       <p class="sub">You watch and listen without being seen or heard. Nobody in the session is told you are there, and you don't appear in the attendance list.</p>
       {% else %}
       <p class="sub">{{ meeting.host.name }} hosts this session and opens it when it is time. You can observe it once it is live, and reschedule, cancel or change the guest list here.</p>
+      {% endif %}
+      {% if meeting.status == 'live' and not meeting.is_hosted_by(current_user) %}
+      <form method="POST" action="{{ url_for('admin.meeting_force_end', meeting_id=meeting.id) }}" style="margin-top:10px;"
+            data-confirm="Everyone is disconnected and the recording is saved. Use this if the host has left without ending the session."
+            data-confirm-title="Close this live session?" data-confirm-action="Close and save recording" data-confirm-tone="danger">
+        <button type="submit" class="btn btn-ghost btn-block">Close session &amp; save recording</button>
+      </form>
       {% endif %}
     </div>
 

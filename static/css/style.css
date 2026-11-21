@@ -2432,3 +2432,22 @@ main.page select:focus { border-color: var(--teal); }
 }
 .radio-line { display: flex; align-items: flex-start; gap: 2px; padding: 6px 0; font-weight: 400; color: var(--ink); font-size: 0.93rem; line-height: 1.4; }
 .radio-line input { margin-top: 3px; }
+
+
+/* ===========================================================================
+   Student link (guests without accounts), invite panel, "More" menu
+   =========================================================================== */
+.guest-crest { display: block; width: 56px; height: 56px; margin: 0 auto 12px; object-fit: contain; }
+.guest-note { margin-top: 16px; font-size: .85rem; color: var(--ink-soft); line-height: 1.45; }
+.link-box { width: 100%; padding: 8px 10px; font-size: .85rem; border: 1px solid var(--line); border-radius: 8px; background: var(--paper-raised); color: inherit; }
+.nav-menu-note { padding: 8px 14px 6px; font-size: .78rem; opacity: .7; max-width: 240px; line-height: 1.35; }
+
+.invite-panel .invite-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
+.invite-help { margin: 0; font-size: .9rem; line-height: 1.45; }
+.invite-link-row { display: flex; gap: 8px; }
+.invite-link-row input { flex: 1; min-width: 0; padding: 8px 10px; font-size: .85rem; border: 1px solid var(--line); border-radius: 8px; background: var(--paper-raised); color: inherit; }
+.toggle-row { display: flex; gap: 10px; align-items: flex-start; font-size: .9rem; cursor: pointer; }
+.toggle-row input { margin-top: 4px; width: 18px; height: 18px; flex: none; }
+.toggle-row small { display: block; opacity: .7; font-size: .8rem; margin-top: 2px; }
+.invite-note { min-height: 1.2em; margin: 0; font-size: .85rem; color: var(--teal); }
+.appt-actions .btn[data-copy] { white-space: nowrap; }

@@ -1,4 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
+  const HOME = window.ROOM_CONFIG.homeUrl || "/dashboard";
   const btnMic = document.getElementById("btn-mic");
   const btnCam = document.getElementById("btn-cam");
   const btnLeave = document.getElementById("btn-leave");
@@ -109,7 +110,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (btnLeave) {
     btnLeave.addEventListener("click", () => {
       window.__sessionOver = true;
-      window.location.href = "/dashboard";
+      window.location.href = HOME;
     });
   }
 
@@ -124,11 +125,11 @@ document.addEventListener("DOMContentLoaded", () => {
         const res = await fetch(`/room/${window.ROOM_CONFIG.roomCode}/end`, { method: "POST" });
         const data = await res.json();
         window.__sessionOver = true;
-        window.location.href = data.redirect || "/dashboard";
+        window.location.href = data.redirect || HOME;
       } catch (err) {
         console.error("Failed to end meeting cleanly:", err);
         window.__sessionOver = true;
-        window.location.href = "/dashboard";
+        window.location.href = HOME;
       }
     });
   }
