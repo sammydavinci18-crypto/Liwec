@@ -70,6 +70,9 @@
   <button class="ctrl-btn" id="btn-whiteboard" title="Open the whiteboard">
     <span class="icon" data-icon="whiteboard"></span><span class="ctrl-label">Whiteboard</span>
   </button>
+  <button class="ctrl-btn" id="btn-slides" title="Present a PowerPoint or PDF to the class">
+    <span class="icon" data-icon="slides"></span><span class="ctrl-label">Slides</span>
+  </button>
   <button class="ctrl-btn" id="btn-invite" title="Copy the link students use to join">
     <span class="icon" data-icon="users"></span><span class="ctrl-label">Invite</span>
   </button>
@@ -159,10 +162,107 @@
   </div>
 </div>
 
-<!-- Enlarged shared screen -->
+<!-- Presentation: covers the whole screen for everyone while the host presents.
+     The host gets presenter controls around the slide; everyone else gets the
+     slide alone, full screen. -->
+<div class="sl-overlay {{ 'is-host' if is_host else 'is-viewer' }}" id="sl-overlay" role="dialog" aria-label="Presentation">
+  <div class="sl-topbar" id="sl-topbar">
+    <div class="sl-heading">
+      <strong id="sl-title"></strong>
+      <span class="sl-chip" id="sl-chip"></span>
+    </div>
+    {% if is_host %}<div class="sl-hands" id="sl-hands" hidden aria-live="polite"></div>{% endif %}
+    <div class="sl-top-actions">
+      {% if not is_host and not is_observer %}
+      <button class="wb-btn" id="sl-hand" type="button">&#9995; Raise hand</button>
+      {% endif %}
+      {% if not is_host %}<button class="wb-btn" id="sl-rotate" type="button" title="Turn the slide sideways" hidden>&#8635; Rotate</button>{% endif %}
+      <button class="wb-btn" id="sl-full" type="button" title="Full screen">&#9974; Full screen</button>
+      {% if is_host %}<button class="wb-btn wb-close" id="sl-stop" type="button" title="Take the slides off everyone's screen">Stop presenting &#10005;</button>{% endif %}
+    </div>
+  </div>
+
+  <div class="sl-stage" id="sl-stage">
+    <img id="sl-img" alt="" draggable="false">
+    <div class="sl-loading" id="sl-loading" hidden>Loading slide&hellip;</div>
+    <div class="sl-failed" id="sl-failed" hidden>
+      <span>This slide could not be loaded.</span>
+      <button class="wb-btn" id="sl-retry" type="button">Try again</button>
+    </div>
+  </div>
+
+  {% if is_host %}
+  <aside class="sl-side">
+    <div class="sl-side-label">Next slide</div>
+    <div class="sl-next">
+      <img id="sl-next-img" alt="" draggable="false">
+      <div class="sl-last-note" id="sl-last-note" hidden>That is the last slide</div>
+    </div>
+    <p class="sl-side-help">The class sees the current slide full screen.<br>
+      Move with the buttons below, <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or <kbd>Space</kbd>, or swipe the slide.</p>
+  </aside>
+  <div class="sl-controls">
+    <button class="wb-btn sl-icon" id="sl-first" type="button" title="First slide" aria-label="First slide">&#9198;</button>
+    <button class="wb-btn sl-big" id="sl-prev" type="button">&#9664; Previous</button>
+    <label class="sl-jump">
+      <input id="sl-jump" type="number" min="1" value="1" inputmode="numeric" aria-label="Go to slide number">
+      <span>of <b id="sl-total">1</b></span>
+    </label>
+    <button class="wb-btn sl-big sl-primary" id="sl-next" type="button">Next &#9654;</button>
+    <button class="wb-btn sl-icon" id="sl-last" type="button" title="Last slide" aria-label="Last slide">&#9197;</button>
+  </div>
+  <div class="sl-strip" id="sl-strip" aria-label="All slides"></div>
+  {% else %}
+  <div class="sl-counter" id="sl-counter" aria-live="polite"></div>
+  {% endif %}
+</div>
+
+{% if is_host %}
+<!-- Slides library: upload a presentation and choose which one to show. -->
+<div class="notes-panel slides-panel" id="slides-panel" data-url="{{ url_for('slides.list_decks', room_code=meeting.room_code) }}">
+  <div class="notes-header">
+    <h3>Slides</h3>
+    <button class="notes-close" id="slides-close" data-icon="close" aria-label="Close"></button>
+  </div>
+  <div class="slides-body">
+    <button class="slides-drop" id="slides-pick" type="button">
+      <strong>Upload a PowerPoint or PDF</strong>
+      <span id="slides-hint">Tap to choose a file, or drop it here</span>
+    </button>
+    <input type="file" id="slides-file" hidden>
+    <progress id="slides-progress" max="100" value="0" hidden></progress>
+    <p class="slides-note" id="slides-note" role="status"></p>
+    <div class="slides-list" id="slides-list"></div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Shared screen viewer: video fills the entire display; the bar floats over it and auto-hides -->
 <div class="focus-overlay" id="focus-overlay">
-  <div class="focus-bar"><span id="focus-label"></span><button class="wb-btn" id="focus-close">Close ✕</button></div>
   <video id="focus-video" autoplay playsinline muted></video>
+  <div class="focus-bar" id="focus-bar">
+    <span id="focus-label"></span>
+    <span class="focus-actions">
+      <button class="wb-btn" id="focus-rotate" type="button" title="Turn the screen sideways" hidden>&#8635; Rotate</button>
+      <button class="wb-btn" id="focus-fit" type="button" title="Fit the whole screen, or fill the display">Fill</button>
+      <button class="wb-btn" id="focus-full" type="button" title="Full screen">&#9974; Full screen</button>
+      <button class="wb-btn" id="focus-close" type="button">Close &#10005;</button>
+    </span>
+  </div>
+</div>
+
+<!-- Phones and tablets: browsers there can't capture the device screen, so offer what does work -->
+<div class="waiting-overlay share-sheet" id="share-sheet">
+  <div class="waiting-box">
+    <h3>Share from this device</h3>
+    <p id="share-sheet-text">Phone and tablet browsers can't capture their own screen. You can still show your class something in one of these ways:</p>
+    <div class="share-sheet-actions">
+      <button class="btn btn-primary btn-sm" id="share-camera" type="button">Show with the back camera</button>
+      <button class="btn btn-ghost btn-sm" id="share-photo" type="button">Share a photo or screenshot</button>
+      <button class="btn btn-ghost btn-sm" id="share-cancel" type="button">Cancel</button>
+    </div>
+    <input type="file" id="share-photo-input" accept="image/*" hidden>
+  </div>
 </div>
 
 {% if attendance_required %}
@@ -289,6 +389,7 @@
 {% endif %}
 <script src="{{ url_for('static', filename='js/collab.js') }}"></script>
 <script src="{{ url_for('static', filename='js/whiteboard.js') }}"></script>
+<script src="{{ url_for('static', filename='js/slides.js') }}"></script>
 <script src="{{ url_for('static', filename='js/focusview.js') }}"></script>
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 {% endblock %}

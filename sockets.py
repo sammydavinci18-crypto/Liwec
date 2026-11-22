@@ -4,7 +4,7 @@ from flask_socketio import join_room, leave_room, emit
 from datetime import datetime
 
 from extensions import socketio, db
-from models import Meeting, MeetingParticipant, MeetingGuest
+from models import Meeting, MeetingParticipant, MeetingGuest, SlideDeck
 
 # Tracks which socket id belongs to which (room_code, user) so we can
 # tell everyone else in the room when someone disconnects.
@@ -35,6 +35,14 @@ OBSERVERS = {}
 # is open sees exactly what is on it. room_code -> {"open": bool, "ops": [op]}
 WHITEBOARD = {}
 MAX_WHITEBOARD_OPS = 20000
+
+# The presentation currently on everyone's screen, per room. Like the
+# whiteboard, the host drives it and everybody else just watches it fill their
+# display. room_code -> {"deck_id", "title", "pages", "index"}; absent = none.
+SLIDES = {}
+# Where the host was in each deck, so presenting it again resumes there.
+# (room_code, deck_id) -> 0-based slide index
+SLIDE_POS = {}
 
 # Sockets that belong to people who came in through a lesson's share link (no
 # account). sid -> MeetingGuest id.
@@ -299,7 +307,8 @@ def handle_join(data):
 
     # Observers are invisible: never listed to anyone as a peer.
     existing_peers = [
-        {"sid": s, "name": info["name"], "is_host": info["is_host"]}
+        {"sid": s, "name": info["name"], "is_host": info["is_host"],
+         "sharing": bool(info.get("sharing"))}
         for s, info in CONNECTED.items()
         if info["room_code"] == room_code and not info.get("observer")
     ]
@@ -311,6 +320,7 @@ def handle_join(data):
         "name": name,
         "is_host": is_host,
         "observer": observing,
+        "sharing": False,
     }
 
     join_room(room_code)
@@ -325,6 +335,10 @@ def handle_join(data):
     board = WHITEBOARD.get(room_code)
     if board and (board["open"] or board["ops"]):
         emit("wb_state", {"open": board["open"], "ops": board["ops"]})
+
+    # ...and the presentation (or that there isn't one: after a dropped
+    # connection, a browser may still be showing slides that have since ended).
+    emit("slides_state", _slides_payload(room_code))
 
     if observing:
         # No peer_joined, no participant row — they just receive.
@@ -446,6 +460,7 @@ def handle_screen_share(data):
     if not info or info.get("observer"):
         return
     sharing = bool(data.get("sharing"))
+    info["sharing"] = sharing  # remembered so people who join mid-share are told
     emit(
         "screen_share",
         {"sid": sid, "name": info["name"], "sharing": sharing},
@@ -597,6 +612,89 @@ def handle_wb_op(data):
     elif len(board["ops"]) < MAX_WHITEBOARD_OPS:
         board["ops"].append(op)
     emit("wb_op", {"op": op}, room=info["room_code"], include_self=False)
+
+
+# ---------------------------------------------------------------------------
+# Presentations. The host uploads a deck (routes/slides.py turns it into one
+# picture per slide) and presents it: it covers the whole screen for everyone
+# in the session and follows the host's slide changes. Only the host can start,
+# stop or move it. Slide numbers are 0-based here; the server validates every
+# one, so a student's browser can't drive the presentation.
+# ---------------------------------------------------------------------------
+
+def _slides_payload(room_code):
+    state = SLIDES.get(room_code)
+    if not state:
+        return {"active": False}
+    return {"active": True, "deck_id": state["deck_id"], "title": state["title"],
+            "pages": state["pages"], "index": state["index"], "v": state["v"]}
+
+
+def _int_in_range(value, lo, hi):
+    try:
+        return min(hi, max(lo, int(value)))
+    except (TypeError, ValueError):
+        return None
+
+
+def stop_slides(room_code):
+    """Takes the presentation off everyone's screen."""
+    SLIDES.pop(room_code, None)
+    socketio.emit("slides_state", {"active": False}, room=room_code)
+
+
+def clear_slides(room_code):
+    """Forget all presentation state for a room (the session ended)."""
+    SLIDES.pop(room_code, None)
+    for key in [k for k in SLIDE_POS if k[0] == room_code]:
+        SLIDE_POS.pop(key, None)
+
+
+@socketio.on("slides_present")
+def handle_slides_present(data):
+    info = _host_info(request.sid)
+    if not info:
+        return
+    room_code = info["room_code"]
+    meeting = Meeting.query.filter_by(room_code=room_code).first()
+    deck_id = _int_in_range((data or {}).get("deck_id"), 1, 2**31 - 1)
+    deck = SlideDeck.query.get(deck_id) if deck_id else None
+    if (not meeting or meeting.status != "live" or not deck or deck.meeting_id != meeting.id
+            or deck.status != "ready" or deck.page_count < 1):
+        emit("slides_error", {"message": "That presentation isn't ready to show yet."})
+        return
+
+    index = _int_in_range((data or {}).get("index"), 0, deck.page_count - 1)
+    if index is None:
+        index = _int_in_range(SLIDE_POS.get((room_code, deck.id), 0), 0, deck.page_count - 1) or 0
+    SLIDES[room_code] = {"deck_id": deck.id, "title": deck.title, "pages": deck.page_count, "index": index,
+                         "v": deck.version}
+    SLIDE_POS[(room_code, deck.id)] = index
+    # To everyone, the host included: the host's presenter view opens from this
+    # same message, so what they see is what the class sees.
+    emit("slides_state", _slides_payload(room_code), room=room_code)
+
+
+@socketio.on("slides_goto")
+def handle_slides_goto(data):
+    info = _host_info(request.sid)
+    state = SLIDES.get(info["room_code"]) if info else None
+    if not state:
+        return
+    index = _int_in_range((data or {}).get("index"), 0, state["pages"] - 1)
+    if index is None:
+        return
+    state["index"] = index
+    SLIDE_POS[(info["room_code"], state["deck_id"])] = index
+    # The host's own screen already moved; tell everyone else.
+    emit("slides_goto", {"index": index}, room=info["room_code"], include_self=False)
+
+
+@socketio.on("slides_stop")
+def handle_slides_stop(data):
+    info = _host_info(request.sid)
+    if info and info["room_code"] in SLIDES:
+        stop_slides(info["room_code"])
 
 
 # ---------------------------------------------------------------------------

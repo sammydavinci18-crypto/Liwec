@@ -273,7 +273,15 @@ def finish_meeting(meeting):
     sockets.ADMITTED.pop(meeting.room_code, None)
     sockets.OBSERVERS.pop(meeting.room_code, None)
     sockets.WHITEBOARD.pop(meeting.room_code, None)
+    sockets.clear_slides(meeting.room_code)
     sockets.RECORDING.pop(meeting.room_code, None)
+
+    # The slide pictures are no longer needed (the recording holds what the
+    # class saw): free the storage, in the background so ending is instant.
+    import slides
+    socketio.start_background_task(
+        slides.purge_meeting_decks, current_app._get_current_object(), meeting.id
+    )
 
 
 @meetings_bp.route("/room/<room_code>/end", methods=["POST"])

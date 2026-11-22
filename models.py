@@ -343,6 +343,42 @@ class Recording(db.Model):
         return self.expires_at is not None and datetime.utcnow() >= self.expires_at
 
 
+class SlideDeck(db.Model):
+    """A presentation the host uploaded to a session. The file itself is not
+    kept: it is turned into one picture per slide (see slides.py) stored under
+    the object keys slides/<id>/<n>.jpg and slides/<id>/<n>-thumb.jpg, and all
+    of it is deleted when the session ends."""
+    __tablename__ = "slide_decks"
+
+    id = db.Column(db.Integer, primary_key=True)
+    meeting_id = db.Column(db.Integer, db.ForeignKey("meetings.id"), nullable=False, index=True)
+    title = db.Column(db.String(200), nullable=False)
+    # processing -> ready | failed
+    status = db.Column(db.String(12), nullable=False, default="processing", server_default="processing")
+    error = db.Column(db.String(300), nullable=True)
+    page_count = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    meeting = db.relationship("Meeting", backref=db.backref("slide_decks", lazy=True, cascade="all, delete-orphan"))
+
+    @property
+    def version(self):
+        """Goes in every picture URL (?v=...). Deck ids can be reused by some
+        databases, and browsers keep these pictures for a day, so without this a
+        new deck could show an old deck's pictures."""
+        return int(self.created_at.timestamp() * 1000) if self.created_at else 0
+
+    def page_key(self, n, thumb=False):
+        """Storage key of slide n (1-based)."""
+        return f"slides/{self.id}/{n}{'-thumb' if thumb else ''}.jpg"
+
+    def all_keys(self):
+        keys = []
+        for n in range(1, (self.page_count or 0) + 1):
+            keys += [self.page_key(n), self.page_key(n, thumb=True)]
+        return keys
+
+
 # =============================================================================
 # Consultancy is run by the admin only. People don't browse consultants or
 # start meetings themselves — they ask, and the admin decides.

@@ -117,6 +117,8 @@ function createPeerConnection(targetSid, meta) {
       upsertFilmstripTile(targetSid, stream, meta.name, true);
     }
     if (viewMode === "gallery") renderGalleryView();
+    if (meta.sharing) window.setTileScreenSharing(targetSid, true);
+    window.dispatchEvent(new CustomEvent("remote-stream", { detail: { sid: targetSid } }));
   };
 
   pc.onconnectionstatechange = () => {
@@ -140,7 +142,13 @@ async function callPeer(targetSid, meta) {
 socket.on("existing_peers", async ({ peers, recording }) => {
   window.dispatchEvent(new CustomEvent("recording-status", { detail: { recording: !!recording } }));
   for (const peer of peers) {
-    await callPeer(peer.sid, { name: peer.name, isHost: peer.is_host });
+    await callPeer(peer.sid, { name: peer.name, isHost: peer.is_host, sharing: !!peer.sharing });
+  }
+  // Joined (or reloaded) while someone is already presenting: show it straight away.
+  for (const peer of peers) {
+    if (peer.sharing) {
+      window.dispatchEvent(new CustomEvent("screen-share-changed", { detail: { sid: peer.sid, sharing: true } }));
+    }
   }
 });
 
@@ -305,6 +313,7 @@ function upsertFilmstripTile(key, stream, name, isRemote) {
     document.getElementById("filmstrip").appendChild(tile);
   }
   tile.innerHTML = "";
+  tile.classList.remove("is-screen");
   tile.dataset.name = name;
 
   const video = document.createElement("video");
@@ -362,12 +371,21 @@ window.setTileHandRaised = function (sid, raised) {
   }
 };
 
-// Sets/clears a "Presenting" badge on a participant's tile.
+// Sets/clears a "Presenting" badge on a participant's tile. A tile that is
+// presenting shows the WHOLE shared screen (object-fit: contain) instead of
+// cropping it like a webcam picture.
 window.setTileScreenSharing = function (sid, sharing) {
-  const tile = peerMeta[sid] && peerMeta[sid].isHost
-    ? document.getElementById("spotlight-tile")
-    : document.getElementById(`tile-${sid}`);
+  let tile;
+  if (sid === "local") {
+    tile = isHost ? document.getElementById("spotlight-tile") : document.getElementById("tile-local");
+  } else {
+    if (peerMeta[sid]) peerMeta[sid].sharing = !!sharing;
+    tile = peerMeta[sid] && peerMeta[sid].isHost
+      ? document.getElementById("spotlight-tile")
+      : document.getElementById(`tile-${sid}`);
+  }
   if (!tile) return;
+  tile.classList.toggle("is-screen", !!sharing);
   let badge = tile.querySelector(".presenting-badge");
   if (sharing && !badge) {
     badge = document.createElement("div");

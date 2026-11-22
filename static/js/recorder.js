@@ -74,6 +74,7 @@ function drawFrame() {
     });
   }
   drawWhiteboard();
+  drawSlides();
 }
 
 // While the whiteboard is open it covers everyone's screen, so it also covers
@@ -86,6 +87,20 @@ function drawWhiteboard() {
   ctx.fillStyle = "#0E1A22";
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
   ctx.drawImage(wb.canvas, (CANVAS_W - w) / 2, (CANVAS_H - h) / 2, w, h);
+}
+
+// Likewise a presentation covers everyone's screen, so it covers the recording.
+// The picture is same-origin (served by our own server), so painting it here
+// can't taint the canvas and break the recording.
+function drawSlides() {
+  const sl = window.Slides;
+  const im = sl && sl.currentImage && sl.currentImage();
+  if (!im) return;
+  const scale = Math.min(CANVAS_W / im.naturalWidth, CANVAS_H / im.naturalHeight);
+  const w = im.naturalWidth * scale, h = im.naturalHeight * scale;
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.drawImage(im, (CANVAS_W - w) / 2, (CANVAS_H - h) / 2, w, h);
 }
 
 function pickMimeType() {

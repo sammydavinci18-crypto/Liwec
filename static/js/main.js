@@ -15,44 +15,161 @@ document.addEventListener("DOMContentLoaded", () => {
   let camOn = true;
   let screenSharing = false;
 
-  /* ---------------- Screen sharing ---------------- */
+  /* ---------------- Screen sharing ----------------
+     Computers share their real screen (getDisplayMedia). Phone and tablet
+     browsers don't have that, so there the Share button offers what a
+     mobile browser CAN send: the back camera (show a book or paper) or a
+     photo / screenshot. Either way the class sees it like a screen share. */
   const btnScreenShare = document.getElementById("btn-screen-share");
-  if (btnScreenShare) {
-    btnScreenShare.addEventListener("click", async () => {
-      if (!screenSharing) {
-        let screenStream;
-        try {
-          screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-        } catch (err) {
-          return; // user cancelled the picker
-        }
-        const screenTrack = screenStream.getVideoTracks()[0];
+  const shareLabel = btnScreenShare ? btnScreenShare.querySelector(".ctrl-label") : null;
+  const sheet = document.getElementById("share-sheet");
+  const canCaptureScreen = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+  let activeShareTrack = null;
+  let shareCleanup = null;
 
-        window.replaceOutgoingVideoTrack(screenTrack);
-        window.setLocalVideoTrack(screenTrack);
-        screenSharing = true;
-        btnScreenShare.classList.add("active-on");
-        btnScreenShare.title = "Stop presenting";
-        window._socket.emit("screen_share", { sharing: true });
-
-        // If the user stops sharing via the browser's native "Stop sharing"
-        // control (rather than our button), fall back cleanly too.
-        screenTrack.onended = () => stopScreenShare();
-      } else {
-        stopScreenShare();
-      }
-    });
+  // Keep text and slides sharp (drop frame rate, not resolution, when bandwidth is tight).
+  async function preferSharpness(on) {
+    const conns = Object.values(window.peerConnections || {}).concat(Object.values(window.observerConnections || {}));
+    for (const pc of conns) {
+      const sender = pc.getSenders().find((s) => s.track && s.track.kind === "video");
+      if (!sender || !sender.getParameters) continue;
+      try {
+        const params = sender.getParameters();
+        params.degradationPreference = on ? "maintain-resolution" : "balanced";
+        await sender.setParameters(params);
+      } catch (err) { /* not supported: harmless */ }
+    }
   }
 
-  function stopScreenShare() {
+  function beginShare(track, cleanup) {
+    activeShareTrack = track;
+    shareCleanup = cleanup || null;
+    try { track.contentHint = "detail"; } catch (e) { /* ignore */ }
+    window.replaceOutgoingVideoTrack(track);
+    window.setLocalVideoTrack(track);
+    screenSharing = true;
+    btnScreenShare.classList.add("active-on");
+    btnScreenShare.title = "Stop presenting";
+    if (shareLabel) shareLabel.textContent = "Stop share";
+    if (window.setTileScreenSharing) window.setTileScreenSharing("local", true);
+    window._socket.emit("screen_share", { sharing: true });
+    preferSharpness(true);
+    // The browser's own "Stop sharing" button ends the track.
+    track.onended = () => stopScreenShare();
+  }
+
+  async function getRestoreTrack() {
+    let t = window._cameraOrBackgroundTrack || window._originalVideoTrack;
+    if (t && t.readyState === "live") return t;
+    // Some phones close the front camera while the back camera is in use: reopen it.
+    try {
+      const cam = await navigator.mediaDevices.getUserMedia({ video: true });
+      t = cam.getVideoTracks()[0];
+      t.enabled = camOn;
+      window._originalVideoTrack = window._cameraOrBackgroundTrack = t;
+      return t;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  async function stopScreenShare() {
     if (!screenSharing) return;
-    const restoreTrack = window._cameraOrBackgroundTrack || window._originalVideoTrack;
-    window.replaceOutgoingVideoTrack(restoreTrack);
-    window.setLocalVideoTrack(restoreTrack);
     screenSharing = false;
+    const finished = activeShareTrack;
+    activeShareTrack = null;
     btnScreenShare.classList.remove("active-on");
     btnScreenShare.title = "Share your screen";
+    if (shareLabel) shareLabel.textContent = "Share";
+    if (window.setTileScreenSharing) window.setTileScreenSharing("local", false);
     window._socket.emit("screen_share", { sharing: false });
+
+    const restoreTrack = await getRestoreTrack();
+    window.replaceOutgoingVideoTrack(restoreTrack);
+    window.setLocalVideoTrack(restoreTrack);
+    preferSharpness(false);
+
+    // Release the capture so the browser's "sharing your screen" indicator goes away.
+    if (finished) { finished.onended = null; finished.stop(); }
+    if (shareCleanup) { shareCleanup(); shareCleanup = null; }
+  }
+
+  async function startDesktopShare() {
+    let screenStream;
+    try {
+      screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 15, max: 30 } },
+        audio: false,
+      });
+    } catch (err) {
+      if (err && err.name !== "NotAllowedError" && err.name !== "AbortError") {
+        alert("Screen sharing could not start (" + (err.name || "error") + "). Try again, or use Chrome, Edge or Firefox on a computer.");
+      }
+      return; // cancelled the picker
+    }
+    beginShare(screenStream.getVideoTracks()[0]);
+  }
+
+  function openSheet() { if (sheet) sheet.classList.add("show"); }
+  function closeSheet() { if (sheet) sheet.classList.remove("show"); }
+
+  async function shareBackCamera() {
+    closeSheet();
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false,
+      });
+    } catch (err) {
+      alert("The camera could not be opened. Allow camera access for this site and try again.");
+      return;
+    }
+    beginShare(stream.getVideoTracks()[0]);
+  }
+
+  function shareImage(file) {
+    closeSheet();
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1920; canvas.height = 1080;
+      const ctx = canvas.getContext("2d");
+      const draw = () => {
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        const scale = Math.min(canvas.width / img.naturalWidth, canvas.height / img.naturalHeight);
+        const w = img.naturalWidth * scale, h = img.naturalHeight * scale;
+        ctx.drawImage(img, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+      };
+      draw();
+      // Redraw regularly so the picture keeps being sent to people who join later.
+      const timer = setInterval(draw, 500);
+      const stream = canvas.captureStream(5);
+      beginShare(stream.getVideoTracks()[0], () => { clearInterval(timer); URL.revokeObjectURL(url); });
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); alert("That picture could not be opened."); };
+    img.src = url;
+  }
+
+  if (btnScreenShare) {
+    btnScreenShare.addEventListener("click", () => {
+      if (screenSharing) return stopScreenShare();
+      if (canCaptureScreen) return startDesktopShare();
+      openSheet();
+    });
+  }
+  if (sheet) {
+    document.getElementById("share-camera").addEventListener("click", shareBackCamera);
+    document.getElementById("share-cancel").addEventListener("click", closeSheet);
+    const photoInput = document.getElementById("share-photo-input");
+    document.getElementById("share-photo").addEventListener("click", () => photoInput.click());
+    photoInput.addEventListener("change", () => {
+      const f = photoInput.files && photoInput.files[0];
+      photoInput.value = "";
+      if (f) shareImage(f);
+    });
   }
 
   btnMic.addEventListener("click", () => {

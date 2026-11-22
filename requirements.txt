@@ -12,6 +12,10 @@ requests==2.32.3
 # Postgres driver — used when DB_ENGINE=postgres (Supabase, Render, etc.)
 psycopg2-binary==2.9.9
 
+# Turns uploaded presentations (PDF, or PowerPoint via LibreOffice) into slide
+# pictures — see slides.py. Pure pip wheel: no system packages needed for PDFs.
+PyMuPDF==1.24.14
+
 # Production WSGI server for Render
 gunicorn==22.0.0
 

@@ -148,5 +148,16 @@ class Config:
     TURN_USERNAME = os.environ.get("TURN_USERNAME", "")
     TURN_CREDENTIAL = os.environ.get("TURN_CREDENTIAL", "")
 
+    # Slide presentations (PowerPoint / PDF the teacher shows the class).
+    # Each deck is turned into one picture per slide and kept in the same
+    # storage bucket as recordings, under "slides/<deck id>/", until the
+    # session ends. PDFs are always supported. PowerPoint files (.pptx/.ppt/
+    # .odp) need LibreOffice installed on the server to be turned into a PDF
+    # first: it is found automatically, or point SOFFICE_PATH at it. Without
+    # it the Slides panel tells the teacher to upload a PDF instead.
+    SLIDES_MAX_MB = int(os.environ.get("SLIDES_MAX_MB", 40))
+    SLIDES_MAX_PAGES = int(os.environ.get("SLIDES_MAX_PAGES", 150))
+    SOFFICE_PATH = os.environ.get("SOFFICE_PATH", "")
+
     # Recording is uploaded in ~30s chunks; keep the per-request limit generous.
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50 MB per chunk

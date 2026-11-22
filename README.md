@@ -150,6 +150,46 @@ Run `flask db upgrade` (or let your Render start command do it). Two additive mi
 - **Whiteboard (host only).** The *Whiteboard* button opens a board that covers the whole screen for everyone in the session. The teacher can write/draw (finger, pen or mouse), type text, change colour and thickness, erase, undo, clear, and *Close board* to return to the lesson. Students and an observing admin only watch. The board is kept server-side for the session, so reopening continues where it left off and late joiners see it. While it is open it is also painted into the session recording. Files: `static/js/whiteboard.js`, handlers `wb_open/wb_close/wb_op` in `sockets.py`.
 - **Enlarge a shared screen.** When someone else shares their screen it fills the window; anyone can close it (✕, Esc or the *Enlarge* button) and reopen it while the share continues. File: `static/js/focusview.js`.
 
+## Presenting slides (PowerPoint / PDF)
+
+The host's control bar has a **Slides** button. The teacher uploads a PowerPoint
+(`.pptx`, `.ppt`, `.odp`) or a PDF, waits a few seconds while it is prepared,
+and presses **Present**.
+
+* **Everyone else** gets the slide on their whole display (real browser full
+  screen: the first tap completes it, as with a shared screen), following the
+  teacher live. Students can raise a hand without leaving the slide. On a phone
+  held upright a **Rotate** button turns the slide sideways.
+* **The teacher** gets a presenter view: the current slide, a preview of the next
+  one, Previous / Next buttons, a "go to slide" box, a strip of every slide, and
+  any raised hands. Arrow keys, Space, Page Up/Down, Home/End and a tablet swipe
+  also work. Only the host can start, stop or move the presentation (the server
+  checks every message).
+* People who join or reload mid-presentation land on the current slide. The
+  slide is also painted into the session recording. Presenting a deck again
+  resumes where the teacher stopped.
+
+How it works: each upload becomes one picture per slide (`slides.py`, PyMuPDF),
+stored in the recordings bucket under `slides/<deck id>/`, and **deleted when
+the session ends** (the recording already holds what the class saw). Up to 10
+decks per session. Limits: `SLIDES_MAX_MB` (40), `SLIDES_MAX_PAGES` (150).
+
+### PowerPoint files need LibreOffice on the server
+
+PDFs work everywhere with no extra setup. Turning a `.pptx` into pictures
+needs LibreOffice (`soffice`) on the server. It is found automatically, or set
+`SOFFICE_PATH`. **If it isn't there, the Slides panel says so and accepts PDF
+only** ("In PowerPoint: File > Save As > PDF"), so nothing breaks.
+
+* **Local (Windows/Mac/Linux):** install LibreOffice from libreoffice.org.
+* **Render:** the standard Python runtime has no LibreOffice and cannot
+  `apt-get`. To accept `.pptx` in production, deploy with the included
+  `Dockerfile` instead (in Render choose Environment: Docker). The Dockerfile has
+  not been built or run by the author of this change: treat it as a starting
+  point and check the first deploy. Converting a deck uses a few hundred MB of
+  memory, so avoid the smallest instance size.
+* Only one conversion runs at a time; a second teacher's upload waits its turn.
+
 ## Interface conventions (usability)
 
 Shared behaviour lives in `static/js/ui.js` (loaded on every page) and the "Usability pass" block at the end of `static/css/style.css`.

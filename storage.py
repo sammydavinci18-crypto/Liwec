@@ -116,3 +116,47 @@ def delete_object(bucket, key):
         return True
     except OSError:
         return False
+
+
+def read_bytes(bucket, key):
+    """Returns an object's bytes, or None if it doesn't exist. Used for slide
+    images, which are served through our own server (same origin) rather than
+    by redirecting to a signed URL: the host's browser paints the slide into
+    the session recording, and a picture from another origin would make that
+    canvas unusable."""
+    if _supabase_configured():
+        url = f"{current_app.config['SUPABASE_URL']}/storage/v1/object/{bucket}/{key}"
+        try:
+            r = requests.get(url, headers=_supabase_headers(), timeout=30)
+        except requests.RequestException as exc:
+            raise StorageError(f"Supabase download failed: {exc}")
+        if r.status_code == 404 or r.status_code == 400:
+            return None
+        if r.status_code != 200:
+            raise StorageError(f"Supabase download failed ({r.status_code}): {r.text[:300]}")
+        return r.content
+
+    path = _local_dir(bucket) / key
+    try:
+        return path.read_bytes() if path.exists() else None
+    except OSError:
+        return None
+
+
+def delete_objects(bucket, keys):
+    """Deletes several objects. Missing ones are ignored. Returns True if
+    nothing went wrong."""
+    keys = list(keys)
+    if not keys:
+        return True
+    if _supabase_configured():
+        url = f"{current_app.config['SUPABASE_URL']}/storage/v1/object/{bucket}"
+        try:
+            r = requests.delete(url, headers=_supabase_headers(), json={"prefixes": keys}, timeout=30)
+            if r.status_code in (200, 204):
+                return True
+        except requests.RequestException:
+            pass
+        # The bulk call failed: fall back to one at a time.
+        return all([delete_object(bucket, k) for k in keys])
+    return all([delete_object(bucket, k) for k in keys])
