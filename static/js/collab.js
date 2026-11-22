@@ -95,7 +95,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // An observing admin is invisible, so doesn't list themselves either.
     const entries = window.ROOM_CONFIG.isObserver ? [] : [{ sid: "local", name: `${userName} (you)`, isHost }];
     Object.entries(window.peerMeta || {}).forEach(([sid, meta]) => {
-      entries.push({ sid, name: meta.name, isHost: meta.isHost });
+      entries.push({ sid, name: meta.name, isHost: meta.isHost, dataMode: meta.dataMode });
     });
     // Host first, then alphabetical.
     entries.sort((a, b) => (b.isHost - a.isHost) || a.name.localeCompare(b.name));
@@ -103,10 +103,23 @@ document.addEventListener("DOMContentLoaded", () => {
     entries.forEach((p) => {
       const row = document.createElement("div");
       row.className = "participant-row";
-      const handIcon = raisedHands.has(p.sid) ? " ✋" : "";
+      const handIcon = (raisedHands.has(p.sid) ? " ✋" : "")
+        + (p.dataMode === "audio" ? " 🎧" : p.dataMode === "low" ? " 📉" : "");
       row.innerHTML = `
         <span class="participant-name">${p.isHost ? '<span class="host-badge">Host</span> ' : ""}${escapeHtml(p.name)}${handIcon}</span>
       `;
+      if (isHost && p.sid !== "local" && !p.isHost && window.CallOn) {
+        const spot = document.createElement("button");
+        spot.className = "btn btn-ghost btn-sm";
+        spot.textContent = "Spotlight";
+        spot.addEventListener("click", () => window.CallOn.spotlight(p.sid));
+        row.appendChild(spot);
+        const call = document.createElement("button");
+        call.className = "btn btn-primary btn-sm";
+        call.textContent = "Call on";
+        call.addEventListener("click", () => window.CallOn.call(p.sid));
+        row.appendChild(call);
+      }
       if (isHost && p.sid !== "local") {
         const removeBtn = document.createElement("button");
         removeBtn.className = "btn btn-ghost btn-sm";

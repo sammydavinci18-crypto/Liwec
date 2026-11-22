@@ -1,0 +1,3 @@
+lk.example.org {
+	reverse_proxy localhost:7880
+}

@@ -1,0 +1,6 @@
+api_key: REPLACE_API_KEY
+api_secret: REPLACE_API_SECRET
+ws_url: ws://localhost:7880
+redis:
+  address: localhost:6379
+health_port: 8080

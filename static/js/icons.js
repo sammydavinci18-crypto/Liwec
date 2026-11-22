@@ -5,6 +5,7 @@
   colour comes from `currentColor`, so it inherits the button's text color.
 */
 window.ICONS = {
+  signal: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="20" x2="5" y2="15"></line><line x1="10" y1="20" x2="10" y2="11"></line><line x1="15" y1="20" x2="15" y2="7"></line><line x1="20" y1="20" x2="20" y2="3"></line></svg>`,
   mic: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"></rect><path d="M5 10a7 7 0 0 0 14 0"></path><line x1="12" y1="19" x2="12" y2="22"></line><line x1="8" y1="22" x2="16" y2="22"></line></svg>`,
 
   micOff: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5a3 3 0 0 1 6 0v5.5"></path><path d="M15 12.5V13a3 3 0 0 1-4.6 2.5"></path><path d="M5 10a7 7 0 0 0 9.5 6.6"></path><path d="M19 10a7 7 0 0 1-1 3.6"></path><line x1="12" y1="19" x2="12" y2="22"></line><line x1="8" y1="22" x2="16" y2="22"></line><line x1="3" y1="3" x2="21" y2="21"></line></svg>`,

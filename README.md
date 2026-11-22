@@ -125,6 +125,74 @@ Mission, vision, six objectives, four values (Excellence, Integrity, Resilience,
 and the three programmes (Year 6–Year 8 Bridging; National Curriculum to Cambridge Transition;
 Home Schooling) are on the landing page. Students apply to one of those three programmes.
 
+## Reliability: connections, big classes, weak links, recording
+
+Four things decide whether a live lesson actually works. All are built in; what
+you turn on depends on how many students you have and where they connect from.
+
+| Problem | What was wrong | What the platform does now |
+|---|---|---|
+| Some students can't connect | Only a public STUN server; phones and strict school Wi-Fi need a **TURN relay** | Set up TURN (below) or LiveKit (which includes one). The host sees a warning in the room until one is configured. Dropped connections are restarted (ICE restart) instead of being deleted. |
+| A class of 30 can't have cameras on | Peer-to-peer: every browser uploads its video to everyone | Set up **LiveKit** (an SFU): each browser sends one stream; viewers get the quality they need. Without it, lessons with more than `MESH_VIDEO_LIMIT` (8) people let new students in with video off. |
+| No low-data mode | A weak connection meant being kicked out | **Data** button in the room: Normal / Low data / Audio only. The teacher sees 📉 / 🎧 next to the name; compulsory-lesson students on audio-only are not logged as away. A suggestion appears when the link looks weak. |
+| Recording depends on the teacher's browser | A crash lost up to 30 s; a slow laptop gave a poor file | With LiveKit + storage configured, **the server records** (slides and whiteboard included). Otherwise the browser records, hardened: 10 s numbered chunks, saved locally and retried, resumes after a reload, keeps its frame rate in a background tab. If the server recorder fails mid-lesson, the teacher's browser takes over automatically. |
+
+### 1. Easiest win: a TURN relay (keeps the current peer-to-peer design)
+Pick one (env vars on the Flask app; details in `config.py`):
+* **coturn** on a small VPS: copy `deploy/turnserver.conf`, then set
+  `TURN_URLS=turn:turn.example.org:3478,turn:turn.example.org:3478?transport=tcp,turns:turn.example.org:443?transport=tcp`
+  and `TURN_SECRET=...`. Each browser gets its own credentials that expire after `TURN_TTL_SECONDS`.
+* **Cloudflare Realtime TURN**: `CLOUDFLARE_TURN_KEY_ID` + `CLOUDFLARE_TURN_API_TOKEN`.
+* Any provider with a fixed login: `ICE_SERVERS=...` plus `TURN_USERNAME` / `TURN_CREDENTIAL`.
+
+The `turns:...:443` TCP/TLS entry is the important one for school networks.
+
+### 2. Big classes: LiveKit (SFU)
+1. Run LiveKit either on **LiveKit Cloud**, or on a VPS with `deploy/docker-compose.yml`
+   (needs UDP ports; the Flask app can stay on Render). LiveKit's own TURN covers item 1.
+2. Set `LIVEKIT_URL` (`wss://...`), `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` on the app.
+3. Optional: `python tools/fetch_vendor.py` so browsers load the LiveKit library from your server.
+
+Lobby, chat, hands, slides, whiteboard and admin oversight are unchanged. Students
+receive the teacher, anyone presenting and the few people speaking (up to 8 cameras;
+the teacher sees up to 24); everyone's audio is always received. An observing admin
+joins as a *hidden*, receive-only participant.
+
+### 3. Server-side recording (needs step 2)
+Set `PUBLIC_BASE_URL` (the app's public https address) and the S3 access key that
+Supabase gives you (Storage > S3 Connection): `EGRESS_S3_ENDPOINT`, `EGRESS_S3_REGION`,
+`EGRESS_S3_ACCESS_KEY`, `EGRESS_S3_SECRET`. The recorder opens `/egress/<room>/<token>/view`
+(see `routes/egress.py`), so the file shows the teacher, the class, slides and whiteboard.
+Server recordings are `.mp4`; browser recordings `.webm`. If any setting is missing, the
+browser records instead.
+
+### Known limits
+* If the server recorder dies and the teacher's browser takes over, the first part is
+  the (possibly partial) server file and the rest is the browser file; only the latter is
+  kept as the recording.
+* A browser recording interrupted by a reload contains two video segments back to back;
+  VLC plays both, some browsers play only the first.
+* Audio-only is chosen by the student. Teachers see it labelled, but it is not approved.
+* None of the LiveKit pieces could be run against a live server while this was written:
+  test a short lesson end to end (join, present, share a screen, end, play the recording)
+  before relying on it.
+
+## Seeing the class and calling on students
+
+* **Presenter view (teacher):** while slides are up, the side panel shows a grid of
+  student faces (raised hands first, in the order they went up) and the chat, with a
+  box to reply. Each face has *Call on* and *Spotlight* buttons.
+* **Teacher video (students):** a small picture of the teacher stays in the corner of the
+  slide. A student can hide it (and it disappears by itself in audio-only mode).
+* **Calling on a student:** *Spotlight* puts the student's video large on everyone's screen.
+  *Call on* does that and sends the student an invitation; their microphone is only turned
+  on when they press **Unmute and speak**, and returns to how it was when the turn ends
+  (the teacher presses *Done*, or the student presses *Stop speaking*). Calling on a student
+  lowers their raised hand. The same buttons are in the Participants panel. With the media
+  server, the spotlighted student is always received at full quality.
+* Not covered: the spotlight card is not painted into the session recording (the recording
+  keeps its normal layout); the teacher's presenter-view faces are not recorded either.
+
 ## Roles
 `admin` (the Director) · `registrar` (enrolment & parent links) · teachers and students (approved by the admin) · parents (linked to a student).
 

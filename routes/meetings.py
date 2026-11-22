@@ -15,7 +15,9 @@ from flask import (
 )
 from flask_login import login_required, current_user
 
+import rtc
 import storage
+import recording_service
 from extensions import db, socketio
 from models import Meeting, MeetingParticipant, ConsultationNote, Recording, generate_guest_token
 
@@ -131,15 +133,18 @@ def observe(room_code):
 
 
 def _ice_servers():
+    return rtc.ice_servers()
+
+
+@meetings_bp.app_context_processor
+def _room_rtc_context():
+    """Extra settings every room page needs (see templates/meeting_room.html)."""
     cfg = current_app.config
-    servers = []
-    for url in cfg["ICE_SERVERS"]:
-        entry = {"urls": url}
-        if url.startswith("turn") and cfg.get("TURN_USERNAME"):
-            entry["username"] = cfg["TURN_USERNAME"]
-            entry["credential"] = cfg["TURN_CREDENTIAL"]
-        servers.append(entry)
-    return servers
+    return {
+        "livekit_url": cfg["LIVEKIT_URL"] if rtc.livekit_enabled(cfg) else "",
+        "turn_missing": not rtc.turn_configured(cfg) and not rtc.livekit_enabled(cfg),
+        "local_livekit": os.path.exists(os.path.join(current_app.static_folder, "vendor", "livekit-client.umd.min.js")),
+    }
 
 
 def _local_socketio_available():
@@ -203,33 +208,70 @@ def _recording_key(meeting):
     return f"{meeting.id}.webm"
 
 
-@meetings_bp.route("/room/<room_code>/recording/chunk", methods=["POST"])
+@meetings_bp.route("/room/<room_code>/recording/status")
 @login_required
-def upload_recording_chunk(room_code):
-    """The host's browser POSTs the meeting recording here in ~30s chunks
-    while the call is happening, so at most a few seconds are ever at risk
-    if the host's browser crashes. Chunks are buffered on local disk for
-    the duration of the live call only (Storage's simple upload API doesn't
-    support appending) — the complete file gets pushed to Supabase Storage
-    once, when the host ends the meeting. See end_meeting() below."""
+def recording_status(room_code):
+    """Tells the host's browser how many chunks the server has, so after a
+    reload or a dropped connection it can resend exactly what is missing."""
     meeting = _meeting_or_404(room_code)
     if not meeting.is_hosted_by(current_user):
         abort(403)
+    rec = Recording.query.filter_by(meeting_id=meeting.id).first()
+    return jsonify(ok=True, received=(rec.chunks_received if rec and rec.source == "browser" else 0),
+                   source=(rec.source if rec else None))
+
+
+@meetings_bp.route("/room/<room_code>/recording/chunk", methods=["POST"])
+@login_required
+def upload_recording_chunk(room_code):
+    """Browser recording, used when the server can't record (or while it is
+    not configured). The host's browser POSTs ~10s chunks, numbered from 0.
+
+    Numbering makes retries safe: a chunk the server already has is simply
+    acknowledged (never appended twice), and a chunk that arrives ahead of a
+    missing one is refused with the number the server needs next, so the file
+    can never be assembled out of order. Chunks are buffered on local disk for
+    the live call only (Storage's simple upload API has no append); the whole
+    file is pushed to Supabase once, when the session ends (finish_meeting)."""
+    meeting = _meeting_or_404(room_code)
+    if not meeting.is_hosted_by(current_user):
+        abort(403)
+    if meeting.status in ("ended", "cancelled"):
+        return jsonify(ok=False, error="This session has ended."), 410
 
     chunk = request.get_data()
     if not chunk:
         return jsonify(ok=True)
 
-    key = _recording_key(meeting)
-    storage.append_bytes(current_app.config["RECORDINGS_BUCKET"], key, chunk)
-
     recording = Recording.query.filter_by(meeting_id=meeting.id).first()
+    key = _recording_key(meeting)
     if not recording:
-        recording = Recording(meeting_id=meeting.id, filename=key, finalized=False)
+        recording = Recording(meeting_id=meeting.id, filename=key, finalized=False, source="browser")
         db.session.add(recording)
-        db.session.commit()
+        db.session.flush()
+    elif recording.source != "browser":
+        # The server recorder gave up (or was never available): the browser takes over.
+        recording.source, recording.filename, recording.egress_id = "browser", key, None
+        recording.chunks_received = 0
 
-    return jsonify(ok=True)
+    seq_raw = request.args.get("seq")
+    expected = recording.chunks_received or 0
+    if seq_raw is not None:
+        try:
+            seq = int(seq_raw)
+        except ValueError:
+            return jsonify(ok=False, error="bad seq"), 400
+        if seq < expected:
+            db.session.commit()
+            return jsonify(ok=True, duplicate=True, expected=expected)
+        if seq > expected:
+            db.session.commit()
+            return jsonify(ok=False, expected=expected), 409
+
+    storage.append_bytes(current_app.config["RECORDINGS_BUCKET"], key, chunk)
+    recording.chunks_received = expected + 1
+    db.session.commit()
+    return jsonify(ok=True, expected=recording.chunks_received)
 
 
 def finish_meeting(meeting):
@@ -244,8 +286,15 @@ def finish_meeting(meeting):
     bucket = current_app.config["RECORDINGS_BUCKET"]
     key = _recording_key(meeting)
     local_buffer = storage.local_path_if_exists(bucket, key)
+    server_recorded = bool(recording and recording.source == "server" and recording.egress_id)
 
-    if recording and local_buffer:
+    if server_recorded:
+        # The media server finishes and uploads the file itself; ending is
+        # instant, and the recording turns "Saved" when the file has landed.
+        db.session.commit()
+        app_obj = current_app._get_current_object()
+        socketio.start_background_task(recording_service.stop_and_finalize, app_obj, meeting.id)
+    elif recording and local_buffer:
         try:
             with open(local_buffer, "rb") as f:
                 data = f.read()
@@ -275,6 +324,16 @@ def finish_meeting(meeting):
     sockets.WHITEBOARD.pop(meeting.room_code, None)
     sockets.clear_slides(meeting.room_code)
     sockets.RECORDING.pop(meeting.room_code, None)
+    sockets.CALLON.pop(meeting.room_code, None)
+
+    # Disconnect everyone from the media server too (background: ending stays instant).
+    # (With a server recorder this happens right after the recorder is stopped.)
+    if rtc.livekit_enabled() and not server_recorded:
+        app_obj = current_app._get_current_object()
+        def _close_media_room(app, room):
+            with app.app_context():
+                rtc.delete_room(room)
+        socketio.start_background_task(_close_media_room, app_obj, meeting.room_code)
 
     # The slide pictures are no longer needed (the recording holds what the
     # class saw): free the storage, in the background so ending is instant.
@@ -367,4 +426,4 @@ def stream_recording(meeting_id):
     path = os.path.join(local_dir, recording.filename)
     if not os.path.exists(path):
         abort(404)
-    return send_file(path, mimetype="video/webm", conditional=True)
+    return send_file(path, mimetype=recording_service.content_type_for(recording.filename), conditional=True)

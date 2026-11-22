@@ -3,6 +3,8 @@ from flask_login import current_user
 from flask_socketio import join_room, leave_room, emit
 from datetime import datetime
 
+import recording_service
+import rtc
 from extensions import socketio, db
 from models import Meeting, MeetingParticipant, MeetingGuest, SlideDeck
 
@@ -40,6 +42,10 @@ MAX_WHITEBOARD_OPS = 20000
 # whiteboard, the host drives it and everybody else just watches it fill their
 # display. room_code -> {"deck_id", "title", "pages", "index"}; absent = none.
 SLIDES = {}
+
+# The student the teacher has put in the spotlight (and maybe invited to speak).
+# room_code -> {"sid", "name", "speak", "accepted"}; absent = nobody.
+CALLON = {}
 # Where the host was in each deck, so presenting it again resumes there.
 # (room_code, deck_id) -> 0-based slide index
 SLIDE_POS = {}
@@ -308,7 +314,7 @@ def handle_join(data):
     # Observers are invisible: never listed to anyone as a peer.
     existing_peers = [
         {"sid": s, "name": info["name"], "is_host": info["is_host"],
-         "sharing": bool(info.get("sharing"))}
+         "sharing": bool(info.get("sharing")), "data_mode": info.get("data_mode", "normal")}
         for s, info in CONNECTED.items()
         if info["room_code"] == room_code and not info.get("observer")
     ]
@@ -321,6 +327,7 @@ def handle_join(data):
         "is_host": is_host,
         "observer": observing,
         "sharing": False,
+        "data_mode": "normal",
     }
 
     join_room(room_code)
@@ -348,6 +355,11 @@ def handle_join(data):
     if is_host:
         RECORDING[room_code] = True
         emit("recording_status", {"recording": True}, room=room_code)
+        # The server decides WHO records: itself (media server) or, failing
+        # that, the host's browser. The host's browser waits for this answer.
+        socketio.start_background_task(
+            recording_service.begin, current_app._get_current_object(), meeting.id, sid
+        )
 
     if is_host and room_code not in TIMED_ROOMS:
         if not meeting.call_started_at:
@@ -363,6 +375,16 @@ def handle_join(data):
             )
 
     emit("existing_peers", {"peers": existing_peers, "recording": RECORDING.get(room_code, False)})
+
+    if room_code in CALLON:
+        emit("spotlight", _spotlight_payload(room_code))
+
+    # Peer-to-peer only: a busy room can't carry another camera. This person
+    # joins audio-only (their browser also stops offering the video options).
+    if (not is_host and not rtc.livekit_enabled()
+            and len(existing_peers) >= current_app.config["MESH_VIDEO_LIMIT"]):
+        emit("mesh_full", {})
+
     emit(
         "peer_joined",
         {"sid": sid, "name": name, "is_host": is_host},
@@ -395,6 +417,48 @@ def handle_signal(data):
         {"sender": request.sid, "signal": data.get("signal"), "observer": bool(sender_info.get("observer"))},
         room=target,
     )
+
+
+# ---------------------------------------------------------------------------
+# Media server (LiveKit). Lobby, chat, slides etc. stay on Socket.IO; only the
+# audio/video moves. A person's LiveKit identity IS their Socket.IO sid, so the
+# server can vouch for them here: only a socket that has been admitted to the
+# call and is in CONNECTED can get a token, and it can only join its own room.
+# ---------------------------------------------------------------------------
+
+@socketio.on("livekit_token")
+def handle_livekit_token(data):
+    sid = request.sid
+    info = CONNECTED.get(sid)
+    if not info or sid not in ADMITTED.get(info["room_code"], set()):
+        return
+    if not rtc.livekit_enabled():
+        return
+    token = rtc.participant_token(
+        info["room_code"], sid, info["name"],
+        is_host=info["is_host"], observer=bool(info.get("observer")),
+    )
+    emit("livekit_token", {"url": current_app.config["LIVEKIT_URL"], "token": token})
+
+
+# ---------------------------------------------------------------------------
+# Low-data mode. A student on a weak connection can drop to smaller video or to
+# audio only without leaving the lesson. The choice is only a label for the
+# others (the teacher sees who is on a slow link); what is actually sent and
+# received is decided in the student's own browser.
+# ---------------------------------------------------------------------------
+
+@socketio.on("data_mode")
+def handle_data_mode(data):
+    sid = request.sid
+    info = CONNECTED.get(sid)
+    if not info or info.get("observer"):
+        return
+    mode = (data or {}).get("mode")
+    if mode not in ("normal", "low", "audio"):
+        mode = "normal"
+    info["data_mode"] = mode
+    emit("data_mode", {"sid": sid, "mode": mode}, room=info["room_code"], include_self=False)
 
 
 # ---------------------------------------------------------------------------
@@ -570,7 +634,7 @@ def _host_info(sid):
 
 
 def _board(room_code):
-    return WHITEBOARD.setdefault(room_code, {"open": False, "ops": []})
+    return WHITEBOARD.setdefault(room_code, {"open": False, "ops": [], "v": 0})
 
 
 @socketio.on("wb_open")
@@ -578,7 +642,9 @@ def handle_wb_open(data):
     info = _host_info(request.sid)
     if not info:
         return
-    _board(info["room_code"])["open"] = True
+    board = _board(info["room_code"])
+    board["open"] = True
+    board["v"] += 1
     emit("wb_open", {}, room=info["room_code"], include_self=False)
 
 
@@ -587,7 +653,9 @@ def handle_wb_close(data):
     info = _host_info(request.sid)
     if not info:
         return
-    _board(info["room_code"])["open"] = False
+    board = _board(info["room_code"])
+    board["open"] = False
+    board["v"] += 1
     emit("wb_close", {}, room=info["room_code"], include_self=False)
 
 
@@ -600,6 +668,7 @@ def handle_wb_op(data):
     if not op:
         return
     board = _board(info["room_code"])
+    board["v"] += 1
     if op["t"] == "clear":
         board["ops"] = []
     elif op["t"] == "undo":
@@ -712,6 +781,88 @@ def handle_host_mute_all(data):
     emit("force_mute", {}, room=room_code, include_self=False)
 
 
+# ---------------------------------------------------------------------------
+# Calling on a student. The teacher can
+#   * spotlight a student: everyone sees that student's video large, or
+#   * call on them: the same, plus an invitation to speak. A student's microphone
+#     is never switched on for them: they get a prompt and press "Unmute and
+#     speak" themselves (or "Not now"). The teacher ends the turn, or the student
+#     can stop it, and the microphone goes back to how it was.
+# Only the host can start or end it (checked here); one student at a time.
+# ---------------------------------------------------------------------------
+
+def _spotlight_payload(room_code):
+    state = CALLON.get(room_code)
+    if not state:
+        return {"active": False}
+    return {"active": True, "sid": state["sid"], "name": state["name"],
+            "speak": state["speak"], "accepted": state["accepted"]}
+
+
+def _host_of_room(room_code):
+    """The host's CONNECTED info if THIS socket is the host of that room."""
+    info = CONNECTED.get(request.sid)
+    if not info or not info["is_host"] or info["room_code"] != room_code:
+        return None
+    return info
+
+
+@socketio.on("host_call_on")
+def handle_host_call_on(data):
+    room_code = (data or {}).get("room_code")
+    host = _host_of_room(room_code)
+    target = CONNECTED.get((data or {}).get("sid"))
+    if not host or not target or target["room_code"] != room_code:
+        return
+    if target.get("observer") or target["is_host"]:
+        return
+    target_sid = data["sid"]
+    speak = bool(data.get("speak"))
+    previous = CALLON.get(room_code)
+    if previous and previous["sid"] != target_sid:
+        emit("call_on_end", {}, room=previous["sid"])
+    CALLON[room_code] = {"sid": target_sid, "name": target["name"], "speak": speak, "accepted": False}
+    emit("spotlight", _spotlight_payload(room_code), room=room_code)
+    if speak:
+        emit("call_on", {"by": host["name"]}, room=target_sid)
+        # Calling on someone answers their raised hand.
+        emit("hand_raise", {"sid": target_sid, "name": target["name"], "raised": False}, room=room_code)
+
+
+@socketio.on("call_on_response")
+def handle_call_on_response(data):
+    """The called-on student accepts, declines, or (after accepting) stops."""
+    sid = request.sid
+    info = CONNECTED.get(sid)
+    if not info:
+        return
+    room_code = info["room_code"]
+    state = CALLON.get(room_code)
+    if not state or state["sid"] != sid:
+        return
+    if (data or {}).get("accepted") and not state["accepted"]:
+        state["accepted"] = True
+        emit("spotlight", _spotlight_payload(room_code), room=room_code)
+        return
+    # Declined, or finished speaking.
+    CALLON.pop(room_code, None)
+    emit("spotlight", {"active": False}, room=room_code)
+    host_sid = _host_sid_for_room(room_code)
+    if host_sid:
+        emit("call_on_declined", {"name": info["name"], "was_speaking": bool(state["accepted"])}, room=host_sid)
+
+
+@socketio.on("host_call_on_end")
+def handle_host_call_on_end(data):
+    room_code = (data or {}).get("room_code")
+    if not _host_of_room(room_code):
+        return
+    state = CALLON.pop(room_code, None)
+    if state:
+        emit("call_on_end", {}, room=state["sid"])
+    emit("spotlight", {"active": False}, room=room_code)
+
+
 @socketio.on("host_remove_participant")
 def handle_host_remove_participant(data):
     room_code = data.get("room_code")
@@ -723,6 +874,10 @@ def handle_host_remove_participant(data):
         return
     # Removed guests lose their admission and must be let in again by the admin.
     ADMITTED.get(room_code, set()).discard(target_sid)
+    rtc.remove_participant(room_code, target_sid)
+    if CALLON.get(room_code, {}).get("sid") == target_sid:
+        CALLON.pop(room_code, None)
+        emit("spotlight", {"active": False}, room=room_code)
     gid = GUEST_SIDS.get(target_sid)
     if gid:
         # A removed link guest can't simply click the link again.
@@ -763,6 +918,10 @@ def handle_disconnect():
         return
 
     emit("peer_left", {"sid": sid}, room=room_code)
+
+    if CALLON.get(room_code, {}).get("sid") == sid:
+        CALLON.pop(room_code, None)
+        emit("spotlight", {"active": False}, room=room_code)
 
     if info["is_host"]:
         RECORDING.pop(room_code, None)

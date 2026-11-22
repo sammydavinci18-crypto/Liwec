@@ -1,0 +1,47 @@
+# Media server + recorder for Liwec, on ONE small Linux VPS with a public IP.
+# (Render/Heroku-style hosts can't open the UDP ports LiveKit needs, so the Flask
+#  app can stay where it is and only THIS runs on the VPS. LiveKit Cloud is the
+#  no-server alternative: put its URL/key/secret in the app's env and skip this.)
+#
+#   1. Point two DNS names at the VPS:  lk.example.org  and  turn.example.org
+#   2. Replace the placeholders in livekit.yaml, egress.yaml, Caddyfile
+#   3. Open: 80, 443 (TCP), 3478 (TCP+UDP), 7881 (TCP), 50000-60000 (UDP)
+#   4. docker compose up -d
+#
+# Port 443 is shared: Caddy answers wss:// for LiveKit and LiveKit's built-in
+# TURN-over-TLS covers students whose network only lets 443 out.
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save "" --appendonly no
+
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    network_mode: host
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+
+  egress:
+    image: livekit/egress:latest
+    restart: unless-stopped
+    environment:
+      EGRESS_CONFIG_FILE: /etc/egress.yaml
+    cap_add:
+      - SYS_ADMIN
+    network_mode: host
+    volumes:
+      - ./egress.yaml:/etc/egress.yaml:ro
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+
+volumes:
+  caddy_data:

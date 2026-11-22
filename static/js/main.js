@@ -205,9 +205,20 @@ document.addEventListener("DOMContentLoaded", () => {
   setRecordingBanner(true);
 
   if (window.ROOM_CONFIG.isHost) {
-    // Start as soon as the host is let into their own room.
-    window.addEventListener("admitted", () => {
+    // The server decides who records: itself (media server: nothing to do here)
+    // or, if it can't, this browser. It answers a moment after the host joins;
+    // if the answer never comes, this browser records, so a lesson is never
+    // left unrecorded.
+    let modeKnown = false;
+    const startBrowserRecording = () => {
       if (window.RecordingControl) window.RecordingControl.start();
+    };
+    window._socket.on("recording_mode", ({ mode }) => {
+      modeKnown = true;
+      if (mode === "browser") startBrowserRecording();
+    });
+    window.addEventListener("admitted", () => {
+      setTimeout(() => { if (!modeKnown) startBrowserRecording(); }, 30000);
     }, { once: true });
     window.addEventListener("recording-failed", () => {
       if (recordFailedOverlay) recordFailedOverlay.classList.add("show");

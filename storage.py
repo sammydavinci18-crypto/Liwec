@@ -100,6 +100,19 @@ def signed_url(bucket, key, expires_in=60):
     return f"{current_app.config['SUPABASE_URL']}/storage/v1{signed_path}"
 
 
+def object_exists(bucket, key):
+    """True if the object is in storage (used to confirm a server-side recording
+    really landed before it is offered for playback)."""
+    if _supabase_configured():
+        url = f"{current_app.config['SUPABASE_URL']}/storage/v1/object/info/{bucket}/{key}"
+        try:
+            r = requests.get(url, headers=_supabase_headers(), timeout=15)
+        except requests.RequestException:
+            return False
+        return r.status_code == 200
+    return (_local_dir(bucket) / key).exists()
+
+
 def delete_object(bucket, key):
     if _supabase_configured():
         url = f"{current_app.config['SUPABASE_URL']}/storage/v1/object/{bucket}/{key}"

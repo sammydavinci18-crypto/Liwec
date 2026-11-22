@@ -309,6 +309,7 @@ def create_app():
     from routes.notifications import notifications_bp
     from routes.guest import guest_bp
     from routes.slides import slides_bp
+    from routes.egress import egress_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
@@ -323,6 +324,7 @@ def create_app():
     app.register_blueprint(notifications_bp)
     app.register_blueprint(guest_bp)
     app.register_blueprint(slides_bp)
+    app.register_blueprint(egress_bp)
 
     # Registers the Socket.IO event handlers defined in sockets.py
     import sockets  # noqa: F401

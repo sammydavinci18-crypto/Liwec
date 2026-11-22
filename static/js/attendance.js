@@ -45,7 +45,12 @@
     }
   }
 
+  // A student who chose "audio only" because their connection is weak is not
+  // hiding: their teacher sees the 🎧 label next to their name (lowdata.js).
+  const audioOnly = () => window.__dataMode === "audio";
+
   function cameraOk() {
+    if (audioOnly()) return true;
     const stream = window.getLocalStream && window.getLocalStream();
     const track = stream && stream.getVideoTracks()[0];
     return !!(track && track.readyState === "live");
@@ -62,7 +67,7 @@
   // Not allowed to hide the lesson: re-enable the camera track if it gets switched off.
   setInterval(() => {
     const stream = window.getLocalStream && window.getLocalStream();
-    if (stream) stream.getVideoTracks().forEach((t) => { if (!t.enabled) t.enabled = true; });
+    if (stream && !audioOnly()) stream.getVideoTracks().forEach((t) => { if (!t.enabled) t.enabled = true; });
     check();
   }, 1000);
 

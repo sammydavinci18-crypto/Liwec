@@ -55,6 +55,12 @@
 <!-- Floating reaction toasts -->
 <div class="reaction-toasts" id="reaction-toasts"></div>
 
+<div class="net-banner" id="net-banner" role="status" aria-live="polite">
+  <span class="net-text"></span>
+  <button type="button" class="btn btn-sm net-action" hidden></button>
+  <button type="button" class="net-close" aria-label="Dismiss" title="Dismiss">&times;</button>
+</div>
+
 <div class="controls-bar{{ ' is-observer' if is_observer }}">
   <button class="ctrl-btn" id="btn-mic" title="Mute / unmute">
     <span class="icon" data-icon="mic"></span><span class="ctrl-label">Mute</span>
@@ -95,6 +101,18 @@
   <button class="ctrl-btn" id="btn-view-mode" title="Switch to gallery view">
     <span class="icon" data-icon="grid"></span><span class="ctrl-label">Layout</span>
   </button>
+
+  <div class="lowdata-wrap">
+    <button class="ctrl-btn" id="btn-lowdata" title="Weak connection? Use less data without leaving the lesson">
+      <span class="icon" data-icon="signal"></span><span class="ctrl-label">Data</span>
+    </button>
+    <div class="lowdata-menu" id="lowdata-menu" role="menu">
+      <div class="lowdata-title">Weak connection?</div>
+      <button type="button" data-mode="normal"><b>Normal</b><span>Full video</span></button>
+      <button type="button" data-mode="low"><b>Low data</b><span>Smaller video, fewer cameras shown</span></button>
+      <button type="button" data-mode="audio"><b>Audio only</b><span>Voice, slides and whiteboard. No video.</span></button>
+    </div>
+  </div>
 
   <button class="ctrl-btn" id="btn-chat" title="Chat">
     <span class="icon" data-icon="chat"></span><span class="ctrl-label">Chat</span>
@@ -176,6 +194,7 @@
       {% if not is_host and not is_observer %}
       <button class="wb-btn" id="sl-hand" type="button">&#9995; Raise hand</button>
       {% endif %}
+      {% if not is_host %}<button class="wb-btn is-on" id="sl-pip-toggle" type="button" title="Show or hide the teacher's video">&#128100; Teacher</button>{% endif %}
       {% if not is_host %}<button class="wb-btn" id="sl-rotate" type="button" title="Turn the slide sideways" hidden>&#8635; Rotate</button>{% endif %}
       <button class="wb-btn" id="sl-full" type="button" title="Full screen">&#9974; Full screen</button>
       {% if is_host %}<button class="wb-btn wb-close" id="sl-stop" type="button" title="Take the slides off everyone's screen">Stop presenting &#10005;</button>{% endif %}
@@ -200,6 +219,14 @@
     </div>
     <p class="sl-side-help">The class sees the current slide full screen.<br>
       Move with the buttons below, <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or <kbd>Space</kbd>, or swipe the slide.</p>
+    <div class="sl-side-label">Class <span id="sl-class-count"></span></div>
+    <div class="sl-faces" id="sl-faces" aria-label="Students"></div>
+    <div class="sl-side-label">Chat</div>
+    <div class="sl-chat-log" id="sl-chat-log" aria-live="polite"></div>
+    <form class="sl-chat-form" id="sl-chat-form" autocomplete="off">
+      <input type="text" id="sl-chat-input" placeholder="Message everyone&hellip;" maxlength="2000">
+      <button type="submit" class="wb-btn">Send</button>
+    </form>
   </aside>
   <div class="sl-controls">
     <button class="wb-btn sl-icon" id="sl-first" type="button" title="First slide" aria-label="First slide">&#9198;</button>
@@ -214,6 +241,11 @@
   <div class="sl-strip" id="sl-strip" aria-label="All slides"></div>
   {% else %}
   <div class="sl-counter" id="sl-counter" aria-live="polite"></div>
+  <div class="sl-pip" id="sl-pip" hidden>
+    <video autoplay playsinline muted></video>
+    <span class="sl-pip-name" id="sl-pip-name"></span>
+    <button type="button" class="sl-pip-x" id="sl-pip-x" aria-label="Hide teacher video" title="Hide">&times;</button>
+  </div>
   {% endif %}
 </div>
 
@@ -375,11 +407,22 @@
     homeUrl: {{ home_url|tojson }},
     attendanceRequired: {{ attendance_required|tojson }},
     callLimitMinutes: {{ call_limit_minutes|tojson }},
-    iceServers: {{ ice_servers|tojson }}
+    iceServers: {{ ice_servers|tojson }},
+    livekitUrl: {{ livekit_url|tojson }},
+    turnMissing: {{ turn_missing|tojson }}
   };
 </script>
+{% if livekit_url %}
+{% if local_livekit %}
+<script src="{{ url_for('static', filename='vendor/livekit-client.umd.min.js') }}"></script>
+{% else %}
+<!-- Run `python tools/fetch_vendor.py` once to serve this library from your own server instead. -->
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2.15.14/dist/livekit-client.umd.min.js"></script>
+{% endif %}
+{% endif %}
 <script src="{{ url_for('static', filename='js/icons.js') }}"></script>
 <script src="{{ url_for('static', filename='js/webrtc.js') }}"></script>
+<script src="{{ url_for('static', filename='js/lowdata.js') }}"></script>
 {% if is_host %}
 <script src="{{ url_for('static', filename='js/recorder.js') }}"></script>
 <script src="{{ url_for('static', filename='js/invite.js') }}"></script>
@@ -390,6 +433,7 @@
 <script src="{{ url_for('static', filename='js/collab.js') }}"></script>
 <script src="{{ url_for('static', filename='js/whiteboard.js') }}"></script>
 <script src="{{ url_for('static', filename='js/slides.js') }}"></script>
+<script src="{{ url_for('static', filename='js/classview.js') }}"></script>
 <script src="{{ url_for('static', filename='js/focusview.js') }}"></script>
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 {% endblock %}

@@ -139,6 +139,12 @@ class Config:
     # browser in the room work harder; see README "Class size".
     GUEST_LIMIT = int(os.environ.get("GUEST_LIMIT", 30))
 
+    # Peer-to-peer (no media server) only: once this many people are in a
+    # lesson, further students join with their camera off so the teacher's laptop
+    # and everyone's phones are not asked to carry another video. Ignored when
+    # LiveKit is configured (the media server has no such limit).
+    MESH_VIDEO_LIMIT = int(os.environ.get("MESH_VIDEO_LIMIT", 8))
+
     # NAT-traversal servers the browsers use to find each other for video.
     # Comma-separated. The default is a free public STUN server; for a fully
     # self-hosted setup run your own coturn and list it here, e.g.
@@ -147,6 +153,53 @@ class Config:
     ICE_SERVERS = [u.strip() for u in os.environ.get("ICE_SERVERS", "stun:stun.l.google.com:19302").split(",") if u.strip()]
     TURN_USERNAME = os.environ.get("TURN_USERNAME", "")
     TURN_CREDENTIAL = os.environ.get("TURN_CREDENTIAL", "")
+
+    # --- TURN relay (needed by students on mobile data / strict school Wi-Fi) ---
+    # Pick ONE of these (rtc.py builds the list the browsers get):
+    #  1. coturn with a shared secret ("use-auth-secret"): set TURN_URLS and
+    #     TURN_SECRET. Each browser receives its own credentials that expire
+    #     after TURN_TTL_SECONDS, so nothing reusable is ever exposed.
+    #       TURN_URLS=turn:turn.school.org:3478,turn:turn.school.org:3478?transport=tcp,turns:turn.school.org:443?transport=tcp
+    #  2. Cloudflare Realtime TURN: set CLOUDFLARE_TURN_KEY_ID and
+    #     CLOUDFLARE_TURN_API_TOKEN (short-lived credentials are fetched for you).
+    #  3. Any provider giving a fixed username/password: ICE_SERVERS=turn:...
+    #     plus TURN_USERNAME / TURN_CREDENTIAL (above).
+    TURN_URLS = [u.strip() for u in os.environ.get("TURN_URLS", "").split(",") if u.strip()]
+    TURN_SECRET = os.environ.get("TURN_SECRET", "")
+    TURN_TTL_SECONDS = int(os.environ.get("TURN_TTL_SECONDS", 6 * 3600))
+    CLOUDFLARE_TURN_KEY_ID = os.environ.get("CLOUDFLARE_TURN_KEY_ID", "")
+    CLOUDFLARE_TURN_API_TOKEN = os.environ.get("CLOUDFLARE_TURN_API_TOKEN", "")
+
+    # --- LiveKit media server (SFU) ---
+    # When these three are set, lessons run through LiveKit instead of the
+    # peer-to-peer mesh: every browser sends ONE stream to the server, which
+    # forwards the right quality to each viewer. Leave unset to keep the mesh.
+    #   LIVEKIT_URL=wss://your-project.livekit.cloud     (what browsers connect to)
+    #   LIVEKIT_API_KEY / LIVEKIT_API_SECRET
+    # LIVEKIT_HTTP_URL is derived from LIVEKIT_URL (wss->https) unless set.
+    LIVEKIT_URL = os.environ.get("LIVEKIT_URL", "").rstrip("/")
+    LIVEKIT_HTTP_URL = os.environ.get("LIVEKIT_HTTP_URL", "").rstrip("/")
+    LIVEKIT_API_KEY = os.environ.get("LIVEKIT_API_KEY", "")
+    LIVEKIT_API_SECRET = os.environ.get("LIVEKIT_API_SECRET", "")
+
+    # --- Server-side recording (LiveKit Egress) ---
+    # The server records the lesson, so a teacher's slow laptop or crashed
+    # browser can't ruin it. Egress writes straight into the Supabase recordings
+    # bucket through Supabase's S3-compatible endpoint (Supabase dashboard >
+    # Storage > S3 Connection: create an access key). It needs:
+    #   EGRESS_S3_ENDPOINT   e.g. https://<project>.supabase.co/storage/v1/s3
+    #   EGRESS_S3_REGION     e.g. us-east-1 (the project's region)
+    #   EGRESS_S3_ACCESS_KEY / EGRESS_S3_SECRET
+    #   PUBLIC_BASE_URL      the public https address of THIS app (Egress opens
+    #                        a page here to draw the recording layout). Render's
+    #                        RENDER_EXTERNAL_URL is used if this is unset.
+    # With any of these missing, the teacher's browser records (as before, but
+    # hardened: see static/js/recorder.js).
+    EGRESS_S3_ENDPOINT = os.environ.get("EGRESS_S3_ENDPOINT", "").rstrip("/")
+    EGRESS_S3_REGION = os.environ.get("EGRESS_S3_REGION", "us-east-1")
+    EGRESS_S3_ACCESS_KEY = os.environ.get("EGRESS_S3_ACCESS_KEY", "")
+    EGRESS_S3_SECRET = os.environ.get("EGRESS_S3_SECRET", "")
+    PUBLIC_BASE_URL = (os.environ.get("PUBLIC_BASE_URL") or os.environ.get("RENDER_EXTERNAL_URL", "")).rstrip("/")
 
     # Slide presentations (PowerPoint / PDF the teacher shows the class).
     # Each deck is turned into one picture per slide and kept in the same

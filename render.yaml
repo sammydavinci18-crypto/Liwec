@@ -29,6 +29,25 @@ services:
         value: /var/data/recordings
       - key: VERIFICATION_DOCS_DIR
         value: /var/data/verification_docs   # teacher/student ID and certificate uploads — sensitive, never publicly served
+      # --- Reliability (see README "Reliability"). All optional; set in the dashboard. ---
+      # TURN relay for students on mobile data / strict school Wi-Fi:
+      # - key: TURN_URLS
+      #   sync: false
+      # - key: TURN_SECRET
+      #   sync: false
+      # LiveKit media server (big classes) and server-side recording:
+      # - key: LIVEKIT_URL
+      #   sync: false
+      # - key: LIVEKIT_API_KEY
+      #   sync: false
+      # - key: LIVEKIT_API_SECRET
+      #   sync: false
+      # - key: EGRESS_S3_ENDPOINT
+      #   sync: false
+      # - key: EGRESS_S3_ACCESS_KEY
+      #   sync: false
+      # - key: EGRESS_S3_SECRET
+      #   sync: false
       # Optional — only needed once. Set these two in the Render dashboard
       # (not here, so the password never gets committed to the repo) to
       # auto-create your first admin account on next deploy. Safe to leave

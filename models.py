@@ -336,6 +336,14 @@ class Recording(db.Model):
     expires_at = db.Column(db.DateTime, nullable=True)
     deleted_at = db.Column(db.DateTime, nullable=True)  # set once the file's actually been removed
 
+    # Who made the recording: "browser" (the host's browser, uploaded in chunks)
+    # or "server" (LiveKit Egress, so no laptop is involved). See rtc.py.
+    source = db.Column(db.String(10), nullable=False, default="browser", server_default="browser")
+    egress_id = db.Column(db.String(64), nullable=True)
+    # Browser recordings: how many chunks have been accepted, so a retried or
+    # duplicated upload is recognised instead of being appended twice.
+    chunks_received = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+
     meeting = db.relationship("Meeting", backref=db.backref("recording", uselist=False, cascade="all, delete-orphan"))
 
     @property

@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Recorder</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Opened by the media server's recorder (LiveKit Egress), never by a person. See routes/egress.py. -->
+<style>
+  html, body { margin: 0; height: 100%; background: #0E1A22; overflow: hidden; font-family: system-ui, "Segoe UI", Arial, sans-serif; }
+  #stage { position: fixed; inset: 0; display: flex; gap: 8px; padding: 0; }
+  #spot { flex: 0 0 35.4%; position: relative; background: #0A1318; border-right: 1px solid #2B3E45; }
+  #grid { flex: 1; display: grid; gap: 8px; align-content: stretch; }
+  .tile { position: relative; background: #0A1318; border: 1px solid #2B3E45; overflow: hidden; min-height: 0; }
+  .tile video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  #spot video { object-fit: contain; }
+  .tile .name { position: absolute; left: 6px; bottom: 6px; color: #fff; font-size: 14px; text-shadow: 0 1px 3px #000; background: rgba(0,0,0,.35); padding: 1px 6px; border-radius: 4px; }
+  #slide, #wb { position: fixed; inset: 0; width: 100%; height: 100%; background: #000; object-fit: contain; display: none; }
+  #wb { background: #fff; }
+  #slide.show, #wb.show { display: block; }
+</style>
+</head>
+<body>
+<div id="stage"><div id="spot" class="tile"></div><div id="grid"></div></div>
+<img id="slide" alt="">
+<canvas id="wb" width="1600" height="900"></canvas>
+{% if local_livekit %}
+<script src="{{ url_for('static', filename='vendor/livekit-client.umd.min.js') }}"></script>
+{% else %}
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2.15.14/dist/livekit-client.umd.min.js"></script>
+{% endif %}
+<script>
+(function () {
+  const BASE = "/egress/{{ room_code }}/{{ token }}";
+  const params = new URLSearchParams(location.search);
+  const LK = window.LivekitClient;
+  const tiles = new Map(); // identity -> { el, video, name }
+  const audioEls = new Map(); // track sid -> element
+  let room = null;
+
+  function meta(p) { try { return JSON.parse(p.metadata || "{}"); } catch (e) { return {}; } }
+
+  function tileFor(p) {
+    let t = tiles.get(p.identity);
+    if (t) return t;
+    const el = document.createElement("div");
+    el.className = "tile";
+    const video = document.createElement("video");
+    video.autoplay = true; video.playsInline = true; video.muted = true; // audio is played separately
+    el.appendChild(video);
+    const name = document.createElement("div");
+    name.className = "name";
+    el.appendChild(name);
+    t = { el, video, name };
+    tiles.set(p.identity, t);
+    return t;
+  }
+
+  function layout() {
+    const grid = document.getElementById("grid");
+    const spot = document.getElementById("spot");
+    const people = Array.from(room.remoteParticipants.values());
+    const host = people.find((p) => meta(p).host);
+    const others = people.filter((p) => p !== host);
+
+    const live = new Set(people.map((p) => p.identity));
+    for (const [id, t] of tiles) if (!live.has(id)) { t.el.remove(); tiles.delete(id); }
+
+    spot.innerHTML = "";
+    if (host) {
+      const t = tileFor(host);
+      t.name.textContent = (host.name || "Host");
+      spot.appendChild(t.video); spot.appendChild(t.name);
+    }
+    const cols = Math.min(3, Math.max(1, Math.ceil(Math.sqrt(others.length || 1))));
+    grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+    grid.style.gridTemplateRows = `repeat(${Math.max(1, Math.ceil(others.length / cols))}, 1fr)`;
+    grid.innerHTML = "";
+    others.forEach((p) => { const t = tileFor(p); t.name.textContent = p.name || ""; t.el.innerHTML = ""; t.el.appendChild(t.video); t.el.appendChild(t.name); grid.appendChild(t.el); });
+  }
+
+  function attachVideo(track, p) {
+    const t = tileFor(p);
+    track.attach(t.video);
+  }
+
+  function onTrack(track, pub, p) {
+    if (track.kind === "video") {
+      // The teacher (and anyone presenting) is shown large, everyone else small.
+      try { pub.setVideoQuality(meta(p).host ? LK.VideoQuality.HIGH : LK.VideoQuality.LOW); } catch (e) {}
+      attachVideo(track, p);
+    } else if (track.kind === "audio") {
+      const el = track.attach();
+      el.style.display = "none";
+      document.body.appendChild(el);
+      audioEls.set(track.sid, el);
+    }
+    layout();
+  }
+
+  async function start() {
+    const url = params.get("url"), token = params.get("token");
+    if (!url || !token) return;
+    room = new LK.Room({ adaptiveStream: false, dynacast: false });
+    room.on(LK.RoomEvent.TrackSubscribed, onTrack);
+    room.on(LK.RoomEvent.TrackUnsubscribed, (track) => {
+      track.detach().forEach((e) => e.remove());
+      audioEls.delete(track.sid);
+      layout();
+    });
+    room.on(LK.RoomEvent.ParticipantConnected, layout);
+    room.on(LK.RoomEvent.ParticipantDisconnected, layout);
+    room.on(LK.RoomEvent.ParticipantMetadataChanged, layout);
+    room.on(LK.RoomEvent.Disconnected, () => console.log("END_RECORDING"));
+    await room.connect(url, token, { autoSubscribe: true });
+    // Browsers may block audio until a gesture; this page has none.
+    try { await room.startAudio(); } catch (e) {}
+    layout();
+    console.log("START_RECORDING");
+  }
+
+  /* ---- slides and whiteboard (not video, so they come from the server) ---- */
+  const slideEl = document.getElementById("slide");
+  const wbEl = document.getElementById("wb");
+  const ctx = wbEl.getContext("2d");
+  const W = wbEl.width, H = wbEl.height;
+  let wbVersion = -1, wbOps = [];
+
+  function drawBoard() {
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W, H);
+    const lines = {};
+    for (const op of wbOps) {
+      if (op.t === "line") {
+        lines[op.id] = op;
+        op.p = op.p.slice();
+      } else if (op.t === "more" && lines[op.id]) {
+        lines[op.id].p.push(...op.p);
+      }
+    }
+    for (const op of wbOps) {
+      if (op.t === "line") {
+        const pts = op.p;
+        ctx.strokeStyle = op.c; ctx.lineWidth = op.w * W; ctx.lineCap = "round"; ctx.lineJoin = "round";
+        ctx.beginPath(); ctx.moveTo(pts[0][0] * W, pts[0][1] * H);
+        if (pts.length === 1) ctx.lineTo(pts[0][0] * W + 0.01, pts[0][1] * H);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0] * W, pts[i][1] * H);
+        ctx.stroke();
+      } else if (op.t === "text") {
+        const px = op.size * H;
+        ctx.fillStyle = op.c; ctx.font = `${px}px "Segoe UI", Arial, sans-serif`; ctx.textBaseline = "top";
+        op.s.split("\n").forEach((l, i) => ctx.fillText(l, op.x * W, op.y * H + i * px * 1.25));
+      }
+    }
+  }
+
+  async function poll() {
+    try {
+      const r = await fetch(`${BASE}/state?wb=${wbVersion}`, { cache: "no-store" });
+      if (r.ok) {
+        const s = await r.json();
+        const sl = s.slides;
+        if (sl && sl.active) {
+          const src = `${BASE}/slide/${sl.deck_id}/${sl.index + 1}.jpg`;
+          if (slideEl.getAttribute("src") !== src) slideEl.src = src;
+          slideEl.classList.add("show");
+        } else {
+          slideEl.classList.remove("show");
+        }
+        if (s.wb) {
+          if (s.wb.ops) { wbOps = JSON.parse(JSON.stringify(s.wb.ops)); wbVersion = s.wb.v; drawBoard(); }
+          wbEl.classList.toggle("show", !!s.wb.open);
+        }
+      }
+    } catch (e) { /* the next tick tries again */ }
+    setTimeout(poll, 1000);
+  }
+
+  start().catch((e) => console.error("recorder page failed", e));
+  poll();
+})();
+</script>
+</body>
+</html>
