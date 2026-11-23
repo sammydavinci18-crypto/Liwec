@@ -79,6 +79,9 @@
   <button class="ctrl-btn" id="btn-slides" title="Present a PowerPoint or PDF to the class">
     <span class="icon" data-icon="slides"></span><span class="ctrl-label">Slides</span>
   </button>
+  <button class="ctrl-btn" id="btn-tools" data-open-tools title="Quick poll, breakout rooms, timer">
+    <span class="icon" data-icon="tools"></span><span class="ctrl-label">Tools</span>
+  </button>
   <button class="ctrl-btn" id="btn-invite" title="Copy the link students use to join">
     <span class="icon" data-icon="users"></span><span class="ctrl-label">Invite</span>
   </button>
@@ -154,25 +157,85 @@
 <div class="wb-overlay" id="wb-overlay">
   {% if is_host %}
   <div class="wb-toolbar">
-    <button class="wb-btn is-on" data-wb-tool="pen" title="Write or draw">✏️ Pen</button>
-    <button class="wb-btn" data-wb-tool="text" title="Click the board, then type">Aa Type</button>
-    <button class="wb-btn" data-wb-tool="eraser" title="Eraser">🧽 Eraser</button>
+    <div class="wb-group" role="group" aria-label="Pens">
+      <button class="wb-btn is-on" data-wb-tool="pen" title="Write or draw">✏️ Pen</button>
+      <button class="wb-btn" data-wb-tool="hi" title="Highlighter: see-through, never hides your writing">🖍 Highlight</button>
+      <button class="wb-btn" data-wb-tool="eraser" title="Eraser">🧽 Eraser</button>
+      <button class="wb-btn" data-wb-tool="text" title="Click the board, then type">Aa Type</button>
+    </div>
+    <div class="wb-group" role="group" aria-label="Shapes">
+      <button class="wb-btn" data-wb-tool="line" title="Straight line">╱ Line</button>
+      <button class="wb-btn" data-wb-tool="arrow" title="Arrow">➚ Arrow</button>
+      <button class="wb-btn" data-wb-tool="rect" title="Rectangle">▭ Box</button>
+      <button class="wb-btn" data-wb-tool="ellipse" title="Circle or oval">◯ Oval</button>
+    </div>
+    <div class="wb-group" role="group" aria-label="Ruler and pictures">
+      <button class="wb-btn" id="wb-ruler" title="Show a ruler. Drag it to move it, drag an end to turn it. Draw along its edge for a straight line.">📏 Ruler</button>
+      <button class="wb-btn" id="wb-image" title="Put a picture on the board">🖼 Picture</button>
+      <input type="file" id="wb-image-input" accept="image/*" hidden>
+    </div>
     <span class="wb-sep"></span>
-    <button class="wb-swatch is-on" data-wb-colour="#111111" title="Black"></button>
-    <button class="wb-swatch" data-wb-colour="#1e5fd8" title="Blue"></button>
-    <button class="wb-swatch" data-wb-colour="#d12f2f" title="Red"></button>
-    <button class="wb-swatch" data-wb-colour="#1f9d55" title="Green"></button>
+    <div class="wb-group" role="group" aria-label="Colour">
+      <button class="wb-swatch is-on" data-wb-colour="#111111" title="Black" aria-label="Black"></button>
+      <button class="wb-swatch" data-wb-colour="#1e5fd8" title="Blue" aria-label="Blue"></button>
+      <button class="wb-swatch" data-wb-colour="#d12f2f" title="Red" aria-label="Red"></button>
+      <button class="wb-swatch" data-wb-colour="#1f9d55" title="Green" aria-label="Green"></button>
+      <button class="wb-swatch" data-wb-colour="#e8710a" title="Orange" aria-label="Orange"></button>
+      <button class="wb-swatch" data-wb-colour="#7b3fc4" title="Purple" aria-label="Purple"></button>
+      <button class="wb-swatch" data-wb-colour="#f5c400" title="Yellow" aria-label="Yellow"></button>
+    </div>
+    <div class="wb-group" role="group" aria-label="Size">
+      <button class="wb-btn" data-wb-size="0" title="Thin">S</button>
+      <button class="wb-btn is-on" data-wb-size="1" title="Medium">M</button>
+      <button class="wb-btn" data-wb-size="2" title="Thick">L</button>
+    </div>
     <span class="wb-sep"></span>
-    <button class="wb-btn" data-wb-size="0" title="Thin">S</button>
-    <button class="wb-btn is-on" data-wb-size="1" title="Medium">M</button>
-    <button class="wb-btn" data-wb-size="2" title="Thick">L</button>
+    <select class="wb-select" id="wb-paper" aria-label="Paper">
+      <option value="plain">Plain paper</option>
+      <option value="grid">Graph paper</option>
+      <option value="axes">Graph with axes</option>
+      <option value="lines">Lined paper</option>
+    </select>
+    <div class="wb-group" role="group" aria-label="Pages">
+      <button class="wb-btn" id="wb-page-prev" title="Previous page" aria-label="Previous page">◀</button>
+      <span class="wb-page-label" id="wb-page-label">Page 1 / 1</span>
+      <button class="wb-btn" id="wb-page-next" title="Next page" aria-label="Next page">▶</button>
+      <button class="wb-btn" id="wb-page-add" title="Add a new page">＋ Page</button>
+    </div>
+    <select class="wb-select" id="wb-writer" aria-label="Who can write on the board" title="Let one student write on the board">
+      <option value="">Only me</option>
+    </select>
     <span class="wb-sep"></span>
     <button class="wb-btn" id="wb-undo">↶ Undo</button>
     <button class="wb-btn" id="wb-clear">Clear</button>
+    <button class="wb-btn" data-open-tools type="button" title="Poll, breakout rooms, timer">🧰 Tools</button>
     <button class="wb-btn wb-close" id="wb-close">Close board ✕</button>
   </div>
+  <div class="wb-hint" id="wb-hint" role="status" hidden></div>
   {% else %}
-  <div class="wb-toolbar wb-toolbar-view"><span>Your teacher is using the whiteboard</span></div>
+  <div class="wb-toolbar wb-toolbar-view"><span>Your teacher is using the whiteboard <span id="wb-writer-note"></span></span></div>
+  {% if not is_observer %}
+  <!-- Shown only while the teacher has let THIS student write. -->
+  <div class="wb-toolbar wb-writer-bar">
+    <strong>✍️ Your turn to write</strong>
+    <button class="wb-btn is-on" data-wb-tool="pen">✏️ Pen</button>
+    <button class="wb-btn" data-wb-tool="hi">🖍 Highlight</button>
+    <button class="wb-btn" data-wb-tool="eraser">🧽 Eraser</button>
+    <button class="wb-btn" data-wb-tool="text">Aa Type</button>
+    <button class="wb-btn" data-wb-tool="line">╱ Line</button>
+    <button class="wb-btn" data-wb-tool="rect">▭ Box</button>
+    <button class="wb-btn" data-wb-tool="ellipse">◯ Oval</button>
+    <span class="wb-sep"></span>
+    <button class="wb-swatch is-on" data-wb-colour="#111111" title="Black" aria-label="Black"></button>
+    <button class="wb-swatch" data-wb-colour="#1e5fd8" title="Blue" aria-label="Blue"></button>
+    <button class="wb-swatch" data-wb-colour="#d12f2f" title="Red" aria-label="Red"></button>
+    <button class="wb-swatch" data-wb-colour="#1f9d55" title="Green" aria-label="Green"></button>
+    <button class="wb-btn" data-wb-size="0" title="Thin">S</button>
+    <button class="wb-btn is-on" data-wb-size="1" title="Medium">M</button>
+    <button class="wb-btn" data-wb-size="2" title="Thick">L</button>
+    <button class="wb-btn wb-close" id="wb-writer-done" type="button">I'm done</button>
+  </div>
+  {% endif %}
   {% endif %}
   <div class="wb-stage" id="wb-stage">
     <canvas id="wb-canvas" width="1600" height="900"{% if not is_host %} class="wb-readonly"{% endif %}></canvas>
@@ -197,12 +260,47 @@
       {% if not is_host %}<button class="wb-btn is-on" id="sl-pip-toggle" type="button" title="Show or hide the teacher's video">&#128100; Teacher</button>{% endif %}
       {% if not is_host %}<button class="wb-btn" id="sl-rotate" type="button" title="Turn the slide sideways" hidden>&#8635; Rotate</button>{% endif %}
       <button class="wb-btn" id="sl-full" type="button" title="Full screen">&#9974; Full screen</button>
+      {% if is_host %}<button class="wb-btn" data-open-tools type="button" title="Poll, breakout rooms, timer">&#129520; Tools</button>{% endif %}
       {% if is_host %}<button class="wb-btn wb-close" id="sl-stop" type="button" title="Take the slides off everyone's screen">Stop presenting &#10005;</button>{% endif %}
     </div>
   </div>
 
   <div class="sl-stage" id="sl-stage">
     <img id="sl-img" alt="" draggable="false">
+    <!-- The teacher's drawing and laser pointer: exactly over the picture (slideink.js) -->
+    <canvas id="sl-ink" width="1600" height="900" aria-hidden="true"></canvas>
+    <canvas id="sl-laser" width="1600" height="900" aria-hidden="true"></canvas>
+    {% if is_host %}
+    <div class="sl-ink-bar" id="sl-ink-bar">
+      <button class="wb-btn" id="sl-ink-open" type="button" title="Draw on the slide: pen, highlighter, laser pointer">✏️ Draw on slide</button>
+      <div class="sl-ink-tools">
+        <button class="wb-btn" data-ink-tool="pen" type="button" title="Pen">✏️ Pen</button>
+        <button class="wb-btn" data-ink-tool="hi" type="button" title="Highlighter">🖍 Highlight</button>
+        <button class="wb-btn" data-ink-tool="laser" type="button" title="Laser pointer: move over the slide, nothing is left behind">🔴 Laser</button>
+        <button class="wb-btn" data-ink-tool="eraser" type="button" title="Eraser">🧽 Erase</button>
+        <span class="wb-sep"></span>
+        <button class="wb-btn" data-ink-tool="line" type="button" title="Underline or straight line">╱</button>
+        <button class="wb-btn" data-ink-tool="arrow" type="button" title="Arrow">➚</button>
+        <button class="wb-btn" data-ink-tool="rect" type="button" title="Box">▭</button>
+        <button class="wb-btn" data-ink-tool="ellipse" type="button" title="Circle something">◯</button>
+        <span class="wb-sep"></span>
+        <button class="wb-swatch" data-ink-colour="#e5262b" title="Red" aria-label="Red"></button>
+        <button class="wb-swatch" data-ink-colour="#f5c400" title="Yellow" aria-label="Yellow"></button>
+        <button class="wb-swatch" data-ink-colour="#1f9d55" title="Green" aria-label="Green"></button>
+        <button class="wb-swatch" data-ink-colour="#1e90ff" title="Blue" aria-label="Blue"></button>
+        <button class="wb-swatch" data-ink-colour="#ffffff" title="White" aria-label="White"></button>
+        <button class="wb-swatch" data-ink-colour="#111111" title="Black" aria-label="Black"></button>
+        <span class="wb-sep"></span>
+        <button class="wb-btn" data-ink-size="0" type="button" title="Thin">S</button>
+        <button class="wb-btn is-on" data-ink-size="1" type="button" title="Medium">M</button>
+        <button class="wb-btn" data-ink-size="2" type="button" title="Thick">L</button>
+        <span class="wb-sep"></span>
+        <button class="wb-btn" id="sl-ink-undo" type="button">↶ Undo</button>
+        <button class="wb-btn" id="sl-ink-clear" type="button" title="Rub out everything drawn on this slide">Clear slide</button>
+        <button class="wb-btn" id="sl-ink-off" type="button" title="Stop drawing">✕</button>
+      </div>
+    </div>
+    {% endif %}
     <div class="sl-loading" id="sl-loading" hidden>Loading slide&hellip;</div>
     <div class="sl-failed" id="sl-failed" hidden>
       <span>This slide could not be loaded.</span>
@@ -431,9 +529,15 @@
 <script src="{{ url_for('static', filename='js/attendance.js') }}"></script>
 {% endif %}
 <script src="{{ url_for('static', filename='js/collab.js') }}"></script>
+<script src="{{ url_for('static', filename='js/ink.js') }}"></script>
 <script src="{{ url_for('static', filename='js/whiteboard.js') }}"></script>
+<script src="{{ url_for('static', filename='js/slideink.js') }}"></script>
 <script src="{{ url_for('static', filename='js/slides.js') }}"></script>
 <script src="{{ url_for('static', filename='js/classview.js') }}"></script>
+<script src="{{ url_for('static', filename='js/teachtools.js') }}"></script>
+<script src="{{ url_for('static', filename='js/polls.js') }}"></script>
+<script src="{{ url_for('static', filename='js/breakout.js') }}"></script>
+<script src="{{ url_for('static', filename='js/timer.js') }}"></script>
 <script src="{{ url_for('static', filename='js/focusview.js') }}"></script>
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 {% endblock %}

@@ -159,6 +159,10 @@ def delete_deck(room_code, deck_id):
         sockets.stop_slides(meeting.room_code)  # the class goes back to the session
     # Forget where the host was in it: ids can be reused (SQLite), and a new deck must start at slide 1.
     sockets.SLIDE_POS.pop((meeting.room_code, deck.id), None)
+    import classroom_state
+    tools = classroom_state.peek(meeting.room_code)
+    if tools:
+        tools.ink.drop_deck(deck.id)            # and the teacher's drawing on its slides
 
     slides.delete_deck_files(current_app._get_current_object(), deck)
     db.session.delete(deck)

@@ -48,15 +48,23 @@ def view(room_code, token):
 def state(room_code, token):
     meeting = _authorised_meeting(room_code, token)
     import sockets
+    import sockets_tools
+    import classroom_state
 
-    payload = {"slides": sockets._slides_payload(meeting.room_code), "wb": {"v": 0, "open": False}}
-    board = sockets.WHITEBOARD.get(meeting.room_code)
-    if board:
-        have = request.args.get("wb", type=int)
-        payload["wb"] = {"v": board["v"], "open": board["open"]}
-        # The (possibly large) list of strokes is only sent when it has changed.
-        if have != board["v"]:
-            payload["wb"]["ops"] = board["ops"]
+    payload = {"slides": sockets._slides_payload(meeting.room_code), "wb": {"v": 0, "open": False}, "ink": None}
+    tools = classroom_state.peek(meeting.room_code)
+    if tools:
+        board = tools.board
+        payload["wb"] = {"v": board.v, "open": board.open, "bg": board.bg, "ruler": board.ruler}
+        # The (possibly large) list of strokes and pictures is only sent when it has changed.
+        if request.args.get("wb", type=int) != board.v:
+            payload["wb"]["ops"] = board.ops
+        ink = sockets_tools.ink_payload(meeting.room_code)
+        if ink is not None:
+            key = "%s:%s:%s" % (ink["deck_id"], ink["index"], tools.ink.v)
+            payload["ink"] = {"key": key}
+            if request.args.get("ink") != key:
+                payload["ink"]["ops"] = ink["ops"]
     return _no_store(jsonify(payload))
 
 

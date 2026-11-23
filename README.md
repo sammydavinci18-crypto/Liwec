@@ -215,7 +215,7 @@ Run `flask db upgrade` (or let your Render start command do it). Two additive mi
 
 ## Whiteboard and enlarged screen share
 
-- **Whiteboard (host only).** The *Whiteboard* button opens a board that covers the whole screen for everyone in the session. The teacher can write/draw (finger, pen or mouse), type text, change colour and thickness, erase, undo, clear, and *Close board* to return to the lesson. Students and an observing admin only watch. The board is kept server-side for the session, so reopening continues where it left off and late joiners see it. While it is open it is also painted into the session recording. Files: `static/js/whiteboard.js`, handlers `wb_open/wb_close/wb_op` in `sockets.py`.
+- **Whiteboard.** The *Whiteboard* button opens a board that covers the whole screen for everyone. The teacher has pen, highlighter (see-through, never hides writing), eraser, typed text, shapes (line, arrow, box, oval), a **ruler** (drag to move, drag an end to turn; start a pen line near its edge and it comes out straight), **pictures** (shrunk in the browser before sending), **several pages**, and a choice of paper: plain, graph, graph with axes, lined. The teacher can let **one student write** (pen, highlighter, eraser, text, shapes only: no clearing, undo or pictures); the student hands it back with *I'm done*, and it ends if they leave or the board closes. The board is kept server-side for the session, so reopening continues and late joiners see every page. It is painted into the recording, ruler included. Files: `static/js/ink.js` (drawing engine shared with slides and the recorder page), `static/js/whiteboard.js`, handlers `wb_*` in `sockets_tools.py`.
 - **Enlarge a shared screen.** When someone else shares their screen it fills the window; anyone can close it (✕, Esc or the *Enlarge* button) and reopen it while the share continues. File: `static/js/focusview.js`.
 
 ## Presenting slides (PowerPoint / PDF)
@@ -270,3 +270,23 @@ Shared behaviour lives in `static/js/ui.js` (loaded on every page) and the "Usab
 - **Navigation**: `templates/base.html` highlights the current page from `request.endpoint`. When you add an admin page, add its endpoint to the matching link (or to `people_eps` for the People menu).
 - **Dates**: any admin `datetime-local` field must carry `data-utc` so it is typed in local time and stored as UTC.
 - Hints under a field: `<span class="field-hint">…</span>`. Group long forms with `<fieldset class="form-section"><legend>…</legend>`.
+
+## Teaching tools (draw on slides, polls, breakout rooms, timer)
+
+All of these are started by the host only; the server checks that on every message (`sockets_tools.py`), and the rules live in plain Python in `classroom_state.py` so they can be tested without a server.
+
+- **Draw on slides.** While presenting, *Draw on slide* gives the teacher pen, highlighter, **laser pointer**, eraser, and underline / arrow / box / circle. Strokes appear on every student's slide as they are drawn, belong to the slide they were made on (go to another slide and it is clean; come back and it is still there, for the session), and are in the recording. The laser is never stored. Files: `static/js/slideink.js`, `ink_op` / `laser` handlers.
+- **Quick poll.** *Tools → Quick poll*: ask with 2 to 6 choices (A, B, C, D…), optionally typing the question and marking the right answer (a quiz). Students tap big buttons or press a key and may change their answer until voting closes. The teacher sees a live count and who has not answered, and can close voting, show the counts to the class, and reveal the answer. The server never sends the right answer to students before it is revealed. Results are not saved after the session. File: `static/js/polls.js`.
+- **Breakout rooms.** *Tools → Breakout rooms*: pairs or a number of groups, dealt at random, with an optional time limit (the server brings everyone back when it runs out). The teacher can move students, **visit** a group (hear it and be heard), talk to everyone, message every group, add a minute, and end it. Students see their group and can ask for help. Late joiners go to the smallest group. File: `static/js/breakout.js`.
+  - *Who hears whom is applied in each browser* (other groups' tiles are muted and hidden), like the rest of this platform's media rules. A determined student with browser developer tools could still listen in; it is a classroom aid, not a security boundary.
+  - *Breakout conversations are recorded.* The recording is made from the streams, not from what each person's speakers play, so every group is in the lesson recording, consistent with the compulsory-recording rule.
+- **Timer and focus bar.** *Tools → Timer*: a countdown (1 to 20 min or custom) with the task written on it. Everyone sees a bar across the top that drains, turns amber then red, chimes and says "Time's up". Pause, +1 minute and stop are on the bar for the teacher. The server sends seconds left, so wrong student clocks do not matter. File: `static/js/timer.js`.
+
+The *Tools* button is in the control bar, the presenter view and the whiteboard. The poll, groups and timer sit in the same top-of-everything layer as the class view (`window.ClassLayer`), so they stay visible over full-screen slides and the whiteboard.
+
+### Testing
+
+- `python -m unittest discover -s tests`: 44 checks of the rules (no server needed).
+- `python tests/browser_test.py`: renders the real room page for a teacher and four students in Chromium and runs every tool above end to end against the real handlers (needs `jinja2` and `playwright`; Flask is stubbed). Screenshots go to `tests/shots/`.
+
+Not covered by those: real WebRTC / LiveKit audio (the hearing rules are tested by checking which tiles are muted), and the server-side LiveKit recorder page (`egress_view.html`), which now uses the same `ink.js` but has only been syntax-checked here, not run against LiveKit.

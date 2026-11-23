@@ -33,11 +33,6 @@ RECORDING = {}
 # room_code -> set(sid)
 OBSERVERS = {}
 
-# Whiteboard state per room, so someone who joins (or reloads) while the board
-# is open sees exactly what is on it. room_code -> {"open": bool, "ops": [op]}
-WHITEBOARD = {}
-MAX_WHITEBOARD_OPS = 20000
-
 # The presentation currently on everyone's screen, per room. Like the
 # whiteboard, the host drives it and everybody else just watches it fill their
 # display. room_code -> {"deck_id", "title", "pages", "index"}; absent = none.
@@ -338,14 +333,13 @@ def handle_join(data):
         guest.left_at = None
         db.session.commit()
 
-    # Whoever arrives (guest, observer, or the host reloading) sees the current board.
-    board = WHITEBOARD.get(room_code)
-    if board and (board["open"] or board["ops"]):
-        emit("wb_state", {"open": board["open"], "ops": board["ops"]})
-
-    # ...and the presentation (or that there isn't one: after a dropped
-    # connection, a browser may still be showing slides that have since ended).
+    # Whoever arrives (guest, observer, or the host reloading) sees the presentation
+    # (or that there isn't one: after a dropped connection, a browser may still be
+    # showing slides that have since ended)...
     emit("slides_state", _slides_payload(room_code))
+    # ...and the rest of the room as it is now: the whiteboard, drawing on the slide,
+    # a poll in progress, breakout groups, the timer.
+    sockets_tools.on_join(sid, room_code)
 
     if observing:
         # No peer_joined, no participant row — they just receive.
@@ -576,114 +570,6 @@ def handle_attendance_away(data):
 
 
 # ---------------------------------------------------------------------------
-# Whiteboard. Only the host draws or types; everyone else (guests and any
-# observing admin) just watches it appear full screen. Every operation is
-# validated here, kept for late joiners, and relayed. Coordinates are 0..1
-# fractions of the board so every screen size shows the same picture.
-# ---------------------------------------------------------------------------
-
-def _num(v, lo, hi, default):
-    try:
-        return min(hi, max(lo, float(v)))
-    except (TypeError, ValueError):
-        return default
-
-
-def _colour(v):
-    v = v if isinstance(v, str) else ""
-    return v if len(v) == 7 and v[0] == "#" and all(c in "0123456789abcdefABCDEF" for c in v[1:]) else "#111111"
-
-
-def _points(raw):
-    out = []
-    for pt in (raw if isinstance(raw, list) else [])[:200]:
-        if isinstance(pt, (list, tuple)) and len(pt) == 2:
-            out.append([round(_num(pt[0], 0, 1, 0), 4), round(_num(pt[1], 0, 1, 0), 4)])
-    return out
-
-
-def _clean_wb_op(op):
-    """Returns a safe copy of a whiteboard operation, or None if it is malformed."""
-    if not isinstance(op, dict):
-        return None
-    kind = op.get("t")
-    if kind == "line":
-        pts = _points(op.get("p"))
-        if not pts:
-            return None
-        return {"t": "line", "id": str(op.get("id", ""))[:24], "c": _colour(op.get("c")),
-                "w": _num(op.get("w"), 0.001, 0.05, 0.006), "p": pts}
-    if kind == "more":
-        pts = _points(op.get("p"))
-        return {"t": "more", "id": str(op.get("id", ""))[:24], "p": pts} if pts else None
-    if kind == "text":
-        text = str(op.get("s", ""))[:500]
-        if not text.strip():
-            return None
-        return {"t": "text", "s": text, "c": _colour(op.get("c")),
-                "x": _num(op.get("x"), 0, 1, 0), "y": _num(op.get("y"), 0, 1, 0),
-                "size": _num(op.get("size"), 0.01, 0.2, 0.06)}
-    if kind in ("undo", "clear"):
-        return {"t": kind}
-    return None
-
-
-def _host_info(sid):
-    info = CONNECTED.get(sid)
-    return info if info and info["is_host"] and not info.get("observer") else None
-
-
-def _board(room_code):
-    return WHITEBOARD.setdefault(room_code, {"open": False, "ops": [], "v": 0})
-
-
-@socketio.on("wb_open")
-def handle_wb_open(data):
-    info = _host_info(request.sid)
-    if not info:
-        return
-    board = _board(info["room_code"])
-    board["open"] = True
-    board["v"] += 1
-    emit("wb_open", {}, room=info["room_code"], include_self=False)
-
-
-@socketio.on("wb_close")
-def handle_wb_close(data):
-    info = _host_info(request.sid)
-    if not info:
-        return
-    board = _board(info["room_code"])
-    board["open"] = False
-    board["v"] += 1
-    emit("wb_close", {}, room=info["room_code"], include_self=False)
-
-
-@socketio.on("wb_op")
-def handle_wb_op(data):
-    info = _host_info(request.sid)
-    if not info:
-        return
-    op = _clean_wb_op((data or {}).get("op"))
-    if not op:
-        return
-    board = _board(info["room_code"])
-    board["v"] += 1
-    if op["t"] == "clear":
-        board["ops"] = []
-    elif op["t"] == "undo":
-        # Remove the last drawn item together with any "more" points that extended it.
-        stored = board["ops"]
-        while stored and stored[-1]["t"] == "more":
-            stored.pop()
-        if stored:
-            stored.pop()
-    elif len(board["ops"]) < MAX_WHITEBOARD_OPS:
-        board["ops"].append(op)
-    emit("wb_op", {"op": op}, room=info["room_code"], include_self=False)
-
-
-# ---------------------------------------------------------------------------
 # Presentations. The host uploads a deck (routes/slides.py turns it into one
 # picture per slide) and presents it: it covers the whole screen for everyone
 # in the session and follows the host's slide changes. Only the host can start,
@@ -742,6 +628,7 @@ def handle_slides_present(data):
     # To everyone, the host included: the host's presenter view opens from this
     # same message, so what they see is what the class sees.
     emit("slides_state", _slides_payload(room_code), room=room_code)
+    sockets_tools.on_slides_changed(room_code)
 
 
 @socketio.on("slides_goto")
@@ -757,6 +644,7 @@ def handle_slides_goto(data):
     SLIDE_POS[(info["room_code"], state["deck_id"])] = index
     # The host's own screen already moved; tell everyone else.
     emit("slides_goto", {"index": index}, room=info["room_code"], include_self=False)
+    sockets_tools.on_slides_changed(info["room_code"])   # this slide's drawing goes to everyone, the host too
 
 
 @socketio.on("slides_stop")
@@ -918,6 +806,7 @@ def handle_disconnect():
         return
 
     emit("peer_left", {"sid": sid}, room=room_code)
+    sockets_tools.on_leave(sid, room_code)
 
     if CALLON.get(room_code, {}).get("sid") == sid:
         CALLON.pop(room_code, None)
@@ -948,3 +837,8 @@ def handle_disconnect():
                 _close_away(sid, row)
                 row.left_at = datetime.utcnow()
                 db.session.commit()
+
+
+# The teaching tools (whiteboard, drawing on slides, polls, breakout rooms, timer).
+# Imported last because it uses names defined above.
+import sockets_tools  # noqa: E402,F401

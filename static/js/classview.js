@@ -43,6 +43,8 @@
   document.addEventListener("fullscreenchange", placeLayer);
   document.addEventListener("webkitfullscreenchange", placeLayer);
   socket.on("slides_state", () => setTimeout(placeLayer, 400));
+  // The poll, breakout and timer tools (teachtools.js and friends) live in this same layer.
+  window.ClassLayer = { el: layer, place: placeLayer };
 
   /* ================= 3. spotlight card and invitation ================= */
   let spot = null; // { sid, name, speak, accepted } while somebody is in the spotlight

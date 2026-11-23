@@ -17,12 +17,16 @@
   #slide, #wb { position: fixed; inset: 0; width: 100%; height: 100%; background: #000; object-fit: contain; display: none; }
   #wb { background: #fff; }
   #slide.show, #wb.show { display: block; }
+  #slideink { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: contain; display: none; background: transparent; }
+  #slideink.show { display: block; }
 </style>
 </head>
 <body>
 <div id="stage"><div id="spot" class="tile"></div><div id="grid"></div></div>
 <img id="slide" alt="">
 <canvas id="wb" width="1600" height="900"></canvas>
+<canvas id="slideink" width="1600" height="900"></canvas>
+<script src="{{ url_for('static', filename='js/ink.js') }}"></script>
 {% if local_livekit %}
 <script src="{{ url_for('static', filename='vendor/livekit-client.umd.min.js') }}"></script>
 {% else %}
@@ -121,40 +125,43 @@
   /* ---- slides and whiteboard (not video, so they come from the server) ---- */
   const slideEl = document.getElementById("slide");
   const wbEl = document.getElementById("wb");
-  const ctx = wbEl.getContext("2d");
   const W = wbEl.width, H = wbEl.height;
-  let wbVersion = -1, wbOps = [];
+  // The same drawing engine the classroom uses (static/js/ink.js), so the recording matches the screen.
+  const board = new InkEngine(wbEl);
+  let wbVersion = -1, ruler = null;
 
-  function drawBoard() {
-    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W, H);
-    const lines = {};
-    for (const op of wbOps) {
-      if (op.t === "line") {
-        lines[op.id] = op;
-        op.p = op.p.slice();
-      } else if (op.t === "more" && lines[op.id]) {
-        lines[op.id].p.push(...op.p);
-      }
+  board.overlay = function (ctx) {
+    if (!ruler || !ruler.on) return;
+    const T = 74, UNIT = W / 40, half = ruler.l * W / 2;
+    ctx.save(); ctx.translate(ruler.x * W, ruler.y * H); ctx.rotate(ruler.a);
+    ctx.fillStyle = "rgba(255,233,160,.78)"; ctx.strokeStyle = "rgba(125,92,0,.95)"; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.rect(-half, -T / 2, half * 2, T); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "rgba(60,42,0,.95)"; ctx.lineWidth = 1.5; ctx.font = Math.round(T * .26) + "px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "top";
+    for (let i = 0; i * UNIT <= half * 2 + .5; i++) {
+      const x = -half + i * UNIT, len = i % 5 === 0 ? T * .34 : T * .2;
+      ctx.beginPath(); ctx.moveTo(x, -T / 2); ctx.lineTo(x, -T / 2 + len); ctx.stroke();
+      if (i % 5 === 0 && i > 0) ctx.fillText(String(i), x, -T / 2 + len + 2);
     }
-    for (const op of wbOps) {
-      if (op.t === "line") {
-        const pts = op.p;
-        ctx.strokeStyle = op.c; ctx.lineWidth = op.w * W; ctx.lineCap = "round"; ctx.lineJoin = "round";
-        ctx.beginPath(); ctx.moveTo(pts[0][0] * W, pts[0][1] * H);
-        if (pts.length === 1) ctx.lineTo(pts[0][0] * W + 0.01, pts[0][1] * H);
-        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0] * W, pts[i][1] * H);
-        ctx.stroke();
-      } else if (op.t === "text") {
-        const px = op.size * H;
-        ctx.fillStyle = op.c; ctx.font = `${px}px "Segoe UI", Arial, sans-serif`; ctx.textBaseline = "top";
-        op.s.split("\n").forEach((l, i) => ctx.fillText(l, op.x * W, op.y * H + i * px * 1.25));
-      }
-    }
+    ctx.restore();
+  };
+
+  // The teacher's drawing on slides: a transparent layer exactly over the slide picture.
+  const inkEl = document.getElementById("slideink");
+  let ink = null, inkKey = "";
+  function inkEngine(ratio) {
+    const h = Math.round(1600 * ratio);
+    if (ink && ink.height === h) return ink;
+    const keep = ink ? ink.ops.map((o) => Object.assign({}, o)) : [];
+    inkEl.width = 1600; inkEl.height = h;
+    ink = new InkEngine(inkEl, { transparent: true });
+    if (keep.length) ink.setOps(keep);
+    return ink;
   }
+  inkEngine(9 / 16);
 
   async function poll() {
     try {
-      const r = await fetch(`${BASE}/state?wb=${wbVersion}`, { cache: "no-store" });
+      const r = await fetch(`${BASE}/state?wb=${wbVersion}&ink=${encodeURIComponent(inkKey)}`, { cache: "no-store" });
       if (r.ok) {
         const s = await r.json();
         const sl = s.slides;
@@ -166,8 +173,20 @@
           slideEl.classList.remove("show");
         }
         if (s.wb) {
-          if (s.wb.ops) { wbOps = JSON.parse(JSON.stringify(s.wb.ops)); wbVersion = s.wb.v; drawBoard(); }
+          ruler = s.wb.ruler || null;
+          board.setBg(s.wb.bg || "plain");
+          if (s.wb.ops) { board.setOps(JSON.parse(JSON.stringify(s.wb.ops))); wbVersion = s.wb.v; }
+          else board.present(true);
           wbEl.classList.toggle("show", !!s.wb.open);
+        }
+        if (s.ink && sl && sl.active) {
+          if (slideEl.naturalWidth) inkEngine(slideEl.naturalHeight / slideEl.naturalWidth);
+          if (s.ink.ops) { ink.setOps(JSON.parse(JSON.stringify(s.ink.ops))); }
+          inkKey = s.ink.key;
+          inkEl.classList.add("show");
+        } else {
+          inkEl.classList.remove("show");
+          inkKey = "";
         }
       }
     } catch (e) { /* the next tick tries again */ }

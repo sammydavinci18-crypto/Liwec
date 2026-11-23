@@ -82,10 +82,12 @@
     const im = getImage(n);
     preloadAround(index);
     updateChrome();
+    if (window.SlideInk) window.SlideInk.slideChanged(deck.id, index);   // the drawing belongs to a slide
 
     const apply = () => {
       if (!showing || !deck || index + 1 !== n) return;   // the teacher already moved on
       if (img.getAttribute("src") !== im.src) img.src = im.src;
+      if (window.SlideInk) window.SlideInk.imageShown(im);   // so the drawing layer has the slide's shape
       img.alt = "Slide " + n + " of " + deck.pages;
       loading.hidden = true;
       failed.hidden = true;

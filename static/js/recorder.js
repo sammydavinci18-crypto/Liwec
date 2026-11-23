@@ -122,6 +122,9 @@ function drawSlides() {
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
   ctx.drawImage(im, (CANVAS_W - w) / 2, (CANVAS_H - h) / 2, w, h);
+  // The teacher's drawing and laser pointer sit on the slide the same way.
+  const layers = window.SlideInk && window.SlideInk.layers ? window.SlideInk.layers() : [];
+  layers.forEach((layer) => ctx.drawImage(layer, (CANVAS_W - w) / 2, (CANVAS_H - h) / 2, w, h));
 }
 
 /* ------------------------------------------------------------------ timer */
