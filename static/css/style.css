@@ -3109,3 +3109,68 @@ body.has-watermark:has(.room-body)::before { display: none; }
 .program-card:nth-child(2) .program-photo { object-position: 30% 35%; }
 .program-card:nth-child(3) .program-photo { object-position: 30% 35%; }
 .learner-photos figure:last-child img { object-position: 35% 40%; }
+
+
+/* ---- Presenter view: fix for narrow screens, edge arrows, "Hide slide" ---- */
+/* The 900px rule above also won on phones and small tablets, leaving a dead 240px column
+   that squeezed the slide and buttons. Narrow screens get a single column again. */
+@media (max-width: 820px) {
+  .sl-overlay.is-host.show { grid-template-columns: minmax(0, 1fr); grid-template-areas: "top" "stage" "ctrl" "strip"; }
+  .sl-side { display: none; }
+  .sl-overlay.is-host .sl-topbar { padding-top: max(8px, env(safe-area-inset-top)); }
+  .sl-top-actions { flex: 1 1 100%; justify-content: flex-start; }
+  .sl-top-actions .wb-btn { min-height: 40px; }
+}
+
+/* big arrows on the slide itself: a navigation button is always in reach */
+.sl-edge {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 3;
+  width: 44px; height: 72px; border: 0; border-radius: 10px; cursor: pointer;
+  background: rgba(14,26,34,.55); color: #fff; font-size: 2.2rem; line-height: 1;
+  opacity: .55; transition: opacity .15s ease, background .15s ease;
+}
+.sl-edge:hover, .sl-edge:focus-visible { opacity: 1; background: rgba(14,26,34,.85); }
+.sl-edge-prev { left: 6px; } .sl-edge-next { right: 6px; }
+@media (pointer: coarse) { .sl-edge { opacity: .8; } }
+
+/* Hide slide: only the teacher's own overlay goes away */
+.sl-overlay.peek, .sl-overlay.is-host.show.peek { display: none; }
+.sl-peek-bar {
+  position: fixed; left: 50%; bottom: max(14px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+  z-index: 140; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px;
+  max-width: calc(100vw - 20px); padding: 8px 12px; border-radius: 14px; color: #fff;
+  background: rgba(14,26,34,.94); border: 2px solid var(--amber); box-shadow: 0 12px 32px rgba(0,0,0,.5);
+}
+.sl-peek-bar[hidden] { display: none; }
+.sl-peek-label { font-size: .85rem; opacity: .9; }
+.sl-peek-hands { font-size: .85rem; padding: 2px 10px; border-radius: 999px; background: rgba(201,162,39,.22); color: #F0D676; border: 1px solid var(--amber); }
+.sl-peek-hands[hidden] { display: none; }
+.sl-peek-bar .wb-btn { min-height: 42px; }
+.sl-peek-bar .sl-primary { background: var(--amber); border-color: var(--amber); color: #1a1405; font-weight: 600; }
+
+
+/* ==== Teacher's room: the lesson fills the whole browser ===================
+   The site menu is tucked away (the Menu button slides it down), and the room's
+   own header and controls are slimmer, so the video, slides and tools get the
+   height. Students' rooms are unchanged. */
+body:has(.room-host) { overflow: hidden; }
+body:has(.room-host) .topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 150;
+  max-height: 90vh; max-height: 90dvh; overflow-y: auto;
+  transform: translateY(-110%); transition: transform .22s ease;
+  box-shadow: 0 14px 34px rgba(0,0,0,.45);
+}
+body.site-menu-open:has(.room-host) .topbar { transform: none; }
+.site-menu-backdrop { position: fixed; inset: 0; z-index: 149; background: rgba(0,0,0,.45); }
+.site-menu-backdrop[hidden], .site-menu-note[hidden] { display: none; }
+.site-menu-note {
+  position: fixed; left: 50%; bottom: 132px; transform: translateX(-50%); z-index: 151;
+  display: flex; align-items: center; gap: 12px; padding: 8px 14px; max-width: calc(100vw - 24px);
+  background: #0E1A22; color: #fff; border: 2px solid var(--amber); border-radius: 12px; font-size: .86rem;
+}
+.room-host .room-header { padding: 8px 16px; }
+.room-host .stage-area { padding: 10px 16px; }
+body:has(.room-host) .controls-bar { padding: 8px 12px; gap: 6px; }
+body:has(.room-host) .ctrl-btn { height: 46px; min-width: 54px; padding: 4px 8px; }
+.ctrl-btn .room-glyph { display: grid; place-items: center; font-size: 1.1rem; line-height: 1; }
+.ctrl-btn[hidden] { display: none; }
