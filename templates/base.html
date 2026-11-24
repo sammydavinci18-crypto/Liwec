@@ -9,7 +9,7 @@
   <script>document.documentElement.className+=" js";try{var t=localStorage.getItem("lw-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
   {% block head %}{% endblock %}
 </head>
-<body>
+<body{% if current_user.is_authenticated %} class="has-watermark"{% endif %}>
   <a class="skip-link" href="#main">Skip to main content</a>
   {% block topheader %}
   {% if current_user.is_authenticated %}

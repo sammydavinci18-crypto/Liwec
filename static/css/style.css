@@ -3069,3 +3069,43 @@ body.tt-timer-on .sl-overlay.is-host .sl-topbar { padding-top: 44px; }
 }
 .tt-toast { background: #16262f; color: #fff; padding: 8px 14px; border-radius: 999px; border: 1px solid #2A3F6B; font-size: .88rem; text-align: center; }
 .tt-poll-note, .tt-poll-q, .tt-poll-head { color: #fff; }
+
+
+/* ---- Academy badge watermark: signed-in pages only ----------------------
+   A large, faint crest fixed behind the content. It never takes clicks, is
+   hidden in the live classroom (video matters more there) and when printing. */
+body.has-watermark::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: url("../img/logo-crest-large.png") center 56% / min(70vmin, 640px) auto no-repeat;
+  opacity: 0.07;
+}
+body.has-watermark .page,
+body.has-watermark .site-footer { position: relative; z-index: 1; }
+:root[data-theme="dark"] body.has-watermark::before { opacity: 0.09; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) body.has-watermark::before { opacity: 0.09; }
+}
+body.has-watermark:has(.room-body)::before { display: none; }
+@media print { body.has-watermark::before { display: none; } }
+
+
+/* ---- Landing: learner photos under "Who we are" ------------------------- */
+.learner-photos { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 34px; }
+.learner-photos figure { position: relative; margin: 0 14px 14px 0; }
+.learner-photos figure::before { content: ""; position: absolute; inset: 12px -12px -12px 12px; border: 3px solid var(--amber); border-radius: var(--radius-lg); z-index: 0; }
+.learner-photos img { position: relative; z-index: 1; display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; object-fit: cover; border-radius: var(--radius-lg); box-shadow: var(--shadow-card); }
+.learner-photos figure:first-child img { object-position: 30% 40%; }
+.learner-photos figure:last-child img { object-position: 30% 35%; }
+@media (max-width: 640px) { .learner-photos { grid-template-columns: 1fr; gap: 34px; } }
+
+
+/* ---- Landing: photo at the top of each programme card ------------------- */
+.program-card .program-photo { display: block; width: calc(100% + 48px); height: auto; max-width: none; aspect-ratio: 16 / 9; object-fit: cover; margin: -24px -24px 10px; }
+.program-card:nth-child(1) .program-photo { object-position: 40% 25%; }
+.program-card:nth-child(2) .program-photo { object-position: 30% 35%; }
+.program-card:nth-child(3) .program-photo { object-position: 30% 35%; }
+.learner-photos figure:last-child img { object-position: 35% 40%; }

@@ -69,6 +69,10 @@
         <p>To be a leading virtual academy that lights the way to academic excellence, global opportunity and lifelong success for every learner, wherever they are.</p>
       </div>
     </div>
+    <div class="learner-photos">
+      <figure><img src="{{ url_for('static', filename='img/learner-boy.jpg') }}" alt="A smiling boy in glasses learning at a computer at home" loading="lazy" width="548" height="364"></figure>
+      <figure><img src="{{ url_for('static', filename='img/learner-class.jpg') }}" alt="Children learning side by side on laptops in class" loading="lazy" width="739" height="415"></figure>
+    </div>
     <p style="margin-top:22px;"><a href="{{ url_for('pages.about') }}">Discover the meaning behind our crest &rarr;</a></p>
   </div>
 </section>
@@ -99,18 +103,21 @@
     <h2>Three pathways into a Cambridge education.</h2>
     <div class="program-grid">
       <div class="program-card">
+        <img class="program-photo" src="{{ url_for('static', filename='img/program-bridging.jpg') }}" alt="A young learner in headphones waving hello to his teacher on a tablet" loading="lazy" width="740" height="415">
         <span class="program-num">01</span>
         <h3>Year 6–Year 8 Bridging</h3>
         <p>Strong foundations before the Cambridge journey begins.</p>
         <ul class="program-points"><li>Core literacy &amp; numeracy</li><li>Study skills &amp; confidence</li><li>Ready for lower secondary</li></ul>
       </div>
       <div class="program-card">
+        <img class="program-photo" src="{{ url_for('static', filename='img/program-transition.jpg') }}" alt="A teenager in headphones taking notes while studying on a laptop" loading="lazy" width="680" height="451">
         <span class="program-num">02</span>
         <h3>National Curriculum to Cambridge Transition</h3>
         <p>A guided, supported move from your current curriculum into Cambridge.</p>
         <ul class="program-points"><li>Gap analysis &amp; catch-up</li><li>Cambridge-style assessment</li><li>Personalised pacing</li></ul>
       </div>
       <div class="program-card">
+        <img class="program-photo" src="{{ url_for('static', filename='img/program-home.jpg') }}" alt="A girl in headphones joining a live lesson from home" loading="lazy" width="740" height="415">
         <span class="program-num">03</span>
         <h3>Home Schooling</h3>
         <p>Structured, teacher-led learning that fits family life.</p>
