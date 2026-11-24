@@ -87,6 +87,9 @@
   <button class="ctrl-btn" id="btn-tools" data-open-tools title="Quick poll, breakout rooms, timer">
     <span class="icon" data-icon="tools"></span><span class="ctrl-label">Tools</span>
   </button>
+  <button class="ctrl-btn" id="btn-break" type="button" title="Take a break: tell students you will be back in a few minutes">
+    <span class="icon" data-icon="coffee"></span><span class="ctrl-label">Break</span>
+  </button>
   <button class="ctrl-btn" id="btn-site-menu" type="button" aria-expanded="false" title="Open the rest of the site (dashboard, classes and so on) in a new tab. Your lesson keeps running.">
     <span class="icon room-glyph" aria-hidden="true">&#9776;</span><span class="ctrl-label">Menu</span>
   </button>
@@ -565,6 +568,7 @@
 <script src="{{ url_for('static', filename='js/polls.js') }}"></script>
 <script src="{{ url_for('static', filename='js/breakout.js') }}"></script>
 <script src="{{ url_for('static', filename='js/timer.js') }}"></script>
+<script src="{{ url_for('static', filename='js/break.js') }}"></script>
 <script src="{{ url_for('static', filename='js/focusview.js') }}"></script>
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 {% if is_host %}<script src="{{ url_for('static', filename='js/roomchrome.js') }}"></script>{% endif %}
