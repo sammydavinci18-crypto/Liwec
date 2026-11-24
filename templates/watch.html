@@ -1,0 +1,48 @@
+{% extends "base_public.html" %}
+{% block title %}{{ meeting.title }} · Lesson recording · Light-Way{% endblock %}
+{% block head %}
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+{% endblock %}
+{% block page_class %}watch-page{% endblock %}
+
+{% block content %}
+<section class="watch-stage">
+  <div class="watch-inner">
+    <span class="eyebrow">Lesson recording</span>
+    <h1>{{ meeting.title }}</h1>
+    <p class="watch-meta">
+      {% if meeting.subject %}{{ meeting.subject }} · {% endif %}{% if meeting.school_class %}{{ meeting.school_class.name }} · {% endif %}with {{ meeting.host.name }} · {{ (meeting.scheduled_time or meeting.ended_at)|dt }}
+    </p>
+
+    <div class="watch-player" id="watch-player">
+      <video id="lesson-video" src="{{ video_url }}" controls playsinline preload="auto" controlsList="nodownload"></video>
+      <button type="button" class="watch-start" id="watch-start" hidden>
+        <span class="watch-start-icon" aria-hidden="true">&#9654;</span>
+        <span>Start the lesson</span>
+      </button>
+    </div>
+    <p class="watch-note">You're watching the whole lesson from the beginning, just as it happened. Use the bar under the video to pause, skip or go full screen.{% if recording.expires_at %} This recording is available until {{ recording.expires_at|dt }}.{% endif %}</p>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var v = document.getElementById("lesson-video");
+  var b = document.getElementById("watch-start");
+  if (!v || !b) return;
+  function showStart() { b.hidden = false; }
+  b.addEventListener("click", function () { b.hidden = true; v.play(); });
+  v.addEventListener("play", function () { b.hidden = true; });
+  // Try to start straight away; phones usually need a tap first, so offer a big button.
+  var p = v.play();
+  if (p && p.catch) p.catch(showStart);
+  v.addEventListener("error", function () {
+    var n = document.querySelector(".watch-note");
+    if (n) n.textContent = "This video could not be loaded. Please check your connection and reload the page, or ask your teacher for a new link.";
+  });
+})();
+</script>
+{% endblock %}

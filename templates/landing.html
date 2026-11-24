@@ -32,7 +32,7 @@
 {% endblock %}
 
 {% block content %}
-<section class="hero">
+<section class="hero has-photo" style="--band-img:url('{{ url_for('static', filename='img/bg-hero.jpg') }}');">
   <div class="hero-glow" aria-hidden="true"></div>
   <div class="hero-inner">
     <img src="{{ url_for('static', filename='img/logo-crest-large.png') }}" alt="Light-Way International Virtual Academy crest" class="hero-crest">
@@ -134,7 +134,7 @@
 </section>
 
 <!-- Pathway -->
-<section class="section-band section-join" id="pathway">
+<section class="section-band section-join photo-band" id="pathway" style="--band-img:url('{{ url_for('static', filename='img/bg-study.jpg') }}'); --band-pos:center 35%;">
   <div class="section-inner">
     <span class="eyebrow eyebrow-dark">The learner's journey</span>
     <h2>From first steps to a global future.</h2>
@@ -264,7 +264,7 @@
   </div>
 </section>
 
-<section class="section-band section-steps" id="how-it-works">
+<section class="section-band section-steps photo-band" id="how-it-works" style="--band-img:url('{{ url_for('static', filename='img/bg-teacher.jpg') }}'); --band-pos:center 30%;">
   <div class="section-inner">
     <span class="eyebrow eyebrow-dark">Getting started</span>
     <h2>Three simple steps.</h2>
@@ -288,7 +288,7 @@
   </div>
 </section>
 
-<section class="cta-band">
+<section class="cta-band photo-band" style="--band-img:url('{{ url_for('static', filename='img/bg-welcome.jpg') }}'); --band-pos:center 25%;">
   <div class="section-inner cta-inner">
     <h2>Lighting Paths. Empowering Futures.</h2>
     <p>Join as a student or teacher, or request a consultation.</p>

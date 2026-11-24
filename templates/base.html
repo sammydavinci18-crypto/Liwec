@@ -48,6 +48,7 @@
       </details>
       {% elif current_user.is_approved_teacher %}
       <a class="topnav-link{{ ' is-current' if ep == 'teachers.my_sessions' }}" href="{{ url_for('teachers.my_sessions') }}"{% if ep == 'teachers.my_sessions' %} aria-current="page"{% endif %}>My lessons</a>
+      <a class="topnav-link{{ ' is-current' if ep == 'teachers.my_recordings' }}" href="{{ url_for('teachers.my_recordings') }}"{% if ep == 'teachers.my_recordings' %} aria-current="page"{% endif %}>Recordings</a>
       <a class="topnav-link{{ ' is-current' if ep == 'portal.timetable' }}" href="{{ url_for('portal.timetable') }}"{% if ep == 'portal.timetable' %} aria-current="page"{% endif %}>Timetable</a>
       <details class="nav-menu">
         <summary class="topnav-link{{ ' is-current' if ep in ['main.dashboard', 'portal.index', 'consult.new', 'consult.mine', 'teachers.directory', 'teachers.profile', 'teachers.my_students', 'teachers.my_profile'] }}">More</summary>

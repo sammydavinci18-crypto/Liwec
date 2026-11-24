@@ -20,7 +20,7 @@
   </div>
   <div class="appt-actions">
     {% if ended %}
-      {% if m.recording %}<a class="btn btn-ghost btn-sm" href="{{ url_for('meetings.room', room_code=m.room_code) }}">Recording &amp; notes</a>{% endif %}
+      {% if m.recording %}<a class="btn btn-ghost btn-sm" href="{{ url_for('meetings.room', room_code=m.room_code) }}">Recording &amp; notes</a>{% if watch_link(m) %}<button type="button" class="btn btn-amber btn-sm" data-copy="{{ watch_link(m) }}" data-share data-share-title="{{ m.title }} (recording)">Copy student link</button>{% endif %}{% endif %}
     {% else %}
       {{ guest_link_button(m) }}
       <a class="btn btn-primary btn-sm" href="{{ url_for('meetings.room', room_code=m.room_code) }}">{{ 'Return to room' if m.status == 'live' else 'Start session' }}</a>
@@ -49,7 +49,7 @@
 {% endif %}
 
 {% if past %}
-<h3 class="section-heading">Finished</h3>
+<h3 class="section-heading">Finished <a class="meta" href="{{ url_for('teachers.my_recordings') }}">All recordings &rarr;</a></h3>
 <div class="appointment-list">{% for m in past %}{{ session_row(m, True) }}{% endfor %}</div>
 {% endif %}
 {% endblock %}

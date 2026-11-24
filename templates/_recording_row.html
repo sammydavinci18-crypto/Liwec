@@ -1,0 +1,45 @@
+{# One finished session with its recording. Use:
+   {% from "_recording_row.html" import row %}
+   {{ row(m, state(m), is_admin=True) }} #}
+{% macro row(m, st, is_admin=False, came=None) %}
+{% set rec = m.recording %}
+<div class="appointment-row recording-row">
+  <div>
+    <strong>{{ m.title }}</strong>
+    <span class="appt-time">{{ m.type_label() }}{% if m.school_class %} · <span class="class-pill">{{ m.school_class.name }}</span>{% endif %}{% if m.subject %} · {{ m.subject }}{% endif %} · {{ m.scheduled_time|dt }}</span>
+    <span class="appt-time">{% if is_admin %}Host: {{ m.host.name }} · {% endif %}{% if came %}{{ came(m) }} attended{% endif %}{% if m.call_started_at and m.ended_at %}{% if came %} · {% endif %}{{ ((m.ended_at - m.call_started_at).total_seconds() // 60)|int }} min{% endif %}{% if rec and rec.size_bytes %} · {{ (rec.size_bytes / 1048576)|round(0)|int }} MB{% endif %}</span>
+    {% if rec and rec.save_note and is_admin %}<span class="appt-time rec-note">{{ rec.save_note }}</span>{% endif %}
+    {% if st == 'ready' and rec and not rec.share_enabled %}<span class="appt-time rec-note">The watch link is switched off.</span>{% endif %}
+  </div>
+  <div class="appt-actions">
+    {% if st == 'ready' %}
+      <span class="status-pill status-approved">Saved</span>
+      <a class="btn btn-primary btn-sm" href="{{ url_for('meetings.room', room_code=m.room_code) }}">Watch</a>
+      {% if rec.share_enabled and watch_link(m) %}
+        <button type="button" class="btn btn-amber btn-sm" data-copy="{{ watch_link(m) }}" data-share data-share-title="{{ m.title }} (recording)" data-share-text="Watch the lesson: {{ m.title }}" title="Students tap this link and the whole lesson plays from the start. No account needed.">Copy student link</button>
+        <details class="rec-more">
+          <summary class="btn btn-ghost btn-sm">Link options</summary>
+          <div class="rec-more-panel">
+            <form method="POST" action="{{ url_for('watch.share_settings', meeting_id=m.id) }}"><input type="hidden" name="action" value="regenerate"><button class="btn btn-ghost btn-sm" type="submit" data-confirm="The old link stops working. Anyone who has it will need the new one." data-confirm-title="Make a new link?" data-confirm-action="Make new link">Make a new link</button></form>
+            <form method="POST" action="{{ url_for('watch.share_settings', meeting_id=m.id) }}"><input type="hidden" name="action" value="off"><button class="btn btn-ghost btn-sm" type="submit" data-confirm="Students who open the link will see that it is switched off." data-confirm-title="Switch the link off?" data-confirm-action="Switch off" data-confirm-tone="danger">Switch link off</button></form>
+          </div>
+        </details>
+      {% elif not rec.share_enabled %}
+        <form method="POST" action="{{ url_for('watch.share_settings', meeting_id=m.id) }}"><input type="hidden" name="action" value="on"><button class="btn btn-ghost btn-sm" type="submit">Switch link on</button></form>
+      {% endif %}
+    {% elif st == 'saving' %}
+      <span class="status-pill status-pending">Saving…</span>
+    {% elif st == 'expired' %}
+      <span class="status-pill status-cancelled">Expired</span>
+    {% elif st == 'failed' %}
+      <span class="status-pill status-cancelled" title="The recording arrived but could not be saved.">Not saved</span>
+      {% if is_admin %}
+      <form method="POST" action="{{ url_for('admin.recording_retry', meeting_id=m.id) }}"><button class="btn btn-primary btn-sm" type="submit">Retry saving</button></form>
+      {% else %}<small class="meta">Please tell the admin.</small>{% endif %}
+    {% else %}
+      <span class="status-pill status-cancelled" title="The session ended but no recording reached the server.">No recording</span>
+    {% endif %}
+    {% if is_admin %}<a class="btn btn-ghost btn-sm" href="{{ url_for('admin.meeting_detail', meeting_id=m.id) }}">Details</a>{% endif %}
+  </div>
+</div>
+{% endmacro %}

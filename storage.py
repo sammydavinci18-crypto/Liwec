@@ -82,6 +82,31 @@ def upload_bytes(bucket, key, data, content_type="application/octet-stream"):
     return key
 
 
+def upload_file(bucket, key, path, content_type="application/octet-stream"):
+    """Uploads a file from disk WITHOUT reading it into memory (a lesson can be
+    hundreds of megabytes). Local-fallback mode: nothing to do, the file is
+    already where playback looks for it. Raises StorageError on refusal."""
+    if not _supabase_configured():
+        return key
+    url = f"{current_app.config['SUPABASE_URL']}/storage/v1/object/{bucket}/{key}"
+    headers = {**_supabase_headers(), "Content-Type": content_type, "x-upsert": "true"}
+
+    def _post():
+        with open(path, "rb") as f:
+            # (connect timeout, read timeout): big files need minutes, not seconds.
+            return requests.post(url, headers=headers, data=f, timeout=(15, 1800))
+
+    try:
+        r = _post()
+        if r.status_code in (400, 404) and "Bucket not found" in r.text and _create_bucket(bucket):
+            r = _post()
+    except requests.RequestException as exc:
+        raise StorageError(f"Supabase upload failed: {exc}")
+    if r.status_code not in (200, 201):
+        raise StorageError(f"Supabase upload failed ({r.status_code}): {r.text[:300]}")
+    return key
+
+
 def upload_bytes_resilient(bucket, key, data, content_type="application/octet-stream"):
     """Like upload_bytes, but if cloud storage refuses (bucket missing, bad key,
     outage) the object is kept on the server's own disk instead of failing.

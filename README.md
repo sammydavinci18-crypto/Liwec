@@ -34,6 +34,24 @@ the **timetable**, **consultations** and **recording review**. Its users are the
 **Recordings page** (`/admin/recordings`): finished sessions with Watch / Saved / Expired / No recording, and a
 **Needs closing** list for sessions whose host vanished without pressing End. *Close & save recording* saves what was received.
 
+**Saving recordings and the student watch link** (`recording_service.py`, `routes/watch.py`)
+- A lesson's video is joined and saved **in the background** when it ends, so pressing *End lesson* is instant and a long
+  lesson can't time out the request. The file is streamed to storage (never loaded into memory) with 3 retries.
+- **Nothing received is ever thrown away.** If cloud storage refuses the file (Supabase's free plan rejects files over
+  50 MB: raise it under Supabase > Storage > Settings), it is kept on the server's disk, still plays, and the admin sees a
+  plain-words note plus a **Retry saving** button. On Render the disk must be attached (`render.yaml` does this).
+- **A teacher who closes the tab or loses connection** no longer leaves the lesson "live" forever: if the host has not come
+  back after `HOST_GONE_AUTO_END_MINUTES` (default 10; `0` = off) the session ends and the recording is saved. Sessions
+  abandoned long ago are also closed when someone opens a Recordings page.
+- **Teachers** have a **Recordings** page (`/teachers/me/recordings`); the admin has `/admin/recordings`. Each saved lesson
+  has **Copy student link** (on phones it opens the Share sheet: WhatsApp, SMS…). The link (`/watch/<token>`) needs no
+  account: students tap it and the whole lesson plays from the start. The host can **switch the link off** or **make a new
+  one** (the old one stops working). Links stop working when the recording expires. The video is not offered for download.
+- If `ffmpeg` is installed on the server (the Dockerfile adds it) the saved file also gets a duration and seek index so
+  students can skip around; without it the video still plays.
+- The teacher's recording badge turns red with "not saving: check your internet" if the recording stops reaching the server.
+- Upgrading: `flask db upgrade` (or just start the app). Migration `c8f2a1d7e405` adds four columns to `recordings`.
+
 **Set aside, not removed.** Student/teacher applications, classes, placements, users, parent links, teacher directory
 and announcements are under **More** in the admin menu and in "Other school tools" on the dashboard. Teachers
 have a smaller **More** menu. Nothing was deleted, so they can be brought back to the main menu any time

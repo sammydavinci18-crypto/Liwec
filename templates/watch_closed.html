@@ -1,0 +1,27 @@
+{% extends "base_public.html" %}
+{% block title %}Lesson recording · Light-Way{% endblock %}
+{% block head %}
+<meta name="robots" content="noindex, nofollow">
+{% if reason == 'pending' %}<meta http-equiv="refresh" content="20">{% endif %}
+{% endblock %}
+{% block page_class %}auth-page{% endblock %}
+
+{% block content %}
+<div class="auth-card">
+  <span class="auth-eyebrow">Lesson recording</span>
+  {% if reason == 'pending' %}
+    <h1>Almost ready</h1>
+    <p class="sub">This recording is still being prepared. This page checks again by itself every few seconds, so you can leave it open.</p>
+  {% elif reason == 'off' %}
+    <h1>This link is switched off</h1>
+    <p class="sub">Your teacher has turned this link off. Please ask them for a new one.</p>
+  {% elif reason == 'expired' %}
+    <h1>This recording has expired</h1>
+    <p class="sub">Recordings are only kept for a limited time, and this one has been removed.</p>
+  {% else %}
+    <h1>We can't find that recording</h1>
+    <p class="sub">The link may be incomplete or out of date. Please ask your teacher to send it again.</p>
+  {% endif %}
+  <a href="{{ url_for('main.index') }}" class="btn btn-primary btn-block">Go to Light-Way</a>
+</div>
+{% endblock %}

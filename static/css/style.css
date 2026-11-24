@@ -3174,3 +3174,80 @@ body:has(.room-host) .controls-bar { padding: 8px 12px; gap: 6px; }
 body:has(.room-host) .ctrl-btn { height: 46px; min-width: 54px; padding: 4px 8px; }
 .ctrl-btn .room-glyph { display: grid; place-items: center; font-size: 1.1rem; line-height: 1; }
 .ctrl-btn[hidden] { display: none; }
+
+/* =========================================================================
+   Photo backgrounds — pictures sitting behind the words.
+   Each section sets --band-img (and optionally --band-pos) inline; a navy
+   wash keeps the text readable on any photo.
+   ========================================================================= */
+.hero.has-photo {
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(201,162,39,0.18) 0%, rgba(201,162,39,0) 55%),
+    linear-gradient(180deg, rgba(10,20,38,0.80) 0%, rgba(10,20,38,0.72) 50%, rgba(7,15,31,0.92) 100%),
+    var(--band-img) center 40% / cover no-repeat;
+}
+.photo-band {
+  background:
+    linear-gradient(180deg, rgba(10,20,38,0.84), rgba(10,20,38,0.76)),
+    var(--band-img) var(--band-pos, center) / cover no-repeat;
+  border-color: transparent;
+}
+.photo-band .eyebrow-dark { color: var(--amber); }
+.photo-band h2 { color: #fff; text-shadow: 0 2px 18px rgba(0,0,0,0.35); }
+.photo-band p { color: #D9E1F0; }
+.photo-band .pathway strong { color: #fff; }
+.photo-band .pathway span:not(.pathway-dot) { color: #D9E1F0; }
+.photo-band .pathway-dot { box-shadow: 0 0 0 4px rgba(201,162,39,0.35); }
+.photo-band .step h3 { color: #fff; }
+.photo-band .step p { color: #D9E1F0; }
+.cta-band.photo-band {
+  background:
+    linear-gradient(135deg, rgba(8,56,62,0.82), rgba(10,20,38,0.84)),
+    var(--band-img) var(--band-pos, center) / cover no-repeat;
+}
+@media (max-width: 640px) {
+  .hero.has-photo, .photo-band { background-attachment: scroll; }
+}
+
+/* =========================================================================
+   Watching a recording (the student link) + recording list extras
+   ========================================================================= */
+.page.watch-page { max-width: none; padding: 0; }
+.watch-stage {
+  min-height: calc(100vh - 80px);
+  background: radial-gradient(ellipse at 50% 0%, #14284B 0%, var(--stage) 60%, #070F1F 100%);
+  padding: 40px 20px 64px;
+}
+.watch-inner { max-width: 1000px; margin: 0 auto; }
+.watch-stage h1 { color: #fff; font-size: clamp(1.5rem, 3.4vw, 2.2rem); margin: 0 0 8px; }
+.watch-meta { color: #BCC8E0; margin: 0 0 22px; font-size: 0.95rem; }
+.watch-player { position: relative; background: #000; border-radius: 14px; overflow: hidden; box-shadow: 0 18px 60px rgba(0,0,0,0.5); aspect-ratio: 16 / 9; }
+.watch-player video { width: 100%; height: 100%; display: block; background: #000; }
+.watch-start {
+  position: absolute; inset: 0; width: 100%; border: 0; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  background: rgba(10,20,38,0.62); color: #fff; font: 700 1.15rem var(--font-body, inherit);
+}
+.watch-start[hidden] { display: none; }
+.watch-start-icon {
+  width: 84px; height: 84px; border-radius: 50%; background: var(--amber); color: #1B1403;
+  display: flex; align-items: center; justify-content: center; font-size: 2rem; padding-left: 6px;
+  box-shadow: 0 0 0 10px rgba(201,162,39,0.25);
+}
+.watch-note { color: #9AA8C4; font-size: 0.88rem; margin-top: 16px; }
+@media (max-width: 640px) { .watch-stage { padding: 20px 0 40px; } .watch-inner { padding: 0 14px; } .watch-player { border-radius: 10px; } }
+
+.rec-note { color: var(--ink-soft); font-size: 0.8rem; max-width: 560px; }
+.recording-row .appt-actions { flex-wrap: wrap; justify-content: flex-end; }
+.rec-more { position: relative; }
+.rec-more > summary { list-style: none; cursor: pointer; }
+.rec-more > summary::-webkit-details-marker { display: none; }
+.rec-more-panel {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; min-width: 190px;
+  background: var(--paper-raised); border: 1px solid var(--line); border-radius: var(--radius-md, 10px);
+  padding: 8px; display: flex; flex-direction: column; gap: 6px; box-shadow: var(--shadow-card);
+}
+.rec-more-panel .btn { width: 100%; justify-content: flex-start; }
+
+.recording-notice.rec-behind { background: #7A1F1F; border-color: #E06A6A; color: #fff; }
+.recording-notice .rec-warn { font-weight: 700; }

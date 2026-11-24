@@ -354,6 +354,7 @@ def handle_join(data):
         return
 
     if is_host:
+        recording_service.host_back(room_code)
         RECORDING[room_code] = True
         emit("recording_status", {"recording": True}, room=room_code)
         # The server decides WHO records: itself (media server) or, failing
@@ -821,6 +822,11 @@ def handle_disconnect():
 
     if info["is_host"]:
         RECORDING.pop(room_code, None)
+        # If the host doesn't come back, end the session for them and save the
+        # recording (otherwise it would sit "live" and never be saved).
+        meeting_for_save = Meeting.query.filter_by(room_code=room_code).first()
+        if meeting_for_save and meeting_for_save.status == "live":
+            recording_service.host_dropped(current_app._get_current_object(), meeting_for_save.id, room_code)
 
     if info.get("guest_id"):
         row = MeetingGuest.query.get(info["guest_id"])

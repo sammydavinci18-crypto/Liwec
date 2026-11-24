@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "_recording_row.html" import row %}
+{% block title %}My recordings · Light-Way{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Teacher</span>
+    <h1>My recordings</h1>
+    <p>Every lesson you teach is recorded automatically and kept here. Press <strong>Copy student link</strong> and send it to your students: when they tap it, the whole lesson plays from the start, as if they were in the room. No account needed.{% if config.RECORDING_RETENTION_DAYS %} Recordings are kept for {{ config.RECORDING_RETENTION_DAYS }} days.{% endif %}</p>
+  </div>
+  <div class="dash-actions">
+    <a class="btn btn-ghost" href="{{ url_for('teachers.my_sessions') }}">My lessons</a>
+  </div>
+</div>
+
+<h3 class="section-heading">Finished lessons ({{ ended|length }})</h3>
+{% if ended %}
+<div class="appointment-list">
+  {% for m in ended %}{{ row(m, state(m)) }}{% endfor %}
+</div>
+{% else %}
+<div class="empty-state">No finished lessons yet. Recordings appear here as soon as a lesson ends.</div>
+{% endif %}
+{% endblock %}
