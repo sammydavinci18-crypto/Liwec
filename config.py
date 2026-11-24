@@ -212,10 +212,5 @@ class Config:
     SLIDES_MAX_PAGES = int(os.environ.get("SLIDES_MAX_PAGES", 150))
     SOFFICE_PATH = os.environ.get("SOFFICE_PATH", "")
 
-    # If a host's connection is gone this long (closed the tab, laptop died) and
-    # they have not come back, the session is ended for them and its recording is
-    # saved. 0 = never auto-end (the admin must press "Close & save").
-    HOST_GONE_AUTO_END_MINUTES = int(os.environ.get("HOST_GONE_AUTO_END_MINUTES", 10))
-
     # Recording is uploaded in ~30s chunks; keep the per-request limit generous.
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50 MB per chunk

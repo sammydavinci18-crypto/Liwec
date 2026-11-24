@@ -352,67 +352,6 @@ class TimerTests(unittest.TestCase):
         self.assertEqual(self.t.payload(), {"active": False})
 
 
-class BreakTests(unittest.TestCase):
-    def setUp(self):
-        self.clock = FakeClock()
-        self.b = cs.Break(clock=self.clock)
-
-    def test_minutes_become_a_countdown(self):
-        self.b.start(5, "Stretch and drink water")
-        p = self.b.payload()
-        self.assertEqual((p["active"], p["remaining"], p["total"]), (True, 300, 300))
-        self.assertEqual(p["message"], "Stretch and drink water")
-        self.clock.t += 100
-        self.assertEqual(self.b.payload()["remaining"], 200)
-
-    def test_one_minute_and_custom_minutes(self):
-        self.b.start(1)
-        self.assertEqual(self.b.total, 60)
-        self.b.start(7.5)
-        self.assertEqual(self.b.total, 450)
-
-    def test_limits_and_junk_input(self):
-        self.b.start(0)
-        self.assertEqual(self.b.total, cs.Break.MIN_SECONDS)
-        self.b.start(10 ** 6)
-        self.assertEqual(self.b.total, cs.Break.MAX_SECONDS)
-        self.b.start("abc")
-        self.assertEqual(self.b.total, 300)                    # falls back to 5 minutes
-
-    def test_message_is_trimmed(self):
-        self.b.start(5, "  " + "x" * 500)
-        self.assertEqual(len(self.b.message), 200)
-
-    def test_extend_and_end(self):
-        self.b.start(2)
-        self.clock.t += 60
-        self.assertTrue(self.b.add(120))
-        self.assertEqual(self.b.payload()["remaining"], 180)
-        self.b.end()
-        self.assertEqual(self.b.payload(), {"active": False})
-        self.assertFalse(self.b.add(60))
-
-    def test_back_message_lingers_then_disappears(self):
-        self.b.start(1)
-        self.clock.t += 61
-        p = self.b.payload()
-        self.assertTrue(p["active"])
-        self.assertEqual(p["remaining"], 0)
-        self.assertFalse(self.b.add(60))                       # too late to extend
-        self.clock.t += cs.Break.LINGER
-        self.assertFalse(self.b.payload()["active"])
-
-    def test_a_room_has_its_own_break_and_timer(self):
-        cs.drop("ROOMB")
-        t = cs.tools("ROOMB")
-        t.timer.start(60)
-        t.rest.start(5)
-        self.assertTrue(t.timer.payload()["active"])
-        t.rest.end()
-        self.assertTrue(t.timer.payload()["active"])
-        cs.drop("ROOMB")
-
-
 class RegistryTests(unittest.TestCase):
     def test_lifecycle(self):
         cs.drop("ROOM1")

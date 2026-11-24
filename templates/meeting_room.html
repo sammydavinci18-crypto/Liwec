@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ meeting.title }} · Light-Way{% endblock %}
-{% block page_class %}room-page{% if is_host %} room-host{% endif %}{% endblock %}
+{% block page_class %}room-page{% endblock %}
 {% block themetoggle %}{% endblock %}
 
 {% block content %}
@@ -61,11 +61,6 @@
   <button type="button" class="net-close" aria-label="Dismiss" title="Dismiss">&times;</button>
 </div>
 
-{% if is_host %}
-<!-- The site's own menu is tucked away during a lesson and slides down from here. -->
-<div class="site-menu-backdrop" id="site-menu-backdrop" hidden></div>
-<div class="site-menu-note" id="site-menu-note" hidden>Links here open in a new tab, so your lesson keeps running. <button type="button" id="site-menu-close" class="btn btn-ghost btn-sm">Close menu</button></div>
-{% endif %}
 <div class="controls-bar{{ ' is-observer' if is_observer }}">
   <button class="ctrl-btn" id="btn-mic" title="Mute / unmute">
     <span class="icon" data-icon="mic"></span><span class="ctrl-label">Mute</span>
@@ -86,15 +81,6 @@
   </button>
   <button class="ctrl-btn" id="btn-tools" data-open-tools title="Quick poll, breakout rooms, timer">
     <span class="icon" data-icon="tools"></span><span class="ctrl-label">Tools</span>
-  </button>
-  <button class="ctrl-btn" id="btn-break" type="button" title="Take a break: tell students you will be back in a few minutes">
-    <span class="icon" data-icon="coffee"></span><span class="ctrl-label">Break</span>
-  </button>
-  <button class="ctrl-btn" id="btn-site-menu" type="button" aria-expanded="false" title="Open the rest of the site (dashboard, classes and so on) in a new tab. Your lesson keeps running.">
-    <span class="icon room-glyph" aria-hidden="true">&#9776;</span><span class="ctrl-label">Menu</span>
-  </button>
-  <button class="ctrl-btn" id="btn-browser-full" type="button" aria-pressed="false" title="Fill the whole browser screen with the lesson">
-    <span class="icon room-glyph" aria-hidden="true">&#9974;</span><span class="ctrl-label">Full screen</span>
   </button>
   <button class="ctrl-btn" id="btn-invite" title="Copy the link students use to join">
     <span class="icon" data-icon="users"></span><span class="ctrl-label">Invite</span>
@@ -275,8 +261,7 @@
       {% if not is_host %}<button class="wb-btn" id="sl-rotate" type="button" title="Turn the slide sideways" hidden>&#8635; Rotate</button>{% endif %}
       <button class="wb-btn" id="sl-full" type="button" title="Full screen">&#9974; Full screen</button>
       {% if is_host %}<button class="wb-btn" data-open-tools type="button" title="Poll, breakout rooms, timer">&#129520; Tools</button>{% endif %}
-      {% if is_host %}<button class="wb-btn" id="sl-peek" type="button" title="Hide the slide on your screen only, to see your class. Everyone else keeps seeing it.">&#128065; Hide slide</button>{% endif %}
-      {% if is_host %}<button class="wb-btn wb-close" id="sl-stop" type="button" title="Close the presentation: it comes off everyone's screen">Close presentation &#10005;</button>{% endif %}
+      {% if is_host %}<button class="wb-btn wb-close" id="sl-stop" type="button" title="Take the slides off everyone's screen">Stop presenting &#10005;</button>{% endif %}
     </div>
   </div>
 
@@ -315,10 +300,6 @@
         <button class="wb-btn" id="sl-ink-off" type="button" title="Stop drawing">✕</button>
       </div>
     </div>
-    {% endif %}
-    {% if is_host %}
-    <button class="sl-edge sl-edge-prev" id="sl-edge-prev" type="button" aria-label="Previous slide" title="Previous slide">&#8249;</button>
-    <button class="sl-edge sl-edge-next" id="sl-edge-next" type="button" aria-label="Next slide" title="Next slide">&#8250;</button>
     {% endif %}
     <div class="sl-loading" id="sl-loading" hidden>Loading slide&hellip;</div>
     <div class="sl-failed" id="sl-failed" hidden>
@@ -367,17 +348,6 @@
 </div>
 
 {% if is_host %}
-<!-- While the teacher has hidden the slide (to look at the class), this small bar floats over the room.
-     Only their own screen changes: the class still sees the slide. -->
-<div class="sl-peek-bar" id="sl-peek-bar" hidden role="group" aria-label="Presentation controls">
-  <span class="sl-peek-label">Slide hidden on your screen only</span>
-  <span class="sl-peek-hands" id="sl-peek-hands" hidden></span>
-  <button class="wb-btn" id="sl-peek-prev" type="button" aria-label="Previous slide">&#9664;</button>
-  <button class="wb-btn" id="sl-peek-next" type="button" aria-label="Next slide">&#9654;</button>
-  <button class="wb-btn sl-primary" id="sl-peek-back" type="button">Show slide</button>
-  <button class="wb-btn wb-close" id="sl-peek-stop" type="button">Close presentation &#10005;</button>
-</div>
-
 <!-- Slides library: upload a presentation and choose which one to show. -->
 <div class="notes-panel slides-panel" id="slides-panel" data-url="{{ url_for('slides.list_decks', room_code=meeting.room_code) }}">
   <div class="notes-header">
@@ -568,8 +538,6 @@
 <script src="{{ url_for('static', filename='js/polls.js') }}"></script>
 <script src="{{ url_for('static', filename='js/breakout.js') }}"></script>
 <script src="{{ url_for('static', filename='js/timer.js') }}"></script>
-<script src="{{ url_for('static', filename='js/break.js') }}"></script>
 <script src="{{ url_for('static', filename='js/focusview.js') }}"></script>
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-{% if is_host %}<script src="{{ url_for('static', filename='js/roomchrome.js') }}"></script>{% endif %}
 {% endblock %}

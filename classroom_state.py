@@ -15,7 +15,6 @@ Covers
   * Poll             - "raise A, B, C or D": one question, live count.
   * Breakouts        - pairs / groups, then everyone back.
   * Timer            - a countdown everyone can see.
-  * Break            - "we are taking a break, back in N minutes" for everyone.
 
 Coordinates in ink operations are fractions (0..1) of the board or slide, so
 every screen size shows the same picture.
@@ -566,69 +565,6 @@ class Timer:
 
 
 # ---------------------------------------------------------------------------
-# Break
-# ---------------------------------------------------------------------------
-
-class Break:
-    """The teacher steps away for a few minutes. Everyone sees a message and a
-    countdown to when the class resumes. Separate from Timer so a task timer
-    and a break never overwrite each other."""
-    MIN_SECONDS = 30
-    MAX_SECONDS = 3 * 3600
-    LINGER = 15                                       # "we're back" stays on screen this long
-
-    def __init__(self, clock=time.monotonic):
-        self._clock = clock
-        self.reset()
-
-    def reset(self):
-        self.on = False
-        self.message = ""
-        self.total = 0
-        self._ends = 0.0
-
-    def start(self, minutes, message=""):
-        self.reset()
-        seconds = _num(float(_num(minutes, 0.5, self.MAX_SECONDS / 60, 5)) * 60,
-                       self.MIN_SECONDS, self.MAX_SECONDS, 300)
-        self.total = int(seconds)
-        self.message = (message or "").strip()[:200]
-        self._ends = self._clock() + self.total
-        self.on = True
-
-    def remaining(self):
-        if not self.on:
-            return 0
-        return max(0.0, self._ends - self._clock())
-
-    def add(self, seconds):
-        """Make the break longer (or a little shorter). Only while it is running."""
-        if not self.on or self.remaining() <= 0:
-            return False
-        left = self.remaining() + _num(seconds, -3600, 3600, 0)
-        left = min(max(left, 5.0), self.MAX_SECONDS)
-        self._ends = self._clock() + left
-        self.total = max(self.total, int(left))
-        return True
-
-    def end(self):
-        self.reset()
-
-    def is_showing(self):
-        if not self.on:
-            return False
-        if self.remaining() > 0:
-            return True
-        return self._clock() - self._ends < self.LINGER
-
-    def payload(self):
-        if not self.is_showing():
-            return {"active": False}
-        return {"active": True, "message": self.message, "total": self.total,
-                "remaining": round(self.remaining(), 1)}
-
-
-# ---------------------------------------------------------------------------
 # Everything for one room
 # ---------------------------------------------------------------------------
 
@@ -640,7 +576,6 @@ class RoomTools:
         self.poll_seq = 0
         self.breakouts = Breakouts()
         self.timer = Timer()
-        self.rest = Break()
 
 
 TOOLS = {}                                            # room_code -> RoomTools

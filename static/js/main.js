@@ -223,28 +223,6 @@ document.addEventListener("DOMContentLoaded", () => {
     window.addEventListener("recording-failed", () => {
       if (recordFailedOverlay) recordFailedOverlay.classList.add("show");
     });
-
-    // Tell the teacher straight away if the recording is not reaching the server,
-    // instead of letting them teach a whole lesson that is not being saved.
-    let recWarn = null;
-    const showRecWarn = (text) => {
-      if (!recordingNotice) return;
-      if (!recWarn) {
-        recWarn = document.createElement("span");
-        recWarn.className = "rec-warn";
-        recWarn.setAttribute("role", "alert");
-        recordingNotice.appendChild(recWarn);
-      }
-      recWarn.textContent = text ? " · " + text : "";
-      recordingNotice.classList.toggle("rec-behind", !!text);
-    };
-    setInterval(() => {
-      const rc = window.RecordingControl;
-      if (!rc || !rc.status) return;
-      const st = rc.status();
-      showRecWarn(st.behind ? "not saving: check your internet" : "");
-    }, 5000);
-    window.addEventListener("recording-warning", () => showRecWarn("not saving: you may be signed out. Reload this page"));
   }
 
   // Closing the tab mid-lesson (host) or mid-lesson as a student would drop the

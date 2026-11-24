@@ -179,19 +179,3 @@ def my_sessions():
         .order_by(Meeting.ended_at.desc()).limit(15).all()
     )
     return render_template("teachers/my_sessions.html", upcoming=upcoming, past=past)
-
-
-@teachers_bp.route("/teachers/me/recordings")
-@login_required
-def my_recordings():
-    """Recordings of the lessons this teacher hosted, each with a watch link to send to students."""
-    if not current_user.is_approved_teacher:
-        abort(403)
-    import recording_service
-    recording_service.close_abandoned(current_app._get_current_object())
-    ended = (
-        Meeting.query.filter(Meeting.host_id == current_user.id, Meeting.status == "ended")
-        .order_by(Meeting.ended_at.desc(), Meeting.id.desc()).limit(100).all()
-    )
-    recording_service.ensure_share_tokens(ended)
-    return render_template("teachers/my_recordings.html", ended=ended, state=recording_service.recording_state)

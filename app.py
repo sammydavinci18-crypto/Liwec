@@ -285,20 +285,6 @@ def create_app():
         from flask import url_for
         return url_for("guest.join", token=meeting.guest_token, _external=True) if meeting.guest_token else ""
 
-    @app.template_global("watch_link")
-    def watch_link(meeting):
-        """The full watch link for a finished session's recording ('' if none yet)."""
-        from flask import url_for
-        rec = meeting.recording
-        if rec and rec.finalized and rec.share_token and rec.share_enabled:
-            return url_for("watch.watch", token=rec.share_token, _external=True)
-        return ""
-
-    @app.template_global("recording_state")
-    def recording_state_for(meeting):
-        import recording_service
-        return recording_service.recording_state(meeting)
-
     @app.template_filter("dt")
     def format_datetime(value):
         """Portable date/time display (the platform stores and shows UTC)."""
@@ -324,7 +310,6 @@ def create_app():
     from routes.guest import guest_bp
     from routes.slides import slides_bp
     from routes.egress import egress_bp
-    from routes.watch import watch_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
@@ -340,7 +325,6 @@ def create_app():
     app.register_blueprint(guest_bp)
     app.register_blueprint(slides_bp)
     app.register_blueprint(egress_bp)
-    app.register_blueprint(watch_bp)
 
     # Registers the Socket.IO event handlers defined in sockets.py
     import sockets  # noqa: F401
