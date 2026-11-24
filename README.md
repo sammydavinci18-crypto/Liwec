@@ -34,24 +34,6 @@ the **timetable**, **consultations** and **recording review**. Its users are the
 **Recordings page** (`/admin/recordings`): finished sessions with Watch / Saved / Expired / No recording, and a
 **Needs closing** list for sessions whose host vanished without pressing End. *Close & save recording* saves what was received.
 
-**Saving recordings and the student watch link** (`recording_service.py`, `routes/watch.py`)
-- A lesson's video is joined and saved **in the background** when it ends, so pressing *End lesson* is instant and a long
-  lesson can't time out the request. The file is streamed to storage (never loaded into memory) with 3 retries.
-- **Nothing received is ever thrown away.** If cloud storage refuses the file (Supabase's free plan rejects files over
-  50 MB: raise it under Supabase > Storage > Settings), it is kept on the server's disk, still plays, and the admin sees a
-  plain-words note plus a **Retry saving** button. On Render the disk must be attached (`render.yaml` does this).
-- **A teacher who closes the tab or loses connection** no longer leaves the lesson "live" forever: if the host has not come
-  back after `HOST_GONE_AUTO_END_MINUTES` (default 10; `0` = off) the session ends and the recording is saved. Sessions
-  abandoned long ago are also closed when someone opens a Recordings page.
-- **Teachers** have a **Recordings** page (`/teachers/me/recordings`); the admin has `/admin/recordings`. Each saved lesson
-  has **Copy student link** (on phones it opens the Share sheet: WhatsApp, SMS…). The link (`/watch/<token>`) needs no
-  account: students tap it and the whole lesson plays from the start. The host can **switch the link off** or **make a new
-  one** (the old one stops working). Links stop working when the recording expires. The video is not offered for download.
-- If `ffmpeg` is installed on the server (the Dockerfile adds it) the saved file also gets a duration and seek index so
-  students can skip around; without it the video still plays.
-- The teacher's recording badge turns red with "not saving: check your internet" if the recording stops reaching the server.
-- Upgrading: `flask db upgrade` (or just start the app). Migration `c8f2a1d7e405` adds four columns to `recordings`.
-
 **Set aside, not removed.** Student/teacher applications, classes, placements, users, parent links, teacher directory
 and announcements are under **More** in the admin menu and in "Other school tools" on the dashboard. Teachers
 have a smaller **More** menu. Nothing was deleted, so they can be brought back to the main menu any time
@@ -291,7 +273,7 @@ Shared behaviour lives in `static/js/ui.js` (loaded on every page) and the "Usab
 - **Dates**: any admin `datetime-local` field must carry `data-utc` so it is typed in local time and stored as UTC.
 - Hints under a field: `<span class="field-hint">…</span>`. Group long forms with `<fieldset class="form-section"><legend>…</legend>`.
 
-## Teaching tools (draw on slides, polls, breakout rooms, timer, break)
+## Teaching tools (draw on slides, polls, breakout rooms, timer)
 
 All of these are started by the host only; the server checks that on every message (`sockets_tools.py`), and the rules live in plain Python in `classroom_state.py` so they can be tested without a server.
 
@@ -301,7 +283,6 @@ All of these are started by the host only; the server checks that on every messa
   - *Who hears whom is applied in each browser* (other groups' tiles are muted and hidden), like the rest of this platform's media rules. A determined student with browser developer tools could still listen in; it is a classroom aid, not a security boundary.
   - *Breakout conversations are recorded.* The recording is made from the streams, not from what each person's speakers play, so every group is in the lesson recording, consistent with the compulsory-recording rule.
 - **Timer and focus bar.** *Tools → Timer*: a countdown (1 to 20 min or custom) with the task written on it. Everyone sees a bar across the top that drains, turns amber then red, chimes and says "Time's up". Pause, +1 minute and stop are on the bar for the teacher. The server sends seconds left, so wrong student clocks do not matter. File: `static/js/timer.js`.
-- **Take a break.** The *Break* button in the control bar (also in *Tools*): pick 1, 2, 5, 10, 15 or 20 minutes, or type any number, add an optional note, and press *Start break*. Every student sees "We are taking a break. Back in N minutes", a countdown and the clock time the class resumes; at zero a chime and "We're back!". The teacher can add a minute or end the break early; students can hide the card. It is separate from the timer, so both can run together. Files: `static/js/break.js`, `classroom_state.Break`.
 
 The *Tools* button is in the control bar, the presenter view and the whiteboard. The poll, groups and timer sit in the same top-of-everything layer as the class view (`window.ClassLayer`), so they stay visible over full-screen slides and the whiteboard.
 

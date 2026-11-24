@@ -46,31 +46,12 @@ def new_object_key(original_filename):
     return f"{uuid.uuid4().hex}{suffix}"
 
 
-def _create_bucket(bucket):
-    """Creates a missing private bucket (the service key is allowed to). Returns
-    True if it now exists, so a first-time setup needs no manual Supabase step."""
-    try:
-        r = requests.post(
-            f"{current_app.config['SUPABASE_URL']}/storage/v1/bucket",
-            headers={**_supabase_headers(), "Content-Type": "application/json"},
-            json={"id": bucket, "name": bucket, "public": False},
-            timeout=15,
-        )
-    except requests.RequestException:
-        return False
-    ok = r.status_code in (200, 201) or "already exists" in r.text
-    current_app.logger.warning(f"[storage] bucket '{bucket}' was missing; create -> {r.status_code}")
-    return ok
-
-
 def upload_bytes(bucket, key, data, content_type="application/octet-stream"):
     """Uploads (or overwrites) an object. Returns the key on success."""
     if _supabase_configured():
         url = f"{current_app.config['SUPABASE_URL']}/storage/v1/object/{bucket}/{key}"
         headers = {**_supabase_headers(), "Content-Type": content_type, "x-upsert": "true"}
         r = requests.post(url, headers=headers, data=data, timeout=30)
-        if r.status_code in (400, 404) and "Bucket not found" in r.text and _create_bucket(bucket):
-            r = requests.post(url, headers=headers, data=data, timeout=30)  # retry once now it exists
         if r.status_code not in (200, 201):
             raise StorageError(f"Supabase upload failed ({r.status_code}): {r.text[:300]}")
         return key
@@ -79,31 +60,6 @@ def upload_bytes(bucket, key, data, content_type="application/octet-stream"):
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "wb") as f:
         f.write(data if isinstance(data, (bytes, bytearray)) else data.read())
-    return key
-
-
-def upload_file(bucket, key, path, content_type="application/octet-stream"):
-    """Uploads a file from disk WITHOUT reading it into memory (a lesson can be
-    hundreds of megabytes). Local-fallback mode: nothing to do, the file is
-    already where playback looks for it. Raises StorageError on refusal."""
-    if not _supabase_configured():
-        return key
-    url = f"{current_app.config['SUPABASE_URL']}/storage/v1/object/{bucket}/{key}"
-    headers = {**_supabase_headers(), "Content-Type": content_type, "x-upsert": "true"}
-
-    def _post():
-        with open(path, "rb") as f:
-            # (connect timeout, read timeout): big files need minutes, not seconds.
-            return requests.post(url, headers=headers, data=f, timeout=(15, 1800))
-
-    try:
-        r = _post()
-        if r.status_code in (400, 404) and "Bucket not found" in r.text and _create_bucket(bucket):
-            r = _post()
-    except requests.RequestException as exc:
-        raise StorageError(f"Supabase upload failed: {exc}")
-    if r.status_code not in (200, 201):
-        raise StorageError(f"Supabase upload failed ({r.status_code}): {r.text[:300]}")
     return key
 
 

@@ -344,22 +344,7 @@ class Recording(db.Model):
     # duplicated upload is recognised instead of being appended twice.
     chunks_received = db.Column(db.Integer, nullable=False, default=0, server_default="0")
 
-    # Shareable watch link: /watch/<share_token>. Anyone with the link can watch
-    # the whole lesson from the start, no account needed. Created the first time
-    # the admin or the teacher copies it; switch it off (or replace it) at any time.
-    share_token = db.Column(db.String(32), nullable=True, index=True)
-    share_enabled = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
-    # Plain-words note about how saving went (e.g. "Kept on the server: cloud
-    # storage refused the file (413)"), shown to the admin.
-    save_note = db.Column(db.Text, nullable=True)
-    size_bytes = db.Column(db.BigInteger, nullable=True)
-
     meeting = db.relationship("Meeting", backref=db.backref("recording", uselist=False, cascade="all, delete-orphan"))
-
-    def ensure_share_token(self):
-        if not self.share_token:
-            self.share_token = generate_guest_token()
-        return self.share_token
 
     @property
     def is_expired(self):
