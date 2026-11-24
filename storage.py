@@ -46,12 +46,31 @@ def new_object_key(original_filename):
     return f"{uuid.uuid4().hex}{suffix}"
 
 
+def _create_bucket(bucket):
+    """Creates a missing private bucket (the service key is allowed to). Returns
+    True if it now exists, so a first-time setup needs no manual Supabase step."""
+    try:
+        r = requests.post(
+            f"{current_app.config['SUPABASE_URL']}/storage/v1/bucket",
+            headers={**_supabase_headers(), "Content-Type": "application/json"},
+            json={"id": bucket, "name": bucket, "public": False},
+            timeout=15,
+        )
+    except requests.RequestException:
+        return False
+    ok = r.status_code in (200, 201) or "already exists" in r.text
+    current_app.logger.warning(f"[storage] bucket '{bucket}' was missing; create -> {r.status_code}")
+    return ok
+
+
 def upload_bytes(bucket, key, data, content_type="application/octet-stream"):
     """Uploads (or overwrites) an object. Returns the key on success."""
     if _supabase_configured():
         url = f"{current_app.config['SUPABASE_URL']}/storage/v1/object/{bucket}/{key}"
         headers = {**_supabase_headers(), "Content-Type": content_type, "x-upsert": "true"}
         r = requests.post(url, headers=headers, data=data, timeout=30)
+        if r.status_code in (400, 404) and "Bucket not found" in r.text and _create_bucket(bucket):
+            r = requests.post(url, headers=headers, data=data, timeout=30)  # retry once now it exists
         if r.status_code not in (200, 201):
             raise StorageError(f"Supabase upload failed ({r.status_code}): {r.text[:300]}")
         return key

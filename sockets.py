@@ -112,6 +112,13 @@ def _host_sid_for_room(room_code):
     )
 
 
+def _host_info(sid):
+    """The CONNECTED entry for this socket if it is the session's host, else None.
+    Used by the slide, whiteboard and teaching-tool handlers: only the host may drive them."""
+    info = CONNECTED.get(sid)
+    return info if info and info.get("is_host") else None
+
+
 def _enforce_call_time_limit(app, room_code, meeting_id, limit_minutes):
     """Runs in a background thread (socketio.start_background_task), one
     per call. Warns everyone 5 minutes before the limit, then force-ends
