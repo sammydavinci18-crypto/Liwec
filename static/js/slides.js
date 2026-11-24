@@ -475,7 +475,7 @@
       fileInput.accept = officeOk ? ACCEPT_ALL : ".pdf,application/pdf";
       hint.textContent = officeOk
         ? "Tap to choose a file, or drop it here (PowerPoint or PDF, up to " + maxMb + " MB)"
-        : "PDF only on this server (up to " + maxMb + " MB). In PowerPoint: File \u203A Save As \u203A PDF.";
+        : "PowerPoint upload isn't switched on for this server yet, so use a PDF (up to " + maxMb + " MB). In PowerPoint: File \u203A Save As \u203A PDF.";
       renderLibrary();
       // Keep checking while anything is still being prepared.
       if (decks.some((d) => d.status === "processing")) pollTimer = setTimeout(refreshLibrary, 1500);

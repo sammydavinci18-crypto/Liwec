@@ -362,6 +362,13 @@ def create_app():
             db.create_all()
         print("Database tables created.")
 
+    @app.cli.command("slides-check")
+    def slides_check():
+        """Checks everything slide uploads depend on and says what is wrong."""
+        import slides as slides_mod
+        for ok, msg in slides_mod.self_check(app):
+            print(("OK    " if ok else "FAIL  ") + msg)
+
     @app.cli.command("make-admin")
     def make_admin():
         """Promote a user to admin (the Director). Admins are the only people who

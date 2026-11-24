@@ -1,0 +1,65 @@
+# Same as render.yaml but deploys with Docker so PowerPoint (.pptx) uploads work.
+# A Render service can't change runtime in place: create a NEW web service from
+# this file (Blueprint > pick render.docker.yaml), copy the env vars across,
+# then retire the old one. Run `flask --app app slides-check` in its Shell to verify.
+services:
+  - type: web
+    name: liwec
+    runtime: docker          # builds ./Dockerfile, which installs LibreOffice so .pptx uploads work
+    dockerfilePath: ./Dockerfile
+    region: oregon          # pick the Render region closest to your Supabase project's region
+    plan: starter           # free plan has no persistent disk — see RECORDINGS_DIR note below
+    branch: main
+    # Runs once per deploy, after build, before traffic is switched over.
+    # Applies any pending migrations (see migrations/). The app also runs
+    # this same sync automatically on every worker boot as a resilient
+    # fallback (see _ensure_schema_up_to_date in app.py) in case this step
+    # doesn't run — e.g. if the service was ever created outside the
+    # render.yaml Blueprint — but keeping it here means a broken migration
+    # fails the deploy instead of going live half-broken.
+    preDeployCommand: "flask --app app db upgrade"
+    healthCheckPath: /login
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true        # Render generates and stores a random secret for you
+      - key: DB_ENGINE
+        value: postgres
+      - key: DATABASE_URL
+        sync: false               # set manually in the Render dashboard — see note below
+      - key: RECORDINGS_DIR
+        value: /var/data/recordings
+      - key: VERIFICATION_DOCS_DIR
+        value: /var/data/verification_docs   # teacher/student ID and certificate uploads — sensitive, never publicly served
+      # --- Reliability (see README "Reliability"). All optional; set in the dashboard. ---
+      # TURN relay for students on mobile data / strict school Wi-Fi:
+      # - key: TURN_URLS
+      #   sync: false
+      # - key: TURN_SECRET
+      #   sync: false
+      # LiveKit media server (big classes) and server-side recording:
+      # - key: LIVEKIT_URL
+      #   sync: false
+      # - key: LIVEKIT_API_KEY
+      #   sync: false
+      # - key: LIVEKIT_API_SECRET
+      #   sync: false
+      # - key: EGRESS_S3_ENDPOINT
+      #   sync: false
+      # - key: EGRESS_S3_ACCESS_KEY
+      #   sync: false
+      # - key: EGRESS_S3_SECRET
+      #   sync: false
+      # Optional — only needed once. Set these two in the Render dashboard
+      # (not here, so the password never gets committed to the repo) to
+      # auto-create your first admin account on next deploy. Safe to leave
+      # unset entirely if you already have an admin, or delete them again
+      # after the account exists — see app.py's _seed_admin_from_env.
+      # - key: ADMIN_EMAIL
+      #   sync: false
+      # - key: ADMIN_PASSWORD
+      #   sync: false
+    disk:
+      name: recordings
+      mountPath: /var/data
+      sizeGB: 2                   # bumped from 1GB — now also holds verification document uploads
+

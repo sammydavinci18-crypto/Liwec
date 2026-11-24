@@ -63,6 +63,27 @@ def upload_bytes(bucket, key, data, content_type="application/octet-stream"):
     return key
 
 
+def upload_bytes_resilient(bucket, key, data, content_type="application/octet-stream"):
+    """Like upload_bytes, but if cloud storage refuses (bucket missing, bad key,
+    outage) the object is kept on the server's own disk instead of failing.
+    Used for slide pictures, which only live for one session anyway. read_bytes
+    and delete_objects look in both places. Returns "cloud" or "local"."""
+    if _supabase_configured():
+        try:
+            upload_bytes(bucket, key, data, content_type=content_type)
+            return "cloud"
+        except (StorageError, requests.RequestException) as exc:
+            current_app.logger.warning(f"[storage] cloud upload of {key} failed, keeping it on local disk: {exc}")
+    path = _local_dir(bucket) / key
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(data if isinstance(data, (bytes, bytearray)) else data.read())
+    except OSError as exc:
+        raise StorageError(f"Could not write {key} to local disk: {exc}")
+    return "local"
+
+
 def append_bytes(bucket, key, chunk):
     """Appends to an object — used only for the local fallback, while a
     recording is still being streamed in during a live call. Supabase mode
@@ -136,7 +157,11 @@ def read_bytes(bucket, key):
     images, which are served through our own server (same origin) rather than
     by redirecting to a signed URL: the host's browser paints the slide into
     the session recording, and a picture from another origin would make that
-    canvas unusable."""
+    canvas unusable. Also finds objects that upload_bytes_resilient kept on
+    local disk."""
+    local = _read_local(bucket, key)
+    if local is not None:
+        return local
     if _supabase_configured():
         url = f"{current_app.config['SUPABASE_URL']}/storage/v1/object/{bucket}/{key}"
         try:
@@ -148,7 +173,10 @@ def read_bytes(bucket, key):
         if r.status_code != 200:
             raise StorageError(f"Supabase download failed ({r.status_code}): {r.text[:300]}")
         return r.content
+    return None
 
+
+def _read_local(bucket, key):
     path = _local_dir(bucket) / key
     try:
         return path.read_bytes() if path.exists() else None
@@ -157,11 +185,18 @@ def read_bytes(bucket, key):
 
 
 def delete_objects(bucket, keys):
-    """Deletes several objects. Missing ones are ignored. Returns True if
-    nothing went wrong."""
+    """Deletes several objects (cloud and any local copy). Missing ones are
+    ignored. Returns True if nothing went wrong."""
     keys = list(keys)
     if not keys:
         return True
+    for k in keys:  # local copies first; harmless if there are none
+        try:
+            p = _local_dir(bucket) / k
+            if p.exists():
+                p.unlink()
+        except OSError:
+            pass
     if _supabase_configured():
         url = f"{current_app.config['SUPABASE_URL']}/storage/v1/object/{bucket}"
         try:
@@ -172,4 +207,4 @@ def delete_objects(bucket, keys):
             pass
         # The bulk call failed: fall back to one at a time.
         return all([delete_object(bucket, k) for k in keys])
-    return all([delete_object(bucket, k) for k in keys])
+    return True

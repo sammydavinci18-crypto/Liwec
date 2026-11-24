@@ -256,6 +256,8 @@ only** ("In PowerPoint: File > Save As > PDF"), so nothing breaks.
   not been built or run by the author of this change: treat it as a starting
   point and check the first deploy. Converting a deck uses a few hundred MB of
   memory, so avoid the smallest instance size.
+* **Render, step by step:** a service can't switch from Python to Docker in place. Create a new web service from `render.docker.yaml`, copy the environment variables over, then retire the old one.
+* **Check it:** `flask --app app slides-check` (Render Shell) tests PDF rendering, LibreOffice and slide storage and says which one is broken. If cloud storage refuses slide pictures they are now kept on the server's disk instead of failing.
 * Only one conversion runs at a time; a second teacher's upload waits its turn.
 
 ## Interface conventions (usability)

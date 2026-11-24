@@ -144,16 +144,23 @@ def office_to_pdf(src_path, out_dir, configured=""):
 def render_pdf(pdf_path, max_pages):
     """Yields (n, slide_jpeg_bytes, thumb_jpeg_bytes) for each page, one page
     in memory at a time. Raises SlideError for a PDF that can't be shown."""
-    import fitz  # PyMuPDF; imported here so the rest of the app doesn't need it to boot
+    try:
+        import fitz  # PyMuPDF; imported here so the rest of the app doesn't need it to boot
+    except ImportError as exc:
+        print(f"[slides] PyMuPDF is not installed: {exc}", file=sys.stderr)
+        raise SlideError("This server is missing its PDF tool (PyMuPDF), so slides can't be prepared. Please tell the administrator.")
 
     try:
         doc = fitz.open(str(pdf_path))
-    except Exception:
+    except Exception as exc:
+        print(f"[slides] fitz.open failed: {exc!r}", file=sys.stderr)
         raise SlideError("That file could not be opened. Check it isn't damaged.")
 
     try:
         if doc.needs_pass:
-            raise SlideError("That file is password-protected. Remove the password and upload it again.")
+            # Many PDFs are "locked" only against editing and open with an empty password.
+            if not doc.authenticate(""):
+                raise SlideError("That file is password-protected. Remove the password and upload it again.")
         count = doc.page_count
         if count < 1:
             raise SlideError("That file has no slides in it.")
@@ -161,19 +168,23 @@ def render_pdf(pdf_path, max_pages):
             raise SlideError(f"That presentation has {count} slides; the limit is {max_pages}. Split it into smaller files.")
 
         for index in range(count):
-            page = doc.load_page(index)
-            width = page.rect.width or 1
-            scale = SLIDE_WIDTH_PX / width
-            # Guard against a freakishly tall page producing a giant bitmap.
-            scale = min(scale, 4000 / (page.rect.height or 1))
-            big = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
-            thumb_scale = THUMB_WIDTH_PX / width
-            small = page.get_pixmap(matrix=fitz.Matrix(thumb_scale, thumb_scale), alpha=False)
-            yield (
-                index + 1,
-                big.tobytes("jpeg", jpg_quality=JPEG_QUALITY),
-                small.tobytes("jpeg", jpg_quality=THUMB_QUALITY),
-            )
+            try:
+                page = doc.load_page(index)
+                width = page.rect.width or 1
+                scale = SLIDE_WIDTH_PX / width
+                # Guard against a freakishly tall page producing a giant bitmap.
+                scale = min(scale, 4000 / (page.rect.height or 1))
+                big = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
+                thumb_scale = THUMB_WIDTH_PX / width
+                small = page.get_pixmap(matrix=fitz.Matrix(thumb_scale, thumb_scale), alpha=False)
+                big_jpg = big.tobytes("jpeg", jpg_quality=JPEG_QUALITY)
+                small_jpg = small.tobytes("jpeg", jpg_quality=THUMB_QUALITY)
+            except SlideError:
+                raise
+            except Exception as exc:
+                print(f"[slides] page {index + 1} could not be drawn: {exc!r}", file=sys.stderr)
+                raise SlideError(f"Slide {index + 1} could not be drawn. Re-save the file as a PDF from PowerPoint (File > Save As > PDF) and try again.")
+            yield index + 1, big_jpg, small_jpg
     finally:
         doc.close()
 
@@ -201,9 +212,9 @@ def process_deck(app, deck_id, upload_path, ext):
 
                 pages = 0
                 for n, big, small in render_pdf(pdf_path, app.config["SLIDES_MAX_PAGES"]):
-                    storage.upload_bytes(bucket, deck.page_key(n), big, content_type="image/jpeg")
+                    storage.upload_bytes_resilient(bucket, deck.page_key(n), big, content_type="image/jpeg")
                     stored.append(deck.page_key(n))
-                    storage.upload_bytes(bucket, deck.page_key(n, thumb=True), small, content_type="image/jpeg")
+                    storage.upload_bytes_resilient(bucket, deck.page_key(n, thumb=True), small, content_type="image/jpeg")
                     stored.append(deck.page_key(n, thumb=True))
                     pages = n
 
@@ -215,10 +226,12 @@ def process_deck(app, deck_id, upload_path, ext):
                 _fail(deck, bucket, stored, str(exc))
             except storage.StorageError as exc:
                 print(f"[slides] storage failed for deck {deck_id}: {exc}", file=sys.stderr)
-                _fail(deck, bucket, stored, "The slides could not be saved. Please try again.")
+                _fail(deck, bucket, stored, "The slides were read but could not be saved on the server. Please try again, and tell the administrator if it keeps happening (run: flask --app app slides-check).")
             except Exception as exc:  # never leave a deck stuck on "processing"
+                import traceback
+                traceback.print_exc()
                 print(f"[slides] unexpected failure for deck {deck_id}: {exc!r}", file=sys.stderr)
-                _fail(deck, bucket, stored, "Something went wrong preparing these slides. Try saving them as a PDF and uploading that.")
+                _fail(deck, bucket, stored, f"Something went wrong preparing these slides ({type(exc).__name__}). Try saving them as a PDF and uploading that.")
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 
@@ -276,6 +289,38 @@ def purge_meeting_decks(app, meeting_id):
             db.session.commit()
     except Exception as exc:
         print(f"[slides] purge failed for meeting {meeting_id}: {exc!r}", file=sys.stderr)
+
+
+def self_check(app):
+    """Used by `flask slides-check`: tries each step a slide upload needs and
+    returns a list of (ok, message) so a problem is named instead of guessed."""
+    results = []
+    try:
+        import fitz
+        results.append((True, f"PyMuPDF {fitz.__doc__.splitlines()[0] if fitz.__doc__ else 'installed'}"))
+        doc = fitz.open()
+        doc.new_page(width=800, height=450)
+        pix = doc.load_page(0).get_pixmap(alpha=False)
+        pix.tobytes("jpeg", jpg_quality=JPEG_QUALITY)
+        results.append((True, "Can draw a PDF page to a JPEG"))
+    except Exception as exc:
+        results.append((False, f"PDF rendering is broken: {exc!r}"))
+    soffice = find_soffice(app.config.get("SOFFICE_PATH", ""))
+    results.append((bool(soffice), f"LibreOffice (for .pptx): {soffice}" if soffice else
+                    "LibreOffice NOT found: only PDFs can be uploaded (deploy with the Dockerfile to accept .pptx)"))
+    with app.app_context():
+        bucket = app.config["RECORDINGS_BUCKET"]
+        key = f"slides/_check/{uuid.uuid4().hex}.jpg"
+        try:
+            where = storage.upload_bytes_resilient(bucket, key, b"check", content_type="image/jpeg")
+            ok = storage.read_bytes(bucket, key) == b"check"
+            storage.delete_objects(bucket, [key])
+            results.append((ok, f"Slide storage works ({where}" + (")" if where == "cloud" else
+                            ": cloud storage refused it, check SUPABASE_URL / SUPABASE_SERVICE_KEY and that the "
+                            f"'{bucket}' bucket exists)")))
+        except Exception as exc:
+            results.append((False, f"Slide storage is broken: {exc}"))
+    return results
 
 
 def new_workdir():
