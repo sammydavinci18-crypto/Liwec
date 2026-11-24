@@ -7,8 +7,7 @@
   when the server tells the host's browser to (the "recording_mode" event in
   main.js): no media server, or the server recorder failed to start or died.
 
-  It composites the SAME layout everyone is watching live (host spotlight +
-  participant grid) onto a canvas, mixes everyone's audio into one track, and
+  It composites the lesson screen (stage + students present + who is here) onto a canvas, mixes everyone's audio into one track, and
   records that as a single video, so playback looks exactly like the lesson.
 
   Hardening, because this used to depend on one fragile browser tab:
@@ -25,9 +24,16 @@
     * If the recorder itself stops unexpectedly, a new one is started.
 */
 
-const CANVAS_W = 960;
-const CANVAS_H = 540;
-const SPOTLIGHT_W = 340; // matches roughly the live CSS spotlight tile proportion
+// The recording is a picture of the whole lesson, like the teacher's own screen: a big STAGE
+// (whiteboard, slides, or the teacher's camera / shared screen), a column down the right with
+// the students present, and a bar along the bottom with the lesson and who is here.
+const CANVAS_W = 1280;
+const CANVAS_H = 720;
+const SIDE_W = 320;                      // student column
+const BAR_H = 52;                        // bottom bar
+const STAGE_W = CANVAS_W - SIDE_W;
+const STAGE_H = CANVAS_H - BAR_H;
+const MAX_TILES = 12;                    // students drawn as pictures; the bar names everyone
 const CHUNK_MS = 10000;
 const ROOM = window.ROOM_CONFIG.roomCode;
 
@@ -60,71 +66,153 @@ function drawCover(video, x, y, w, h) {
   ctx.drawImage(video, sx, sy, sw, sh, x, y, w, h);
 }
 
+function drawContain(video, x, y, w, h) {
+  if (!video || !video.videoWidth) return false;
+  const scale = Math.min(w / video.videoWidth, h / video.videoHeight);
+  const dw = video.videoWidth * scale, dh = video.videoHeight * scale;
+  ctx.drawImage(video, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+  return true;
+}
+
+// The name on a tile, without the little icons/badges (hand, audio only, ...) the live page adds.
+function tileName(container, labelSel) {
+  const label = container && container.querySelector(labelSel);
+  if (!label) return "";
+  const c = label.cloneNode(true);
+  c.querySelectorAll(".hand-badge, .data-badge, .host-badge, .ico").forEach((n) => n.remove());
+  return (c.textContent || "").replace(/\s+/g, " ").trim();
+}
+
+function drawLabel(text, x, y, maxW, size) {
+  if (!text) return;
+  ctx.font = `${size}px system-ui, Arial, sans-serif`;
+  let t = text;
+  while (t.length > 1 && ctx.measureText(t).width > maxW - 14) t = t.slice(0, -2);
+  if (t !== text) t += "…";
+  const w = ctx.measureText(t).width + 14;
+  ctx.fillStyle = "rgba(0,0,0,.55)";
+  ctx.fillRect(x, y - size - 4, w, size + 8);
+  ctx.fillStyle = "#fff";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText(t, x + 7, y);
+}
+
+// A student tile: their picture, or their initial when the camera is off (so they still show as present).
+function drawStudent(video, name, x, y, w, h) {
+  ctx.fillStyle = "#0A1318";
+  ctx.fillRect(x, y, w, h);
+  const hasPicture = video && video.videoWidth && !video.closest(".no-video");
+  if (hasPicture) {
+    drawCover(video, x, y, w, h);
+  } else {
+    const r = Math.min(w, h) * 0.22;
+    ctx.fillStyle = "#16262f";
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = "#2A3F6B";
+    ctx.beginPath(); ctx.arc(x + w / 2, y + h / 2 - 6, r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.font = `700 ${Math.round(r * 1.1)}px system-ui, Arial, sans-serif`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(((name || "?").trim()[0] || "?").toUpperCase(), x + w / 2, y + h / 2 - 5);
+    ctx.textAlign = "left";
+  }
+  ctx.strokeStyle = "#2B3E45";
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  drawLabel(name, x + 6, y + h - 8, w - 12, 13);
+}
+
 function drawFrame() {
   ctx.fillStyle = "#0E1A22";
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-  // Host spotlight — reuse the actual <video> element already rendering it.
-  const spotlightVideo = document.querySelector("#spotlight-tile video");
-  if (spotlightVideo) {
-    drawCover(spotlightVideo, 0, 0, SPOTLIGHT_W, CANVAS_H);
+  // Stage: the teacher's camera or shared screen (the picture already on the big tile).
+  ctx.fillStyle = "#05090c";
+  ctx.fillRect(0, 0, STAGE_W, STAGE_H);
+  const spotlightTile = document.querySelector("#spotlight-tile");
+  const spotlightVideo = spotlightTile && spotlightTile.querySelector("video");
+  if (!drawContain(spotlightVideo, 0, 0, STAGE_W, STAGE_H)) {
+    ctx.fillStyle = "#8FA3AD";
+    ctx.font = "22px system-ui, Arial, sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("Waiting for the teacher…", STAGE_W / 2, STAGE_H / 2);
+    ctx.textAlign = "left";
   }
-  ctx.strokeStyle = "#2B3E45";
-  ctx.strokeRect(0, 0, SPOTLIGHT_W, CANVAS_H);
-
-  // Participant grid — reuse the actual tile <video> elements. Selecting by
-  // class (not "#filmstrip .mini-tile") so this keeps working even when
-  // gallery view has moved the tiles into #gallery-grid.
-  const tiles = Array.from(document.querySelectorAll(".mini-tile video"));
-  const gridX = SPOTLIGHT_W + 12;
-  const gridW = CANVAS_W - gridX;
-  if (tiles.length > 0) {
-    const cols = Math.min(3, Math.ceil(Math.sqrt(tiles.length)));
-    const rows = Math.ceil(tiles.length / cols);
-    const cellW = (gridW - (cols - 1) * 8) / cols;
-    const cellH = (CANVAS_H - (rows - 1) * 8) / rows;
-
-    tiles.forEach((video, i) => {
-      const col = i % cols;
-      const row = Math.floor(i / cols);
-      const x = gridX + col * (cellW + 8);
-      const y = row * (cellH + 8);
-      drawCover(video, x, y, cellW, cellH);
-      ctx.strokeStyle = "#2B3E45";
-      ctx.strokeRect(x, y, cellW, cellH);
-    });
-  }
+  const stageName = tileName(document, "#spotlight-label");
+  if (stageName) drawLabel(stageName + (spotlightTile && spotlightTile.classList.contains("is-screen") ? " is sharing their screen" : ""), 12, STAGE_H - 14, STAGE_W - 24, 16);
   drawWhiteboard();
   drawSlides();
+
+  // Student column. Selecting by class (not "#filmstrip .mini-tile") so this keeps working
+  // when gallery view has moved the tiles into #gallery-grid.
+  ctx.fillStyle = "#0E1A22";
+  ctx.fillRect(STAGE_W, 0, SIDE_W, STAGE_H);
+  ctx.strokeStyle = "#2B3E45";
+  ctx.beginPath(); ctx.moveTo(STAGE_W + 0.5, 0); ctx.lineTo(STAGE_W + 0.5, STAGE_H); ctx.stroke();
+  const all = Array.from(document.querySelectorAll(".mini-tile")).map((t) => ({
+    video: t.querySelector("video"), name: tileName(t, ".tile-label"),
+  }));
+  all.sort((a, b) => a.name.localeCompare(b.name));
+  const shown = all.slice(0, MAX_TILES);
+  const pad = 6, cols = shown.length <= 1 ? 1 : 2;
+  const rows = Math.max(1, Math.ceil(shown.length / cols));
+  const cellW = (SIDE_W - pad * (cols + 1)) / cols;
+  const cellH = Math.min(cellW * 9 / 16 * 1.0, (STAGE_H - pad * (rows + 1)) / rows);
+  shown.forEach((st, i) => {
+    drawStudent(st.video, st.name, STAGE_W + pad + (i % cols) * (cellW + pad), pad + Math.floor(i / cols) * (cellH + pad), cellW, cellH);
+  });
+
+  // Bottom bar: the lesson, how many are here, and their names.
+  ctx.fillStyle = "#0A1318";
+  ctx.fillRect(0, STAGE_H, CANVAS_W, BAR_H);
+  ctx.strokeStyle = "#2B3E45";
+  ctx.beginPath(); ctx.moveTo(0, STAGE_H + 0.5); ctx.lineTo(CANVAS_W, STAGE_H + 0.5); ctx.stroke();
+  const title = (window.ROOM_CONFIG && window.ROOM_CONFIG.title) || document.title.split(" · ")[0] || "";
+  ctx.textBaseline = "middle";
+  ctx.font = "700 15px system-ui, Arial, sans-serif";
+  ctx.fillStyle = "#fff";
+  let x = 16;
+  const tw = Math.min(ctx.measureText(title).width, 380);
+  if (title) { ctx.save(); ctx.beginPath(); ctx.rect(x, STAGE_H, 380, BAR_H); ctx.clip(); ctx.fillText(title, x, STAGE_H + BAR_H / 2); ctx.restore(); }
+  x += tw + 16;
+  const count = all.length === 1 ? "1 student present" : all.length + " students present";
+  ctx.font = "600 15px system-ui, Arial, sans-serif";
+  ctx.fillStyle = "#E8C65A";
+  ctx.fillText(count, x, STAGE_H + BAR_H / 2);
+  x += ctx.measureText(count).width + 16;
+  ctx.font = "13px system-ui, Arial, sans-serif";
+  ctx.fillStyle = "#C9D6DC";
+  let roster = all.map((st) => st.name).filter(Boolean).join("  ·  ");
+  const maxW = CANVAS_W - x - 16;
+  while (roster.length > 3 && ctx.measureText(roster).width > maxW) roster = roster.slice(0, -4) + "…";
+  ctx.fillText(roster, x, STAGE_H + BAR_H / 2);
+  ctx.textBaseline = "alphabetic";
 }
 
-// While the whiteboard is open it covers everyone's screen, so it also covers
-// the recording: the board is painted over the normal layout.
+// While the whiteboard is open it replaces the stage (everyone's screen shows it); the students stay visible.
 function drawWhiteboard() {
   const wb = window.Whiteboard;
   if (!wb || !wb.isOpen()) return;
-  const scale = Math.min(CANVAS_W / wb.canvas.width, CANVAS_H / wb.canvas.height);
+  const scale = Math.min(STAGE_W / wb.canvas.width, STAGE_H / wb.canvas.height);
   const w = wb.canvas.width * scale, h = wb.canvas.height * scale;
   ctx.fillStyle = "#0E1A22";
-  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-  ctx.drawImage(wb.canvas, (CANVAS_W - w) / 2, (CANVAS_H - h) / 2, w, h);
+  ctx.fillRect(0, 0, STAGE_W, STAGE_H);
+  ctx.drawImage(wb.canvas, (STAGE_W - w) / 2, (STAGE_H - h) / 2, w, h);
 }
 
-// Likewise a presentation covers everyone's screen, so it covers the recording.
-// The picture is same-origin (served by our own server), so painting it here
-// can't taint the canvas and break the recording.
+// Likewise a presentation takes over the stage. The picture is same-origin (served by our own
+// server), so painting it here can't taint the canvas and break the recording.
 function drawSlides() {
   const sl = window.Slides;
   const im = sl && sl.currentImage && sl.currentImage();
   if (!im) return;
-  const scale = Math.min(CANVAS_W / im.naturalWidth, CANVAS_H / im.naturalHeight);
+  const scale = Math.min(STAGE_W / im.naturalWidth, STAGE_H / im.naturalHeight);
   const w = im.naturalWidth * scale, h = im.naturalHeight * scale;
   ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-  ctx.drawImage(im, (CANVAS_W - w) / 2, (CANVAS_H - h) / 2, w, h);
+  ctx.fillRect(0, 0, STAGE_W, STAGE_H);
+  ctx.drawImage(im, (STAGE_W - w) / 2, (STAGE_H - h) / 2, w, h);
   // The teacher's drawing and laser pointer sit on the slide the same way.
   const layers = window.SlideInk && window.SlideInk.layers ? window.SlideInk.layers() : [];
-  layers.forEach((layer) => ctx.drawImage(layer, (CANVAS_W - w) / 2, (CANVAS_H - h) / 2, w, h));
+  layers.forEach((layer) => ctx.drawImage(layer, (STAGE_W - w) / 2, (STAGE_H - h) / 2, w, h));
 }
 
 /* ------------------------------------------------------------------ timer */

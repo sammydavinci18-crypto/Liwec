@@ -402,6 +402,27 @@ class BreakTests(unittest.TestCase):
         self.clock.t += cs.Break.LINGER
         self.assertFalse(self.b.payload()["active"])
 
+    def test_absence_is_excused_during_the_break_and_a_minute_after(self):
+        self.assertFalse(self.b.excuses_absence())             # no break: not excused
+        self.b.start(2)
+        self.assertTrue(self.b.excuses_absence())
+        self.clock.t += 121                                    # break over by the clock
+        self.assertTrue(self.b.excuses_absence())              # grace
+        self.clock.t += cs.Break.GRACE
+        self.assertFalse(self.b.excuses_absence())
+
+    def test_ending_early_also_gives_grace(self):
+        self.b.start(10)
+        self.b.end()
+        self.assertTrue(self.b.excuses_absence())
+        self.clock.t += cs.Break.GRACE + 1
+        self.assertFalse(self.b.excuses_absence())
+
+    def test_a_new_break_clears_old_grace(self):
+        self.b.start(1); self.b.end()
+        self.b.start(5)
+        self.assertTrue(self.b.running())
+
     def test_a_room_has_its_own_break_and_timer(self):
         cs.drop("ROOMB")
         t = cs.tools("ROOMB")

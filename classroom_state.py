@@ -576,9 +576,11 @@ class Break:
     MIN_SECONDS = 30
     MAX_SECONDS = 3 * 3600
     LINGER = 15                                       # "we're back" stays on screen this long
+    GRACE = 60                                        # seconds after a break during which being away is excused
 
     def __init__(self, clock=time.monotonic):
         self._clock = clock
+        self._grace_until = 0.0
         self.reset()
 
     def reset(self):
@@ -589,6 +591,7 @@ class Break:
 
     def start(self, minutes, message=""):
         self.reset()
+        self._grace_until = 0.0
         seconds = _num(float(_num(minutes, 0.5, self.MAX_SECONDS / 60, 5)) * 60,
                        self.MIN_SECONDS, self.MAX_SECONDS, 300)
         self.total = int(seconds)
@@ -613,6 +616,19 @@ class Break:
 
     def end(self):
         self.reset()
+        self._grace_until = self._clock() + self.GRACE    # students need a moment to come back
+
+    def running(self):
+        return self.on and self.remaining() > 0
+
+    def excuses_absence(self):
+        """True while students are free to leave the lesson screen: during the break, and for
+        GRACE seconds after it (they may be in another tab and have not seen it end yet)."""
+        if self.running():
+            return True
+        if self.on:
+            return self._clock() < self._ends + self.GRACE
+        return self._clock() < self._grace_until
 
     def is_showing(self):
         if not self.on:

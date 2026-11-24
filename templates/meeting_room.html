@@ -527,6 +527,7 @@
 <script>
   window.ROOM_CONFIG = {
     roomCode: {{ meeting.room_code|tojson }},
+    title: {{ meeting.title|tojson }},
     isHost: {{ is_host|tojson }},
     userName: {{ viewer_name|tojson }},
     hostName: {{ meeting.host.name|tojson }},

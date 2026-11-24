@@ -561,6 +561,12 @@ def handle_attendance_away(data):
         return
 
     away = bool(data.get("away"))
+    if away:
+        # During a teacher's break (and just after) students may leave the lesson screen.
+        import classroom_state as _cs
+        tools = _cs.peek(info["room_code"])
+        if tools and tools.rest.excuses_absence():
+            return
     row = _attendance_row(info)
     if away and sid not in AWAY_SINCE:
         AWAY_SINCE[sid] = datetime.utcnow()

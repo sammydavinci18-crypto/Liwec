@@ -1,12 +1,14 @@
 /*
-  Taking a break.
+  Taking a break (pausing the lesson).
 
   The teacher presses "Break" in the control bar, picks how long (1, 2, 5, 10, 15
-  or 20 minutes, or any number of minutes) and may add a short note. Everyone then
-  sees a card: "Taking a break. Back in 5 minutes", a countdown and the clock time
-  the class resumes. At zero it says "We're back!" with a short chime. The teacher
-  can add a minute or end the break early. Students can close the card if it is in
-  the way; it comes back if the teacher changes the break.
+  or 20 minutes, or any number of minutes) and may add a short note. The lesson
+  is then paused for the students: their screen shows ONLY a message, "Break time.
+  We are back in 5 minutes", with a countdown and the clock time the class resumes,
+  and they are free to do something else. Compulsory-attendance checks are switched
+  off for the break (window.__onBreak, read by attendance.js) and for a minute after
+  it. At zero a chime and "We're back!". The teacher keeps a small card with the
+  countdown, "+1 min" and "End break".
 
   The server sends the seconds LEFT (classroom_state.Break), not a clock time, so a
   student's wrong computer clock never shows the wrong countdown.
@@ -38,6 +40,28 @@
   live.setAttribute("role", "status");
   card.appendChild(live);
 
+  /* ---------- the students' paused screen: nothing but the message ---------- */
+  let full = null, fullTitle, fullNote, fullTime, fullBack, fullHint, fullBtn;
+  if (!isHost) {
+    full = el("div", "tt-break-full");
+    full.hidden = true;
+    full.setAttribute("role", "alertdialog");
+    full.setAttribute("aria-live", "polite");
+    const fi = el("div", "tt-break-full-icon");
+    fi.setAttribute("aria-hidden", "true");
+    if (window.ICONS && window.ICONS.coffee) fi.innerHTML = window.ICONS.coffee;
+    fullTitle = el("h2", "tt-break-full-title");
+    fullNote = el("p", "tt-break-full-note");
+    fullTime = el("div", "tt-break-full-time");
+    fullBack = el("p", "tt-break-full-back");
+    fullHint = el("p", "tt-break-full-hint");
+    fullBtn = el("button", "btn btn-primary tt-break-full-btn", "Back to the lesson");
+    fullBtn.type = "button";
+    fullBtn.addEventListener("click", () => { dismissed = true; paint(); });
+    full.append(fi, fullTitle, fullNote, fullTime, fullBack, fullHint, fullBtn);
+    T.layer.el.appendChild(full);
+  }
+
   let st = null;          // last state from the server
   let endsAt = 0;         // performance.now() when the break ends
   let doneAt = 0;
@@ -57,12 +81,51 @@
     catch (e) { return ""; }
   }
 
+  // Tell the rest of the page (attendance.js) whether students may leave the lesson screen.
+  function syncExcuse() {
+    const running = !!(st && st.active && left() > 0);
+    if (window.__onBreak && !running) window.__breakGraceUntil = Date.now() + 60000;
+    window.__onBreak = running;
+  }
+
+  function paintFull() {
+    syncExcuse();
+    if (!st || !st.active || dismissed) { full.hidden = true; document.body.classList.remove("tt-on-break"); return; }
+    const s = left();
+    const done = s <= 0;
+    full.hidden = false;
+    document.body.classList.add("tt-on-break");
+    full.classList.toggle("is-done", done);
+    if (done) {
+      fullTitle.textContent = "We're back!";
+      fullNote.textContent = "The break is over. The lesson is continuing.";
+      fullTime.textContent = "";
+      fullBack.textContent = "";
+      fullHint.textContent = "";
+      fullBtn.hidden = false;
+      if (!chimed) { chimed = true; doneAt = performance.now(); T.chime(); }
+      if (performance.now() - doneAt > 15000) { st = null; paintFull(); return; }
+    } else {
+      const mins = Math.ceil(s / 60);
+      fullTitle.textContent = "Break time";
+      fullNote.textContent = (st.message ? st.message + ". " : "") + "The lesson is paused. We will be back in " + plural(mins, "minute") + ".";
+      fullTime.textContent = T.clock(Math.ceil(s));
+      fullBack.textContent = "Back at " + clockTime(Date.now() + s * 1000);
+      fullHint.textContent = "You can step away or do something else. A sound will play when the break ends.";
+      fullBtn.hidden = true;
+    }
+    const spoken = done ? "The break is over. We are back." : "Break time. The lesson is paused. Back in " + lengthText(st.total) + ".";
+    if (spoken !== lastSpoken) { lastSpoken = spoken; live.textContent = spoken; }
+  }
+
   function paint() {
-    if (!st || !st.active || (dismissed && !isHost)) {
+    if (!isHost) { card.hidden = true; return paintFull(); }
+    const s0 = left();
+    if (!st || !st.active) {
       card.hidden = true;
       return;
     }
-    const s = left();
+    const s = s0;
     const done = s <= 0;
     card.hidden = false;
     card.classList.toggle("is-done", done);
@@ -100,11 +163,6 @@
       };
       if (left() > 0) mk("+1 min", "Add a minute to the break", () => socket.emit("break_control", { action: "add", seconds: 60 }));
       mk(left() > 0 ? "End break" : "Close", left() > 0 ? "End the break now" : "Close this message", () => socket.emit("break_control", { action: "end" }));
-    } else {
-      const x = el("button", "tt-x", "×");
-      x.type = "button"; x.setAttribute("aria-label", "Hide the break message");
-      x.addEventListener("click", () => { dismissed = true; paint(); });
-      side.appendChild(x);
     }
   }
 
@@ -116,8 +174,6 @@
       endsAt = performance.now() + st.remaining * 1000;
       if (st.remaining > 0) { chimed = false; doneAt = 0; lastSpoken = ""; if (!wasActive && !isHost) T.chime(); }
       else if (!wasActive) chimed = true;      // joined after it finished: no chime
-    } else if (wasActive && !isHost) {
-      T.toast("The break has ended", 3000);
     }
     drawSide();
     paint();

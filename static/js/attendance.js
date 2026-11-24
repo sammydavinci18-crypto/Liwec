@@ -56,8 +56,13 @@
     return !!(track && track.readyState === "live");
   }
 
+  // While the teacher has paused the lesson for a break (break.js), students may leave the
+  // screen. A minute of grace follows, because they may not have seen the break end.
+  const excused = () => !!window.__onBreak || Date.now() < (window.__breakGraceUntil || 0);
+
   function check() {
     if (!started) return;
+    if (excused()) return setAway(false);
     if (document.visibilityState === "hidden") return setAway(true, "This lesson is not the tab you are looking at.");
     if (canFullscreen && !document.fullscreenElement) return setAway(true, "The lesson must stay in full screen.");
     if (!cameraOk()) return setAway(true, "Your camera must stay on for the whole lesson.");
@@ -67,7 +72,7 @@
   // Not allowed to hide the lesson: re-enable the camera track if it gets switched off.
   setInterval(() => {
     const stream = window.getLocalStream && window.getLocalStream();
-    if (stream && !audioOnly()) stream.getVideoTracks().forEach((t) => { if (!t.enabled) t.enabled = true; });
+    if (stream && !audioOnly() && !excused()) stream.getVideoTracks().forEach((t) => { if (!t.enabled) t.enabled = true; });
     check();
   }, 1000);
 
