@@ -8,7 +8,7 @@
     <span class="title">{{ meeting.title }}</span>
     <span class="code-pill">{{ meeting.type_label() }}</span>
   </div>
-  <span class="recording-badge">● Recording</span>
+  <span class="recording-badge"><span class="rec-dot" aria-hidden="true"></span>Recording</span>
 </div>
 
 <div class="playback-wrap">
@@ -26,6 +26,9 @@
     autoplay
     playsinline
   ></video>
-  <a href="{{ url_for('main.dashboard') }}" class="btn btn-ghost">← Back to dashboard</a>
+  {% if (current_user.is_admin or meeting.is_hosted_by(current_user)) and watch_link(meeting) %}
+  <button type="button" class="btn btn-amber" data-copy="{{ watch_link(meeting) }}" data-share data-share-title="{{ meeting.title }} (recording)">Copy student link</button>
+  {% endif %}
+  <a href="{{ url_for('main.dashboard') }}" class="btn btn-ghost">&larr; Back to dashboard</a>
 </div>
 {% endblock %}

@@ -206,7 +206,10 @@
     socket.on("breakout_help", ({ group, name, from }) => {
       helpBox.hidden = false;
       const row = el("div", "tt-help-row");
-      row.appendChild(el("span", null, "✋ " + name + " (" + from + ") needs you"));
+      const who = el("span");
+      who.innerHTML = window.iconHTML("hand");
+      who.appendChild(document.createTextNode(" " + name + " (" + from + ") needs you"));
+      row.appendChild(who);
       const visit = el("button", "btn btn-primary btn-sm", "Visit"); visit.type = "button";
       visit.addEventListener("click", () => { socket.emit("breakout_visit", { where: group }); row.remove(); if (!helpBox.children.length) helpBox.hidden = true; });
       const dismiss = el("button", "tt-x", "×"); dismiss.type = "button"; dismiss.setAttribute("aria-label", "Dismiss");
@@ -236,11 +239,12 @@
   const title = el("strong", "tt-breakout-title");
   const who = el("span", "tt-breakout-who");
   const clockEl = el("span", "tt-clock");
-  const help = el("button", "wb-btn", "✋ Ask teacher to join"); help.type = "button";
+  const helpLabel = () => { help.innerHTML = window.iconHTML("hand") + " Ask teacher to join"; };
+  const help = el("button", "wb-btn"); help.type = "button"; helpLabel();
   help.addEventListener("click", () => {
     socket.emit("breakout_help", {});
-    help.disabled = true; help.textContent = "Teacher asked ✓";
-    setTimeout(() => { help.disabled = false; help.textContent = "✋ Ask teacher to join"; }, 20000);
+    help.disabled = true; help.textContent = "Teacher asked";
+    setTimeout(() => { help.disabled = false; helpLabel(); }, 20000);
   });
   banner.append(title, clockEl, who, help);
   T.layer.el.appendChild(banner);

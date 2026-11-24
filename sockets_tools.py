@@ -7,6 +7,7 @@ classroom_state.py; this file checks WHO is asking and relays the result.
   Polls        poll_*     "raise A, B, C or D" with a live count
   Breakouts    breakout_* pairs / groups, then everyone back
   Timer        timer_*    a countdown with an optional task and focus bar
+  Break        break_*    "taking a break, back in N minutes" for everyone
 
 Only the host can start, change or end any of these. A student's browser can
 only answer a poll, ask for help in a breakout room, or (when the teacher has
@@ -453,6 +454,40 @@ def handle_timer_control(data):
 
 
 # ---------------------------------------------------------------------------
+# Break ("we'll be back in N minutes")
+# ---------------------------------------------------------------------------
+
+def _break_to_room(room_code):
+    socketio.emit("break_state", cs.tools(room_code).rest.payload(), room=room_code)
+
+
+@socketio.on("break_start")
+def handle_break_start(data):
+    info = _host_info(_sid())
+    if not info:
+        return
+    data = data or {}
+    cs.tools(info["room_code"]).rest.start(data.get("minutes", 5), data.get("message", ""))
+    _break_to_room(info["room_code"])
+
+
+@socketio.on("break_control")
+def handle_break_control(data):
+    info = _host_info(_sid())
+    if not info:
+        return
+    rest = cs.tools(info["room_code"]).rest
+    action = (data or {}).get("action")
+    if action == "add":
+        rest.add((data or {}).get("seconds", 60))
+    elif action == "end":
+        rest.end()
+    else:
+        return
+    _break_to_room(info["room_code"])
+
+
+# ---------------------------------------------------------------------------
 # People arriving, leaving, and the session ending
 # ---------------------------------------------------------------------------
 
@@ -469,6 +504,9 @@ def on_join(sid, room_code):
     timer = tools.timer.payload()
     if timer["active"]:
         emit("timer_state", timer)
+    rest = tools.rest.payload()
+    if rest["active"]:
+        emit("break_state", rest)
     if info.get("observer"):
         return
     if info["is_host"]:

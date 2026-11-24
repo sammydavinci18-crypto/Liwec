@@ -1,7 +1,7 @@
 <ol class="tracker" aria-label="Application progress">
   {% for s in stages %}
   <li class="tracker-step tracker-{{ s.state }}">
-    <span class="tracker-dot">{% if s.state == 'done' %}&#10003;{% elif s.state == 'failed' %}!{% else %}{{ loop.index }}{% endif %}</span>
+    <span class="tracker-dot">{% if s.state == 'done' %}<svg class="ico-svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>{% elif s.state == 'failed' %}!{% else %}{{ loop.index }}{% endif %}</span>
     <span class="tracker-label">{{ s.label }}</span>
   </li>
   {% endfor %}

@@ -128,7 +128,7 @@
     if (window.innerWidth >= window.innerHeight) overlay.classList.remove("rotated");
     const full = !!fsElement();
     btnFull.hidden = !(canElementFullscreen || canVideoFullscreen);
-    btnFull.innerHTML = full ? "&#10006; Exit full screen" : "&#9974; Full screen";
+    btnFull.innerHTML = window.iconHTML(full ? "shrink" : "expand") + (full ? " Exit full screen" : " Full screen");
     btnFit.textContent = overlay.classList.contains("fill") ? "Fit" : "Fill";
     // Offer "Rotate" only when the screen is held upright.
     btnRotate.hidden = !(isTouch && window.innerHeight > window.innerWidth) && !overlay.classList.contains("rotated");

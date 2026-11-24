@@ -74,8 +74,15 @@
     card.querySelector(".cv-avatar").textContent = initial(spot.name);
     card.querySelector(".cv-name").textContent = (mine ? "You" : spot.name);
     let status = "In the spotlight";
-    if (spot.speak) status = spot.accepted ? "🎤 Speaking" : (mine ? "Your turn!" : "⏳ Waiting to unmute…");
-    card.querySelector(".cv-status").textContent = status;
+    let statusIcon = "";
+    if (spot.speak) {
+      if (spot.accepted) { status = "Speaking"; statusIcon = "mic"; }
+      else if (mine) status = "Your turn!";
+      else { status = "Waiting to unmute…"; statusIcon = "clock"; }
+    }
+    const statusEl = card.querySelector(".cv-status");
+    statusEl.textContent = status;
+    if (statusIcon) statusEl.insertAdjacentHTML("afterbegin", window.iconHTML(statusIcon));
 
     const actions = card.querySelector(".cv-actions");
     actions.innerHTML = "";
@@ -249,8 +256,10 @@
       f.el.classList.toggle("hand", handOrder.includes(sid));
       f.el.classList.toggle("in-spotlight", !!spot && spot.sid === sid);
       f.initial.textContent = initial(m.name);
-      const badges = (handOrder.includes(sid) ? " ✋" : "") + (m.dataMode === "audio" ? " 🎧" : m.dataMode === "low" ? " 📉" : "");
-      f.name.textContent = (m.name || "") + badges;
+      f.name.textContent = m.name || "";
+      if (handOrder.includes(sid)) f.name.insertAdjacentHTML("beforeend", window.iconHTML("hand"));
+      if (m.dataMode === "audio") f.name.insertAdjacentHTML("beforeend", window.iconHTML("headphones"));
+      else if (m.dataMode === "low") f.name.insertAdjacentHTML("beforeend", window.iconHTML("lowData"));
       // Keep DOM order equal to the sort (cheap: only moves what changed).
       if (facesEl.children[idx] !== f.el) facesEl.insertBefore(f.el, facesEl.children[idx] || null);
     });

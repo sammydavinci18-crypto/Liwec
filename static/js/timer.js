@@ -81,15 +81,16 @@
     if (!isHost) return;
     controls.textContent = "";
     if (!st) return;
-    const mk = (text, title, fn) => {
-      const b = el("button", "tt-timer-btn", text);
+    const mk = (text, title, fn, icon) => {
+      const b = el("button", "tt-timer-btn", icon ? null : text);
+      if (icon) b.innerHTML = window.iconHTML(icon);
       b.type = "button"; b.title = title; b.setAttribute("aria-label", title);
       b.addEventListener("click", fn);
       controls.appendChild(b);
     };
-    if (left() > 0) mk(st.paused ? "▶" : "⏸", st.paused ? "Resume" : "Pause", () => socket.emit("timer_control", { action: st.paused ? "resume" : "pause" }));
+    if (left() > 0) mk("", st.paused ? "Resume" : "Pause", () => socket.emit("timer_control", { action: st.paused ? "resume" : "pause" }), st.paused ? "play" : "pause");
     mk("+1", "Add a minute", () => socket.emit("timer_control", { action: "add", seconds: 60 }));
-    mk("■", "Stop the timer", () => socket.emit("timer_control", { action: "stop" }));
+    mk("", "Stop the timer", () => socket.emit("timer_control", { action: "stop" }), "stop");
   }
 
   if (!isHost) return;

@@ -9,7 +9,7 @@
   <script>document.documentElement.className+=" js";try{var t=localStorage.getItem("lw-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
   {% block head %}{% endblock %}
 </head>
-<body>
+<body{% if current_user.is_authenticated %} class="has-watermark"{% endif %}>
   <a class="skip-link" href="#main">Skip to main content</a>
   {% block topheader %}
   {% if current_user.is_authenticated %}
@@ -48,6 +48,7 @@
       </details>
       {% elif current_user.is_approved_teacher %}
       <a class="topnav-link{{ ' is-current' if ep == 'teachers.my_sessions' }}" href="{{ url_for('teachers.my_sessions') }}"{% if ep == 'teachers.my_sessions' %} aria-current="page"{% endif %}>My lessons</a>
+      <a class="topnav-link{{ ' is-current' if ep == 'teachers.my_recordings' }}" href="{{ url_for('teachers.my_recordings') }}"{% if ep == 'teachers.my_recordings' %} aria-current="page"{% endif %}>Recordings</a>
       <a class="topnav-link{{ ' is-current' if ep == 'portal.timetable' }}" href="{{ url_for('portal.timetable') }}"{% if ep == 'portal.timetable' %} aria-current="page"{% endif %}>Timetable</a>
       <details class="nav-menu">
         <summary class="topnav-link{{ ' is-current' if ep in ['main.dashboard', 'portal.index', 'consult.new', 'consult.mine', 'teachers.directory', 'teachers.profile', 'teachers.my_students', 'teachers.my_profile'] }}">More</summary>

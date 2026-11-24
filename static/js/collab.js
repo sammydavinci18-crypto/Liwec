@@ -103,8 +103,8 @@ document.addEventListener("DOMContentLoaded", () => {
     entries.forEach((p) => {
       const row = document.createElement("div");
       row.className = "participant-row";
-      const handIcon = (raisedHands.has(p.sid) ? " ✋" : "")
-        + (p.dataMode === "audio" ? " 🎧" : p.dataMode === "low" ? " 📉" : "");
+      const handIcon = (raisedHands.has(p.sid) ? window.iconHTML("hand") : "")
+        + (p.dataMode === "audio" ? window.iconHTML("headphones") : p.dataMode === "low" ? window.iconHTML("lowData") : "");
       row.innerHTML = `
         <span class="participant-name">${p.isHost ? '<span class="host-badge">Host</span> ' : ""}${escapeHtml(p.name)}${handIcon}</span>
       `;
@@ -234,11 +234,18 @@ document.addEventListener("DOMContentLoaded", () => {
     if (name !== userName) showReactionToast(name, emoji);
   });
 
-  function showReactionToast(name, emoji) {
+  // `icon` is the name of a line icon (thumbsUp, star, heart, smile, micOff, warning, check, clock).
+  // Older clients may still send an emoji character: show it as plain text so nothing breaks.
+  function showReactionToast(name, icon, text) {
     if (!reactionToasts) return;
     const toast = document.createElement("div");
     toast.className = "reaction-toast";
-    toast.innerHTML = `<span class="reaction-emoji">${emoji}</span><span class="reaction-name"></span>`;
+    const known = !!(window.ICONS && window.ICONS[icon]);
+    toast.innerHTML = '<span class="reaction-emoji"></span><span class="reaction-name"></span>';
+    const mark = toast.querySelector(".reaction-emoji");
+    if (known) { mark.innerHTML = '<span class="reaction-icon">' + window.ICONS[icon] + "</span>"; }
+    else { mark.textContent = icon; }
+    if (text) { mark.classList.add("has-text"); mark.appendChild(document.createTextNode(text)); }
     toast.querySelector(".reaction-name").textContent = name;
     reactionToasts.appendChild(toast);
     setTimeout(() => toast.remove(), 2600);
@@ -290,7 +297,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (label) label.textContent = "Unmute";
       btnMic.dataset.forcedMute = "true";
     }
-    showReactionToast("Host", "🔇 muted everyone");
+    showReactionToast("Host", "volumeOff", "muted everyone");
   });
 
   socket.on("removed_by_host", () => {
@@ -310,7 +317,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Teacher is told when a student leaves / returns to the lesson screen.
   if (isHost) {
     socket.on("student_away", ({ name, away }) => {
-      showReactionToast(name, away ? "⚠️ left the lesson screen" : "✅ is back on the lesson screen");
+      showReactionToast(name, away ? "warning" : "check", away ? "left the lesson screen" : "is back on the lesson screen");
     });
   }
 
@@ -318,7 +325,7 @@ document.addEventListener("DOMContentLoaded", () => {
      Call time limit (server-enforced — see sockets.py)
      ========================================================= */
   socket.on("time_limit_warning", ({ minutes_left }) => {
-    showReactionToast("Light-Way", `⏳ ${minutes_left} minute${minutes_left === 1 ? "" : "s"} left in this call`);
+    showReactionToast("Light-Way", "clock", `${minutes_left} minute${minutes_left === 1 ? "" : "s"} left in this call`);
   });
 
   socket.on("time_limit_reached", async () => {

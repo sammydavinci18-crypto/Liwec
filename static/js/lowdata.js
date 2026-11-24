@@ -6,7 +6,7 @@
     Normal      everything.
     Low data    smaller video each way; only the teacher, anyone presenting and a
                 couple of speakers are shown.
-    Audio only  no video sent or received. The teacher sees "🎧 audio only" next to
+    Audio only  no video sent or received. The teacher sees the headphones "audio only" label next to
                 the name, and a compulsory-lesson student is not logged as away.
 
   The mode itself is applied by webrtc.js (window.setDataMode). This file is the

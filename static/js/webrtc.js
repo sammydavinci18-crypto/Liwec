@@ -827,7 +827,7 @@ function removeFilmstripTile(key) {
   }
 }
 
-// Sets/clears a small ✋ badge on a participant's tile label.
+// Sets/clears a small raised-hand badge on a participant's tile label.
 window.setTileHandRaised = function (sid, raised) {
   const key = sid === "local" ? "local" : sid;
   const isSpotlightSelf = isHost && sid === "local";
@@ -846,7 +846,8 @@ window.setTileHandRaised = function (sid, raised) {
   if (raised && !existingBadge) {
     const badge = document.createElement("span");
     badge.className = "hand-badge";
-    badge.textContent = " ✋";
+    badge.innerHTML = window.iconHTML("hand");
+    badge.title = "Hand raised";
     labelEl.appendChild(badge);
   } else if (!raised && existingBadge) {
     existingBadge.remove();
@@ -869,7 +870,7 @@ window.setTileDataMode = function (sid, mode) {
       badge.className = "data-badge";
       labelEl.appendChild(badge);
     }
-    badge.textContent = mode === "audio" ? " 🎧 audio only" : " 📉 low data";
+    badge.innerHTML = window.iconHTML(mode === "audio" ? "headphones" : "lowData") + (mode === "audio" ? " audio only" : " low data");
     badge.title = mode === "audio" ? "On a weak connection: audio only" : "On a weak connection: smaller video";
   } else if (badge) {
     badge.remove();
@@ -897,7 +898,7 @@ window.setTileScreenSharing = function (sid, sharing) {
   if (sharing && !badge) {
     badge = document.createElement("div");
     badge.className = "presenting-badge";
-    badge.textContent = "🖥️ Presenting";
+    badge.innerHTML = window.iconHTML("screenShare") + " Presenting";
     tile.appendChild(badge);
   } else if (!sharing && badge) {
     badge.remove();

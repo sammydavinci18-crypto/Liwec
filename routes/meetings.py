@@ -283,9 +283,6 @@ def finish_meeting(meeting):
     meeting.ended_at = datetime.utcnow()
 
     recording = Recording.query.filter_by(meeting_id=meeting.id).first()
-    bucket = current_app.config["RECORDINGS_BUCKET"]
-    key = _recording_key(meeting)
-    local_buffer = storage.local_path_if_exists(bucket, key)
     server_recorded = bool(recording and recording.source == "server" and recording.egress_id)
 
     if server_recorded:
@@ -294,24 +291,14 @@ def finish_meeting(meeting):
         db.session.commit()
         app_obj = current_app._get_current_object()
         socketio.start_background_task(recording_service.stop_and_finalize, app_obj, meeting.id)
-    elif recording and local_buffer:
-        try:
-            with open(local_buffer, "rb") as f:
-                data = f.read()
-            storage.upload_bytes(bucket, key, data, content_type="video/webm")
-            # Only in Supabase mode is there a separate local buffer to
-            # clean up — in local-fallback mode upload_bytes() just
-            # rewrote the same file in place, so this is a no-op there.
-            if current_app.config.get("SUPABASE_URL") and current_app.config.get("SUPABASE_SERVICE_KEY"):
-                os.remove(local_buffer)
-            recording.finalized = True
-            retention_days = current_app.config["RECORDING_RETENTION_DAYS"]
-            # 0 = keep until the admin deletes it.
-            recording.expires_at = (
-                datetime.utcnow() + timedelta(days=retention_days) if retention_days > 0 else None
-            )
-        except storage.StorageError as exc:
-            current_app.logger.error(f"Recording upload failed for meeting {meeting.id}: {exc}")
+    elif recording:
+        # The host's browser recorded. Joining the pieces and uploading them can
+        # take minutes for a long lesson, so it happens in the background: ending
+        # stays instant, and the recording turns "Saved" when it is ready. If cloud
+        # storage refuses it, it is kept on this server and played from here.
+        db.session.commit()
+        app_obj = current_app._get_current_object()
+        socketio.start_background_task(recording_service.finalize_browser_recording, app_obj, meeting.id)
 
     db.session.commit()
 
@@ -409,21 +396,11 @@ def stream_recording(meeting_id):
     if not recording or not recording.finalized:
         abort(404)
 
-    # Only the admin host, or a guest the admin invited, can watch it back.
+    # The host, an admin, or anyone the admin invited can watch it back.
     if meeting.entry_state(current_user) not in ("host", "ok"):
         abort(403)
 
     if recording.is_expired or recording.deleted_at:
         abort(410)  # Gone — matches meeting_ended.html's "expired" messaging
 
-    bucket = current_app.config["RECORDINGS_BUCKET"]
-    url = storage.signed_url(bucket, recording.filename, expires_in=120)
-    if url:
-        return redirect(url)
-
-    # Local-fallback mode.
-    local_dir = current_app.config["RECORDINGS_DIR"]
-    path = os.path.join(local_dir, recording.filename)
-    if not os.path.exists(path):
-        abort(404)
-    return send_file(path, mimetype=recording_service.content_type_for(recording.filename), conditional=True)
+    return recording_service.open_recording_response(recording, current_app.config["RECORDINGS_BUCKET"])

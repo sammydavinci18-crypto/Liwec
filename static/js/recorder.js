@@ -235,6 +235,8 @@ const queue = []; // { seq, blob } in order, not yet confirmed by the server
 let nextSeq = 0;
 let pumping = false;
 let giveUpAt = 0; // set when the session is ending: stop retrying after this time
+let lastOkAt = 0;  // when the server last confirmed a chunk (0 = never yet)
+let startedAt = 0;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -249,7 +251,12 @@ async function sendChunk(item) {
     const j = await res.json().catch(() => ({}));
     return { gap: typeof j.expected === "number" ? j.expected : null };
   }
-  if (res.status === 403 || res.status === 410 || res.status === 404) return { dropped: true }; // not ours / ended
+  if (res.status === 410) return { dropped: true }; // the session already ended
+  if (res.status === 403 || res.status === 404) {
+    // This account is no longer the host of the session: the chunks are being refused.
+    window.dispatchEvent(new CustomEvent("recording-warning", { detail: { reason: "refused" } }));
+    return { dropped: true };
+  }
   if (!res.ok) throw new Error("HTTP " + res.status);
   return { ok: true };
 }
@@ -277,6 +284,7 @@ async function pump() {
         queue.shift();
         IDB.del(item.seq);
         attempt = 0;
+        lastOkAt = Date.now();
       } catch (err) {
         attempt += 1;
         await sleep(Math.min(20000, 1000 * 2 ** Math.min(attempt, 5)));
@@ -341,6 +349,12 @@ async function startRecording() {
   await resume();
 
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  // Browsers start an AudioContext "suspended" until the person has interacted
+  // with the page; a suspended one records silence. Resume it now and again on
+  // the first click/tap/key if it is still suspended.
+  const wake = () => { if (audioCtx && audioCtx.state === "suspended") audioCtx.resume().catch(() => {}); };
+  wake();
+  ["click", "keydown", "touchstart"].forEach((ev) => document.addEventListener(ev, wake, { passive: true }));
   audioDest = audioCtx.createMediaStreamDestination();
 
   const canvasStream = canvas.captureStream(fps);
@@ -363,6 +377,7 @@ async function startRecording() {
   });
 
   recordingActive = true;
+  startedAt = Date.now();
 }
 
 // window.stopRecordingAndWait(): used by main.js when the host clicks "End meeting".
@@ -423,5 +438,14 @@ window.RecordingControl = {
   },
   isActive() {
     return recordingActive;
+  },
+  // For the "Recording" badge: is saving keeping up with recording?
+  status() {
+    const sinceOk = Date.now() - (lastOkAt || startedAt || Date.now());
+    return {
+      active: recordingActive,
+      backlog: queue.length,
+      behind: recordingActive && (queue.length >= 6 || sinceOk > 60000),
+    };
   },
 };

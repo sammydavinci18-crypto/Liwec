@@ -321,10 +321,16 @@ def meeting_cancel_series(meeting_id):
 @admin_required
 def recordings():
     import sockets
+    import recording_service
+    from flask import current_app
+    # Safety net: sessions abandoned long ago are closed and their recording saved.
+    recording_service.close_abandoned(current_app._get_current_object())
+
     ended = (
         Meeting.query.filter(Meeting.status == "ended")
         .order_by(Meeting.ended_at.desc(), Meeting.id.desc()).limit(100).all()
     )
+    recording_service.ensure_share_tokens(ended)
     live = Meeting.query.filter(Meeting.status == "live").all()
     # "Live" in the database but nobody is hosting it any more (the teacher
     # closed the tab / lost connection without pressing End).
@@ -333,13 +339,37 @@ def recordings():
     def came(m):
         return len([g for g in m.guests if g.entered_at]) + len(m.participants)
 
-    def state(m):
-        rec = m.recording
-        if not rec or not rec.finalized:
-            return "missing"
-        return "expired" if (rec.is_expired or rec.deleted_at) else "ready"
+    return render_template("admin/recordings.html", ended=ended, stuck=stuck, came=came,
+                           state=recording_service.recording_state)
 
-    return render_template("admin/recordings.html", ended=ended, stuck=stuck, came=came, state=state)
+
+@admin_bp.route("/admin/recordings/<int:meeting_id>/retry", methods=["POST"])
+@login_required
+@admin_required
+def recording_retry(meeting_id):
+    """Try saving a recording again (it arrived but could not be saved the first time)."""
+    import recording_service
+    import storage
+    from extensions import socketio
+    from flask import current_app
+    meeting = Meeting.query.get_or_404(meeting_id)
+    rec = meeting.recording
+    if meeting.status != "ended" or rec is None or rec.finalized:
+        flash("There is nothing to retry for that session.", "info")
+        return redirect(url_for("admin.recordings"))
+    app_obj = current_app._get_current_object()
+    if rec.source == "server":
+        if storage.object_exists(current_app.config["RECORDINGS_BUCKET"], rec.filename):
+            rec.finalized = True
+            rec.ensure_share_token()
+            db.session.commit()
+            flash("Found the recording in storage and marked it ready.", "success")
+        else:
+            flash("The server recorder's file is not in storage, so there is nothing to recover.", "error")
+        return redirect(url_for("admin.recordings"))
+    socketio.start_background_task(recording_service.finalize_browser_recording, app_obj, meeting.id)
+    flash("Saving the recording again. Refresh this page in a minute.", "info")
+    return redirect(url_for("admin.recordings"))
 
 
 @admin_bp.route("/admin/meetings/<int:meeting_id>/force-end", methods=["POST"])
@@ -353,8 +383,8 @@ def meeting_force_end(meeting_id):
         return redirect(url_for("admin.recordings"))
     from routes.meetings import finish_meeting
     finish_meeting(meeting)
-    if meeting.recording and meeting.recording.finalized:
-        flash(f"\"{meeting.title}\" was closed and its recording is saved.", "success")
+    if meeting.recording:
+        flash(f"\"{meeting.title}\" was closed. Its recording is being saved and will show as Saved in a moment.", "success")
     else:
         flash(f"\"{meeting.title}\" was closed, but no recording had been received for it.", "info")
     return redirect(url_for("admin.recordings"))

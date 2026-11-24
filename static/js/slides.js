@@ -163,7 +163,7 @@
   function updateButtons() {
     if (window.innerWidth >= window.innerHeight) overlay.classList.remove("rotated");
     btnFull.hidden = !canFullscreen;
-    btnFull.innerHTML = fsElement() ? "&#10006; Exit full screen" : "&#9974; Full screen";
+    btnFull.innerHTML = window.iconHTML(fsElement() ? "shrink" : "expand") + (fsElement() ? " Exit full screen" : " Full screen");
     const rotate = $("sl-rotate");
     if (rotate) rotate.hidden = !(isTouch && window.innerHeight > window.innerWidth) && !overlay.classList.contains("rotated");
   }
@@ -247,7 +247,9 @@
     showing = false;
     deck = null;
     cache.clear();
-    overlay.classList.remove("show", "rotated");
+    overlay.classList.remove("show", "rotated", "peek");
+    const peekBarEl = document.getElementById("sl-peek-bar");
+    if (peekBarEl) peekBarEl.hidden = true;
     img.removeAttribute("src");
     loading.hidden = failed.hidden = true;
     clearTimeout(barTimer);
@@ -280,7 +282,7 @@
     const sync = () => {
       const on = realHand.classList.contains("active-on");
       handBtn.classList.toggle("is-on", on);
-      handBtn.innerHTML = on ? "&#9995; Lower hand" : "&#9995; Raise hand";
+      handBtn.innerHTML = window.iconHTML("hand") + (on ? " Lower hand" : " Raise hand");
     };
     new MutationObserver(sync).observe(realHand, { attributes: true, attributeFilter: ["class"] });
     sync();
@@ -403,9 +405,16 @@
   const handsEl = $("sl-hands");
   const hands = new Map(); // sid -> name
   function renderHands() {
+    syncPeekHands();
     if (!hands.size) { handsEl.hidden = true; handsEl.textContent = ""; return; }
     handsEl.hidden = false;
     handsEl.textContent = "\u270B " + Array.from(hands.values()).join(", ");
+  }
+  function syncPeekHands() {   // raised hands stay visible while the slide is hidden
+    const el = $("sl-peek-hands");
+    if (!el) return;
+    el.hidden = !hands.size;
+    el.textContent = hands.size ? "\u270B " + Array.from(hands.values()).join(", ") : "";
   }
   socket.on("hand_raise", ({ sid, name, raised }) => {
     if (raised) hands.set(sid, name || "Someone"); else hands.delete(sid);
@@ -418,6 +427,28 @@
   });
 
   $("sl-stop").addEventListener("click", () => socket.emit("slides_stop", {}));
+
+  /* ---------- hide the slide on the teacher's screen only, to see the class ---------- */
+  const peekBar = $("sl-peek-bar");
+  function setPeek(on) {
+    if (on && !showing) return;
+    if (on && fsElement() === overlay) {            // the overlay can't stay full screen while hidden
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if (exit) { try { Promise.resolve(exit.call(document)).catch(() => {}); } catch (e) { /* ignore */ } }
+      weEnteredFullscreen = false;
+    }
+    overlay.classList.toggle("peek", on);
+    peekBar.hidden = !on;
+    if (on) syncPeekHands();
+    else if (showing) show(index);                  // coming back: make sure the picture is current
+  }
+  $("sl-peek").addEventListener("click", () => setPeek(true));
+  $("sl-peek-back").addEventListener("click", () => setPeek(false));
+  $("sl-peek-stop").addEventListener("click", () => socket.emit("slides_stop", {}));
+  $("sl-peek-prev").addEventListener("click", prev);
+  $("sl-peek-next").addEventListener("click", next);
+  $("sl-edge-prev").addEventListener("click", prev);
+  $("sl-edge-next").addEventListener("click", next);
 
   // After a click, give focus back to the page so Space / arrows move the slides
   // (a focused button would otherwise swallow Space and repeat its own action).

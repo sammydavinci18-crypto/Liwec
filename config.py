@@ -1,3 +1,4 @@
+import importlib.util
 import os
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
@@ -32,6 +33,31 @@ def _normalize_postgres_url(raw_url: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, new_query, parts.fragment))
 
 
+def _postgres_driver(uri: str, have=None):
+    """Pick the Postgres driver and the connect options it needs.
+
+    Returns (uri, connect_args). Which driver runs depends on what is installed,
+    and psycopg 3 behaves differently from psycopg2: it creates named server-side
+    prepared statements. Behind a transaction-mode pooler (Supabase port 6543,
+    pgbouncer) different requests share one server connection, so those names
+    collide and Postgres answers 'prepared statement "_pg3_0" already exists'.
+    Setting prepare_threshold=None turns prepared statements off for psycopg 3.
+    psycopg2 does not accept that option, so it is only passed to psycopg 3.
+    `have` lets tests say which driver modules exist.
+    """
+    if not uri:
+        return uri, {}
+    have = have or (lambda name: importlib.util.find_spec(name) is not None)
+    scheme = urlsplit(uri).scheme
+    if scheme == "postgresql":                     # no driver named: SQLAlchemy would guess psycopg2
+        if not have("psycopg2") and have("psycopg"):
+            uri = "postgresql+psycopg" + uri[len("postgresql"):]
+            scheme = "postgresql+psycopg"
+    if scheme == "postgresql+psycopg":
+        return uri, {"prepare_threshold": None}
+    return uri, {}
+
+
 class Config:
     # Flask
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-change-this-in-production")
@@ -53,20 +79,22 @@ class Config:
         # short-lived connection without exhausting Supabase's own Postgres
         # connection limit). Port 5432 = direct/session connection.
         RAW_DATABASE_URL = os.environ.get("DATABASE_URL", "")
-        SQLALCHEMY_DATABASE_URI = _normalize_postgres_url(RAW_DATABASE_URL)
+        SQLALCHEMY_DATABASE_URI, _PG_CONNECT_ARGS = _postgres_driver(_normalize_postgres_url(RAW_DATABASE_URL))
 
         # The Supabase pooler (pgbouncer, transaction mode) already pools
         # connections for us, so SQLAlchemy shouldn't keep its own pool on
         # top of it — that just means two layers of pooling fighting each
         # other and stale connections. NullPool opens a fresh connection per
         # checkout and hands it straight to pgbouncer.
-        # psycopg2 (unlike psycopg3/asyncpg) doesn't use server-side prepared
-        # statements by default, so it's safe to use as-is against a
-        # transaction-mode pgbouncer pooler — no extra connect_args needed.
+        # psycopg2 doesn't use server-side prepared statements, so it is safe
+        # behind a transaction-mode pooler as-is. psycopg 3 does, so
+        # _postgres_driver() switches them off for it (see its docstring).
         SQLALCHEMY_ENGINE_OPTIONS = {
             "poolclass": NullPool,
             "pool_pre_ping": True,
         }
+        if _PG_CONNECT_ARGS:
+            SQLALCHEMY_ENGINE_OPTIONS["connect_args"] = _PG_CONNECT_ARGS
     elif DB_ENGINE == "mysql":
         MYSQL_USER = os.environ.get("MYSQL_USER", "root")
         MYSQL_PASSWORD = os.environ.get("MYSQL_PASSWORD", "")
@@ -211,6 +239,11 @@ class Config:
     SLIDES_MAX_MB = int(os.environ.get("SLIDES_MAX_MB", 40))
     SLIDES_MAX_PAGES = int(os.environ.get("SLIDES_MAX_PAGES", 150))
     SOFFICE_PATH = os.environ.get("SOFFICE_PATH", "")
+
+    # If a host's connection is gone this long (closed the tab, laptop died) and
+    # they have not come back, the session is ended for them and its recording is
+    # saved. 0 = never auto-end (the admin must press "Close & save").
+    HOST_GONE_AUTO_END_MINUTES = int(os.environ.get("HOST_GONE_AUTO_END_MINUTES", 10))
 
     # Recording is uploaded in ~30s chunks; keep the per-request limit generous.
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # 50 MB per chunk

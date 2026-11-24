@@ -95,7 +95,9 @@
       bars.textContent = "";
       p.counts.forEach((c, i) => {
         const row = el("div", "tt-bar" + (p.correct === i ? " is-correct" : ""));
-        row.appendChild(el("span", "tt-bar-letter", LETTERS[i] + (p.correct === i ? " ✓" : "")));
+        const letter = el("span", "tt-bar-letter", LETTERS[i]);
+        if (p.correct === i) letter.insertAdjacentHTML("beforeend", window.iconHTML("check"));
+        row.appendChild(letter);
         const track = el("span", "tt-bar-track");
         const fill = el("span", "tt-bar-fill");
         fill.style.width = (c / top * 100) + "%";
@@ -189,7 +191,7 @@
     sheet.appendChild(choices);
 
     let note;
-    if (s.revealed) note = s.mine === s.correct ? "✓ You got it." : s.mine == null ? "No answer from you this time." : "The right answer was " + LETTERS[s.correct] + ".";
+    if (s.revealed) note = s.mine === s.correct ? "You got it." : s.mine == null ? "No answer from you this time." : "The right answer was " + LETTERS[s.correct] + ".";
     else if (s.open) note = s.mine == null ? "Tap your answer. You can change it until voting closes." : "Answer sent: " + LETTERS[s.mine] + ". You can still change it.";
     else note = s.mine == null ? "Voting is closed." : "Voting is closed. You answered " + LETTERS[s.mine] + ".";
     const foot = el("p", "tt-poll-note", note);

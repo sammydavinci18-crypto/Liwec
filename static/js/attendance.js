@@ -46,7 +46,7 @@
   }
 
   // A student who chose "audio only" because their connection is weak is not
-  // hiding: their teacher sees the 🎧 label next to their name (lowdata.js).
+  // hiding: their teacher sees the headphones label next to their name (lowdata.js).
   const audioOnly = () => window.__dataMode === "audio";
 
   function cameraOk() {

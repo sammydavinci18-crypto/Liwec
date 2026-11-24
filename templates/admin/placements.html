@@ -133,7 +133,7 @@
       <select id="student_id" name="student_id" required>
         <option value="">— Choose —</option>
         {% for s in students %}
-        <option value="{{ s.user_id }}" {{ 'selected' if preselect_student == s.user_id }}>{{ s.user.name }} — {{ s.class_label() if s.class_id else '⚠ no class yet' }}</option>
+        <option value="{{ s.user_id }}" {{ 'selected' if preselect_student == s.user_id }}>{{ s.user.name }} — {{ s.class_label() if s.class_id else 'no class yet' }}</option>
         {% endfor %}
       </select>
     </div>

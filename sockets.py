@@ -112,6 +112,13 @@ def _host_sid_for_room(room_code):
     )
 
 
+def _host_info(sid):
+    """The CONNECTED entry for this socket if it is the session's host, else None.
+    Used by the slide, whiteboard and teaching-tool handlers: only the host may drive them."""
+    info = CONNECTED.get(sid)
+    return info if info and info.get("is_host") else None
+
+
 def _enforce_call_time_limit(app, room_code, meeting_id, limit_minutes):
     """Runs in a background thread (socketio.start_background_task), one
     per call. Warns everyone 5 minutes before the limit, then force-ends
@@ -347,6 +354,7 @@ def handle_join(data):
         return
 
     if is_host:
+        recording_service.host_back(room_code)
         RECORDING[room_code] = True
         emit("recording_status", {"recording": True}, room=room_code)
         # The server decides WHO records: itself (media server) or, failing
@@ -814,6 +822,11 @@ def handle_disconnect():
 
     if info["is_host"]:
         RECORDING.pop(room_code, None)
+        # If the host doesn't come back, end the session for them and save the
+        # recording (otherwise it would sit "live" and never be saved).
+        meeting_for_save = Meeting.query.filter_by(room_code=room_code).first()
+        if meeting_for_save and meeting_for_save.status == "live":
+            recording_service.host_dropped(current_app._get_current_object(), meeting_for_save.id, room_code)
 
     if info.get("guest_id"):
         row = MeetingGuest.query.get(info["guest_id"])

@@ -3069,3 +3069,243 @@ body.tt-timer-on .sl-overlay.is-host .sl-topbar { padding-top: 44px; }
 }
 .tt-toast { background: #16262f; color: #fff; padding: 8px 14px; border-radius: 999px; border: 1px solid #2A3F6B; font-size: .88rem; text-align: center; }
 .tt-poll-note, .tt-poll-q, .tt-poll-head { color: #fff; }
+
+
+/* ---- inline line icons (replace emoji and symbol characters) ---- */
+.ico { display: inline-flex; width: 1.15em; height: 1.15em; vertical-align: -0.22em; flex: 0 0 auto; }
+.ico svg { width: 100%; height: 100%; display: block; }
+.wb-btn .ico, .tt-help-row .ico { margin-right: 2px; }
+.wb-btn > .ico:only-child, .sl-edge > .ico { margin-right: 0; }
+.sl-edge > .ico { width: 1.1em; height: 1.1em; vertical-align: middle; }
+.wb-btn { display: inline-flex; align-items: center; gap: 6px; justify-content: center; }
+.sl-icon > .ico, .sl-big > .ico { width: 1.2em; height: 1.2em; }
+.reaction-btn .icon { width: 18px; height: 18px; }
+.reaction-icon { display: inline-flex; width: 1.3rem; height: 1.3rem; color: #F0D676; }
+.reaction-icon svg { width: 100%; height: 100%; }
+.reaction-emoji.has-text { display: inline-flex; align-items: center; gap: 6px; }
+.hand-badge, .data-badge { display: inline-flex; align-items: center; gap: 4px; vertical-align: middle; margin-left: 4px; }
+.hand-badge .ico, .data-badge .ico, .sl-face-name .ico, .participant-name .ico { width: 1em; height: 1em; vertical-align: -0.15em; margin-left: 4px; color: #F0D676; }
+.presenting-badge { display: inline-flex; align-items: center; gap: 6px; }
+.presenting-badge .ico { width: 1em; height: 1em; }
+.cv-status .ico { width: 1em; height: 1em; margin-right: 4px; vertical-align: -0.15em; }
+.observer-notice .ico { width: 1em; height: 1em; margin-right: 4px; }
+.tt-timer-btn { display: inline-flex; align-items: center; justify-content: center; }
+.tt-timer-btn .ico { width: 14px; height: 14px; }
+.tt-bar-letter .ico { width: 1em; height: 1em; margin-left: 4px; }
+.rec-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); margin-right: 6px; vertical-align: 1px; }
+.tracker-dot .ico-svg { display: block; }
+.watch-start-icon svg { display: block; }
+
+/* taking a break */
+#classview-layer > .tt-break {
+  position: absolute; left: 50%; top: 64px; transform: translateX(-50%); z-index: 3;
+  width: min(540px, calc(100vw - 24px)); box-sizing: border-box;
+  display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 16px;
+  background: rgba(14,26,34,.95); color: #fff; border: 2px solid #f0b429;
+  box-shadow: 0 8px 24px rgba(0,0,0,.4); font-variant-numeric: tabular-nums;
+}
+#classview-layer > .tt-break[hidden] { display: none; }
+.tt-break.is-done { border-color: #3fbf7f; animation: tt-break-pop .5s ease-out 1; }
+.tt-break-icon { width: 34px; height: 34px; flex: 0 0 34px; color: #F0D676; }
+.tt-break.is-done .tt-break-icon { color: #8fe3b0; }
+.tt-break-icon svg { width: 100%; height: 100%; }
+.tt-break-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.tt-break-title { font-size: 1.05rem; }
+.tt-break-note { font-size: .88rem; opacity: .9; line-height: 1.3; overflow-wrap: anywhere; }
+.tt-break-back { font-size: .8rem; opacity: .7; }
+.tt-break-back:empty { display: none; }
+.tt-break-time { font-size: 1.9rem; font-weight: 700; line-height: 1; }
+.tt-break-side { display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
+.tt-break-btn { white-space: nowrap; padding: 2px 10px; }
+body.tt-timer-on #classview-layer > .tt-break { top: 112px; }
+.tt-card .tt-break-hint { color: rgba(255,255,255,.75); opacity: 1; }
+.tt-card .tt-break-go { background: #f0b429; color: #1a1a1a; border: 0; font-weight: 700; }
+.tt-card .tt-break-go:hover, .tt-card .tt-break-go:focus-visible { background: #F0D676; }
+@keyframes tt-break-pop { 0% { transform: translateX(-50%) scale(.94); } 100% { transform: translateX(-50%) scale(1); } }
+@media (prefers-reduced-motion: reduce) { .tt-break.is-done { animation: none; } }
+@media (max-width: 640px) {
+  .tt-break { flex-wrap: wrap; }
+  .tt-break-time { font-size: 1.5rem; }
+}
+
+
+/* ---- Academy badge watermark: signed-in pages only ----------------------
+   A large, faint crest fixed behind the content. It never takes clicks, is
+   hidden in the live classroom (video matters more there) and when printing. */
+body.has-watermark::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: url("../img/logo-crest-large.png") center 56% / min(70vmin, 640px) auto no-repeat;
+  opacity: 0.07;
+}
+body.has-watermark .page,
+body.has-watermark .site-footer { position: relative; z-index: 1; }
+:root[data-theme="dark"] body.has-watermark::before { opacity: 0.09; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) body.has-watermark::before { opacity: 0.09; }
+}
+body.has-watermark:has(.room-body)::before { display: none; }
+@media print { body.has-watermark::before { display: none; } }
+
+
+/* ---- Landing: learner photos under "Who we are" ------------------------- */
+.learner-photos { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 34px; }
+.learner-photos figure { position: relative; margin: 0 14px 14px 0; }
+.learner-photos figure::before { content: ""; position: absolute; inset: 12px -12px -12px 12px; border: 3px solid var(--amber); border-radius: var(--radius-lg); z-index: 0; }
+.learner-photos img { position: relative; z-index: 1; display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; object-fit: cover; border-radius: var(--radius-lg); box-shadow: var(--shadow-card); }
+.learner-photos figure:first-child img { object-position: 30% 40%; }
+.learner-photos figure:last-child img { object-position: 30% 35%; }
+@media (max-width: 640px) { .learner-photos { grid-template-columns: 1fr; gap: 34px; } }
+
+
+/* ---- Landing: photo at the top of each programme card ------------------- */
+.program-card .program-photo { display: block; width: calc(100% + 48px); height: auto; max-width: none; aspect-ratio: 16 / 9; object-fit: cover; margin: -24px -24px 10px; }
+.program-card:nth-child(1) .program-photo { object-position: 40% 25%; }
+.program-card:nth-child(2) .program-photo { object-position: 30% 35%; }
+.program-card:nth-child(3) .program-photo { object-position: 30% 35%; }
+.learner-photos figure:last-child img { object-position: 35% 40%; }
+
+
+/* ---- Presenter view: fix for narrow screens, edge arrows, "Hide slide" ---- */
+/* The 900px rule above also won on phones and small tablets, leaving a dead 240px column
+   that squeezed the slide and buttons. Narrow screens get a single column again. */
+@media (max-width: 820px) {
+  .sl-overlay.is-host.show { grid-template-columns: minmax(0, 1fr); grid-template-areas: "top" "stage" "ctrl" "strip"; }
+  .sl-side { display: none; }
+  .sl-overlay.is-host .sl-topbar { padding-top: max(8px, env(safe-area-inset-top)); }
+  .sl-top-actions { flex: 1 1 100%; justify-content: flex-start; }
+  .sl-top-actions .wb-btn { min-height: 40px; }
+}
+
+/* big arrows on the slide itself: a navigation button is always in reach */
+.sl-edge {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 3;
+  width: 44px; height: 72px; border: 0; border-radius: 10px; cursor: pointer;
+  background: rgba(14,26,34,.55); color: #fff; font-size: 2.2rem; line-height: 1;
+  opacity: .55; transition: opacity .15s ease, background .15s ease;
+}
+.sl-edge:hover, .sl-edge:focus-visible { opacity: 1; background: rgba(14,26,34,.85); }
+.sl-edge-prev { left: 6px; } .sl-edge-next { right: 6px; }
+@media (pointer: coarse) { .sl-edge { opacity: .8; } }
+
+/* Hide slide: only the teacher's own overlay goes away */
+.sl-overlay.peek, .sl-overlay.is-host.show.peek { display: none; }
+.sl-peek-bar {
+  position: fixed; left: 50%; bottom: max(14px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+  z-index: 140; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px;
+  max-width: calc(100vw - 20px); padding: 8px 12px; border-radius: 14px; color: #fff;
+  background: rgba(14,26,34,.94); border: 2px solid var(--amber); box-shadow: 0 12px 32px rgba(0,0,0,.5);
+}
+.sl-peek-bar[hidden] { display: none; }
+.sl-peek-label { font-size: .85rem; opacity: .9; }
+.sl-peek-hands { font-size: .85rem; padding: 2px 10px; border-radius: 999px; background: rgba(201,162,39,.22); color: #F0D676; border: 1px solid var(--amber); }
+.sl-peek-hands[hidden] { display: none; }
+.sl-peek-bar .wb-btn { min-height: 42px; }
+.sl-peek-bar .sl-primary { background: var(--amber); border-color: var(--amber); color: #1a1405; font-weight: 600; }
+
+
+/* ==== Teacher's room: the lesson fills the whole browser ===================
+   The site menu is tucked away (the Menu button slides it down), and the room's
+   own header and controls are slimmer, so the video, slides and tools get the
+   height. Students' rooms are unchanged. */
+body:has(.room-host) { overflow: hidden; }
+body:has(.room-host) .topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 150;
+  max-height: 90vh; max-height: 90dvh; overflow-y: auto;
+  transform: translateY(-110%); transition: transform .22s ease;
+  box-shadow: 0 14px 34px rgba(0,0,0,.45);
+}
+body.site-menu-open:has(.room-host) .topbar { transform: none; }
+.site-menu-backdrop { position: fixed; inset: 0; z-index: 149; background: rgba(0,0,0,.45); }
+.site-menu-backdrop[hidden], .site-menu-note[hidden] { display: none; }
+.site-menu-note {
+  position: fixed; left: 50%; bottom: 132px; transform: translateX(-50%); z-index: 151;
+  display: flex; align-items: center; gap: 12px; padding: 8px 14px; max-width: calc(100vw - 24px);
+  background: #0E1A22; color: #fff; border: 2px solid var(--amber); border-radius: 12px; font-size: .86rem;
+}
+.room-host .room-header { padding: 8px 16px; }
+.room-host .stage-area { padding: 10px 16px; }
+body:has(.room-host) .controls-bar { padding: 8px 12px; gap: 6px; }
+body:has(.room-host) .ctrl-btn { height: 46px; min-width: 54px; padding: 4px 8px; }
+.ctrl-btn .room-glyph { display: grid; place-items: center; font-size: 1.1rem; line-height: 1; }
+.ctrl-btn[hidden] { display: none; }
+
+/* =========================================================================
+   Photo backgrounds — pictures sitting behind the words.
+   Each section sets --band-img (and optionally --band-pos) inline; a navy
+   wash keeps the text readable on any photo.
+   ========================================================================= */
+.hero.has-photo {
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(201,162,39,0.18) 0%, rgba(201,162,39,0) 55%),
+    linear-gradient(180deg, rgba(10,20,38,0.80) 0%, rgba(10,20,38,0.72) 50%, rgba(7,15,31,0.92) 100%),
+    var(--band-img) center 40% / cover no-repeat;
+}
+.photo-band {
+  background:
+    linear-gradient(180deg, rgba(10,20,38,0.84), rgba(10,20,38,0.76)),
+    var(--band-img) var(--band-pos, center) / cover no-repeat;
+  border-color: transparent;
+}
+.photo-band .eyebrow-dark { color: var(--amber); }
+.photo-band h2 { color: #fff; text-shadow: 0 2px 18px rgba(0,0,0,0.35); }
+.photo-band p { color: #D9E1F0; }
+.photo-band .pathway strong { color: #fff; }
+.photo-band .pathway span:not(.pathway-dot) { color: #D9E1F0; }
+.photo-band .pathway-dot { box-shadow: 0 0 0 4px rgba(201,162,39,0.35); }
+.photo-band .step h3 { color: #fff; }
+.photo-band .step p { color: #D9E1F0; }
+.cta-band.photo-band {
+  background:
+    linear-gradient(135deg, rgba(8,56,62,0.82), rgba(10,20,38,0.84)),
+    var(--band-img) var(--band-pos, center) / cover no-repeat;
+}
+@media (max-width: 640px) {
+  .hero.has-photo, .photo-band { background-attachment: scroll; }
+}
+
+/* =========================================================================
+   Watching a recording (the student link) + recording list extras
+   ========================================================================= */
+.page.watch-page { max-width: none; padding: 0; }
+.watch-stage {
+  min-height: calc(100vh - 80px);
+  background: radial-gradient(ellipse at 50% 0%, #14284B 0%, var(--stage) 60%, #070F1F 100%);
+  padding: 40px 20px 64px;
+}
+.watch-inner { max-width: 1000px; margin: 0 auto; }
+.watch-stage h1 { color: #fff; font-size: clamp(1.5rem, 3.4vw, 2.2rem); margin: 0 0 8px; }
+.watch-meta { color: #BCC8E0; margin: 0 0 22px; font-size: 0.95rem; }
+.watch-player { position: relative; background: #000; border-radius: 14px; overflow: hidden; box-shadow: 0 18px 60px rgba(0,0,0,0.5); aspect-ratio: 16 / 9; }
+.watch-player video { width: 100%; height: 100%; display: block; background: #000; }
+.watch-start {
+  position: absolute; inset: 0; width: 100%; border: 0; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  background: rgba(10,20,38,0.62); color: #fff; font: 700 1.15rem var(--font-body, inherit);
+}
+.watch-start[hidden] { display: none; }
+.watch-start-icon {
+  width: 84px; height: 84px; border-radius: 50%; background: var(--amber); color: #1B1403;
+  display: flex; align-items: center; justify-content: center; font-size: 2rem; padding-left: 6px;
+  box-shadow: 0 0 0 10px rgba(201,162,39,0.25);
+}
+.watch-note { color: #9AA8C4; font-size: 0.88rem; margin-top: 16px; }
+@media (max-width: 640px) { .watch-stage { padding: 20px 0 40px; } .watch-inner { padding: 0 14px; } .watch-player { border-radius: 10px; } }
+
+.rec-note { color: var(--ink-soft); font-size: 0.8rem; max-width: 560px; }
+.recording-row .appt-actions { flex-wrap: wrap; justify-content: flex-end; }
+.rec-more { position: relative; }
+.rec-more > summary { list-style: none; cursor: pointer; }
+.rec-more > summary::-webkit-details-marker { display: none; }
+.rec-more-panel {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; min-width: 190px;
+  background: var(--paper-raised); border: 1px solid var(--line); border-radius: var(--radius-md, 10px);
+  padding: 8px; display: flex; flex-direction: column; gap: 6px; box-shadow: var(--shadow-card);
+}
+.rec-more-panel .btn { width: 100%; justify-content: flex-start; }
+
+.recording-notice.rec-behind { background: #7A1F1F; border-color: #E06A6A; color: #fff; }
+.recording-notice .rec-warn { font-weight: 700; }
