@@ -3354,6 +3354,12 @@ body:has(.room-host) .ctrl-btn { height: 46px; min-width: 54px; padding: 4px 8px
 .vd-shield { position: absolute; inset: 0; z-index: 2; background: transparent; }
 .vd-tap { position: absolute; z-index: 3; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 1.1rem; padding: 14px 22px; }
 .vd-tap[hidden], .vd-peek-btn[hidden] { display: none; }
+.vd-status {
+  position: absolute; z-index: 3; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  max-width: min(80%, 420px); margin: 0; padding: 12px 16px; text-align: center;
+  background: rgba(0, 0, 0, .75); border-radius: 10px; font-size: .95rem; line-height: 1.4;
+}
+.vd-status[hidden] { display: none; }
 .vd-bar {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px;
   background: rgba(0, 0, 0, .85);

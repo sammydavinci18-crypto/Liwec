@@ -28,6 +28,7 @@
 
   const titleEl = $("vd-title");
   const tapBtn = $("vd-tap");
+  const statusEl = $("vd-status");
   const RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
   let player = null;
@@ -39,6 +40,7 @@
   let peeked = false;
   let tapTimer = null;
   let beat = null;
+  let loadTimer = null;
 
   /* ---------- YouTube's player API, loaded the first time it is needed ---------- */
   function loadApi() {
@@ -75,6 +77,13 @@
     });
   }
 
+  // A line over the video, so a student never just sees a black screen with no explanation.
+  function setStatus(msg) {
+    if (!statusEl) return;
+    statusEl.textContent = msg || "";
+    statusEl.hidden = !msg;
+  }
+
   /* ---------- showing and hiding ---------- */
   function show() {
     overlay.classList.add("show");
@@ -87,6 +96,8 @@
     overlay.classList.remove("show", "peeked");
     document.body.classList.remove("video-on");
     tapBtn.hidden = true;
+    setStatus("");
+    clearTimeout(loadTimer);
     clearTimeout(tapTimer);
     clearInterval(beat);
     beat = null;
@@ -106,6 +117,13 @@
     if (!current || current.id !== s.id) {
       current = { id: s.id };
       titleEl.textContent = s.title || "";
+      if (!isHost) {
+        setStatus("Loading the video\u2026");
+        clearTimeout(loadTimer);
+        loadTimer = setTimeout(() => {
+          if (!ready || !desired) setStatus("The video is taking a long time to load. YouTube may be blocked or slow on this connection.");
+        }, 12000);
+      }
       await loadApi();
       if (!current || current.id !== s.id) return;   // changed again while loading
       if (!player) {
@@ -113,6 +131,8 @@
       } else {
         player.loadVideoById({ videoId: s.id, startSeconds: s.t || 0 });
       }
+      setStatus("");
+      clearTimeout(loadTimer);
       armTap();
       if (isHost) startBeat();
       return;
@@ -150,6 +170,7 @@
     const st = e.data;
     if (st === 1) {
       tapBtn.hidden = true;
+      setStatus("");
       try { const d = player.getVideoData(); if (d && d.title) titleEl.textContent = d.title; } catch (x) { /* ignore */ }
       // A video the teacher had already paused starts playing when loaded: pause it again.
       if (desired && !desired.playing && !isHost) follow(desired);
@@ -159,7 +180,10 @@
   }
 
   function onError(e) {
-    if (!isHost) return;
+    if (!isHost) {
+      setStatus("This video cannot be played on your device. Ask your teacher to choose another one.");
+      return;
+    }
     const blocked = e && (e.data === 101 || e.data === 150);
     setNote(blocked
       ? "The owner of that video does not allow it to be played here. Choose another one."
@@ -171,7 +195,16 @@
   socket.on("video_state", apply);
   socket.on("video_error", (d) => { if (isHost) setNote((d && d.message) || "That video could not be started.", true); });
 
-  if (!isHost) return;
+  // Safety net for students: if the "video started / stopped" message never reached
+  // this device, ask the server what is playing, when the connection comes back, when
+  // the tab is looked at again, and every few seconds.
+  if (!isHost) {
+    const ask = () => { if (socket.connected !== false) socket.emit("video_sync", {}); };
+    socket.on("connect", ask);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) ask(); });
+    setInterval(ask, 6000);
+    return;
+  }
 
   /* ====================== the teacher's side ====================== */
   const btn = $("btn-video");

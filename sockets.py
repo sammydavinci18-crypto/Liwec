@@ -717,6 +717,16 @@ def handle_video_play(data):
     emit("video_state", _video_payload(room_code), room=room_code)   # everyone, the host too
 
 
+@socketio.on("video_sync")
+def handle_video_sync(data):
+    """A student's browser asks "is a video playing?" It is the safety net for a
+    video_state message that never arrived (a dropped or sleeping connection)."""
+    info = CONNECTED.get(request.sid)
+    if not info:
+        return
+    emit("video_state", _video_payload(info["room_code"]))
+
+
 @socketio.on("video_ctrl")
 def handle_video_ctrl(data):
     info = _host_info(request.sid)
