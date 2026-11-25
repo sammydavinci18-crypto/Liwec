@@ -67,9 +67,14 @@
         playerVars: {
           controls: 0, disablekb: 1, rel: 0, modestbranding: 1, playsinline: 1, fs: 0,
           iv_load_policy: 3, autoplay: 1, start: Math.floor(start || 0), origin: location.origin,
+          mute: isHost ? 0 : 1,
         },
         events: {
-          onReady: () => { ready = true; resolve(); },
+          onReady: () => {
+            ready = true;
+            if (!isHost) { try { player.mute(); player.playVideo(); } catch (e) { /* ignore */ } }
+            resolve();
+          },
           onStateChange: onState,
           onError: onError,
         },
@@ -82,6 +87,31 @@
     if (!statusEl) return;
     statusEl.textContent = msg || "";
     statusEl.hidden = !msg;
+  }
+
+  // If YouTube's player script cannot load (slow or filtered connection), show the video
+  // in a plain embedded frame instead. It is not kept in step with the teacher, but the
+  // student still sees it, muted and playing, instead of a black screen.
+  function fallbackEmbed(s) {
+    if (player || !s || document.getElementById("vd-fallback")) return;
+    const host = document.getElementById("vd-player");
+    if (!host) return;
+    const f = document.createElement("iframe");
+    f.id = "vd-fallback";
+    f.src = "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(s.id) +
+      "?autoplay=1&mute=1&controls=0&playsinline=1&rel=0&modestbranding=1&start=" + Math.floor(s.t || 0);
+    f.allow = "autoplay; encrypted-media; picture-in-picture";
+    f.setAttribute("allowfullscreen", "");
+    host.replaceWith(f);
+    setStatus("");
+  }
+
+  // Phones will not start sound without a tap, so students begin muted.
+  function offerSound() {
+    if (isHost || !player) return;
+    try {
+      if (player.isMuted && player.isMuted()) { tapBtn.textContent = "Tap for sound"; tapBtn.hidden = false; }
+    } catch (e) { /* ignore */ }
   }
 
   /* ---------- showing and hiding ---------- */
@@ -107,6 +137,8 @@
     peeked = false;
     if (isHost) $("vd-peek-btn").hidden = true;
     try { if (player && ready) player.stopVideo(); } catch (e) { /* ignore */ }
+    const fb = document.getElementById("vd-fallback");
+    if (fb) { const d = document.createElement("div"); d.id = "vd-player"; fb.replaceWith(d); }
   }
 
   /* ---------- following the teacher ---------- */
@@ -121,11 +153,15 @@
         setStatus("Loading the video\u2026");
         clearTimeout(loadTimer);
         loadTimer = setTimeout(() => {
-          if (!ready || !desired) setStatus("The video is taking a long time to load. YouTube may be blocked or slow on this connection.");
-        }, 12000);
+          if (!ready) {
+            fallbackEmbed(desired);
+            if (!document.getElementById("vd-fallback")) setStatus("The video is taking a long time to load. YouTube may be blocked or slow on this connection.");
+          }
+        }, 6000);
       }
       await loadApi();
       if (!current || current.id !== s.id) return;   // changed again while loading
+      if (document.getElementById("vd-fallback")) return;   // already showing the plain frame
       if (!player) {
         await buildPlayer(s.id, s.t);
       } else {
@@ -157,12 +193,18 @@
     tapTimer = setTimeout(() => {
       try {
         const st = player.getPlayerState();
-        if (desired && desired.playing && st !== 1 && st !== 3) tapBtn.hidden = false;
+        if (desired && desired.playing && st !== 1 && st !== 3) { tapBtn.textContent = "Tap to play the video"; tapBtn.hidden = false; }
+        else offerSound();
       } catch (e) { /* ignore */ }
     }, 2500);
   }
   tapBtn.addEventListener("click", () => {
-    try { player.playVideo(); if (desired) follow(desired); } catch (e) { /* ignore */ }
+    try {
+      if (player.isMuted && player.isMuted()) player.unMute();
+      player.setVolume(100);
+      player.playVideo();
+      if (desired) follow(desired);
+    } catch (e) { /* ignore */ }
     tapBtn.hidden = true;
   });
 
@@ -171,6 +213,7 @@
     if (st === 1) {
       tapBtn.hidden = true;
       setStatus("");
+      offerSound();
       try { const d = player.getVideoData(); if (d && d.title) titleEl.textContent = d.title; } catch (x) { /* ignore */ }
       // A video the teacher had already paused starts playing when loaded: pause it again.
       if (desired && !desired.playing && !isHost) follow(desired);
