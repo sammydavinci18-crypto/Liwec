@@ -115,9 +115,9 @@
   // Busy peer-to-peer lesson: this person joins with video off, and can't turn it on.
   window.addEventListener("mesh-full", () => {
     if (cfg.isHost) return;
-    forcedAudio = true;
-    window.setDataMode("audio");
-    showBanner("This lesson is busy, so you are joining with video off to keep it smooth for everyone. You can hear and see everything the teacher shares.", { kind: "info" });
+    // Only YOUR camera is switched off (webrtc.js). You still receive the
+    // teacher's video and sound, so this is not "audio only" mode.
+    showBanner("This lesson is busy, so your camera is off to keep it smooth for everyone. You can still see and hear your teacher and everything they share.", { kind: "info" });
   });
 
   // Host only: nothing relays video for students behind strict networks.

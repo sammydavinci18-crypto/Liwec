@@ -180,6 +180,9 @@ socket.on("data_mode", ({ sid, mode }) => {
 // The lesson is busy and the peer-to-peer mesh can't carry another camera:
 // this person joins with video off. (Never sent when a media server is used.)
 socket.on("mesh_full", () => {
+  // Stop sending MY picture, but keep receiving the teacher's.
+  window.__noVideoOut = true;
+  meshApplyPolicyAll();
   window.dispatchEvent(new CustomEvent("mesh-full"));
 });
 
@@ -221,7 +224,9 @@ async function meshApplyPolicy(pc, sid, isObserverConn) {
   if (!s) return;
   const wanted = window._outTrack || (localStream && localStream.getVideoTracks()[0]) || null;
   try {
-    if (mode === "audio") {
+    // Audio-only (chosen, or a student joining a busy lesson): send no picture.
+    // The teacher's picture is still RECEIVED by a student in the busy case.
+    if (mode === "audio" || (!isHost && window.__noVideoOut)) {
       if (s.track) await s.replaceTrack(null);
       return;
     }
@@ -229,9 +234,19 @@ async function meshApplyPolicy(pc, sid, isObserverConn) {
     if (s.getParameters) {
       const params = s.getParameters();
       if (!params.encodings || !params.encodings.length) params.encodings = [{}];
+      // In the peer-to-peer mesh the teacher uploads the picture once PER
+      // student, all through one phone-or-laptop connection. Left uncapped the
+      // browser starves the picture first and keeps the sound, so students
+      // "hear but can't see". The more students, the smaller each copy.
+      const n = Object.keys(peerConnections).length;
+      const hostCap = isHost && !SFU ? (n <= 2 ? 800000 : n <= 4 ? 500000 : n <= 6 ? 350000 : 250000) : 0;
       if (mode === "low") {
         params.encodings[0].maxBitrate = 150000;
         params.encodings[0].scaleResolutionDownBy = 2;
+      } else if (hostCap) {
+        params.encodings[0].maxBitrate = hostCap;
+        if (n > 4) params.encodings[0].scaleResolutionDownBy = 1.5;
+        else delete params.encodings[0].scaleResolutionDownBy;
       } else {
         delete params.encodings[0].maxBitrate;
         delete params.encodings[0].scaleResolutionDownBy;
@@ -282,7 +297,10 @@ function createPeerConnection(targetSid, meta, isCaller) {
   };
 
   pc.ontrack = (event) => {
-    const stream = event.streams[0];
+    const known = window._remoteStreams[targetSid];
+    const stream = event.streams[0] || (known && known.stream) || new MediaStream();
+    if (!stream.getTracks().includes(event.track)) stream.addTrack(event.track);
+    watchVideoTrack(event.track, stream);
     window._remoteStreams[targetSid] = { stream, name: meta.name, isHost: meta.isHost };
     if (meta.isHost) {
       renderSpotlightStream(stream, meta.name, false);
@@ -297,7 +315,7 @@ function createPeerConnection(targetSid, meta, isCaller) {
 
   pc.onconnectionstatechange = () => meshConnectionChanged(targetSid, pc);
 
-  meshApplyPolicy(pc, targetSid, false);
+  if (isHost) meshApplyPolicyAll(); else meshApplyPolicy(pc, targetSid, false);
   notifyParticipantsChanged();
   return pc;
 }
@@ -496,10 +514,14 @@ function scheduleSfuRetry() {
 
 function sfuMeta(participant) {
   const sid = participant.identity;
+  let host = false;
+  try { host = !!JSON.parse(participant.metadata || "{}").host; } catch (e) { /* ignore */ }
   if (!peerMeta[sid]) {
-    let host = false;
-    try { host = !!JSON.parse(participant.metadata || "{}").host; } catch (e) { /* ignore */ }
     peerMeta[sid] = { name: participant.name || "Participant", isHost: host };
+    notifyParticipantsChanged();
+  } else if (host && !peerMeta[sid].isHost) {
+    // The teacher's details can arrive a moment after the teacher does.
+    peerMeta[sid].isHost = true;
     notifyParticipantsChanged();
   }
   return peerMeta[sid];
@@ -547,6 +569,7 @@ async function connectSfu(url, token) {
   room.on(LK.RoomEvent.TrackUnsubscribed, sfuTrackUnsubscribed);
   room.on(LK.RoomEvent.TrackPublished, () => sfuQueueApply());
   room.on(LK.RoomEvent.ParticipantConnected, (p) => { sfuMeta(p); sfuQueueApply(); });
+  room.on(LK.RoomEvent.ParticipantMetadataChanged, (md, p) => { if (p) { sfuMeta(p); sfuQueueApply(); } });
   room.on(LK.RoomEvent.ParticipantDisconnected, (p) => teardownPeer(p.identity));
   room.on(LK.RoomEvent.ActiveSpeakersChanged, (speakers) => {
     speakers.forEach((s) => {
@@ -586,6 +609,7 @@ function sfuTrackSubscribed(track, pub, participant) {
     window._remoteStreams[sid] = entry;
   }
   entry.stream.addTrack(track.mediaStreamTrack);
+  watchVideoTrack(track.mediaStreamTrack, entry.stream);
 
   if (meta.isHost) {
     const v = document.querySelector("#spotlight-tile video");
@@ -594,6 +618,10 @@ function sfuTrackSubscribed(track, pub, participant) {
     upsertFilmstripTile(sid, entry.stream, meta.name, true);
   }
   if (viewMode === "gallery") renderGalleryView();
+  // The sound usually arrives before the picture. A video track added to a
+  // stream that is already on screen is not always painted by phones, so
+  // re-attach the stream now that the picture is part of it.
+  if (track.kind === "video") refreshStreamVideos(entry.stream);
   if (meta.sharing) window.setTileScreenSharing(sid, true);
   if (meta.dataMode && meta.dataMode !== "normal") window.setTileDataMode(sid, meta.dataMode);
   window.dispatchEvent(new CustomEvent("remote-stream", { detail: { sid } }));
@@ -755,12 +783,71 @@ window.addEventListener("spotlight-changed", () => { if (SFU) sfuQueueApply(); }
 
 /* ---------------- DOM rendering ---------------- */
 
+// Phone browsers (iPhone Safari especially) are fussy about a <video> that is
+// fed by a live MediaStream: a picture that arrives AFTER the sound, or a
+// <video> that was never told to play, can stay black while the audio plays.
+// These helpers make sure the picture is (re)attached and playing.
+function startPlayback(video) {
+  video.setAttribute("playsinline", "");
+  video.setAttribute("webkit-playsinline", "");
+  const p = video.play();
+  if (p && p.catch) {
+    p.catch(() => {
+      // Sound-on autoplay was refused: show the picture muted rather than nothing,
+      // and give the sound back at the first touch.
+      if (!video.muted) {
+        video.muted = true;
+        video._wantsSound = true;
+        video.play().catch(() => {});
+      }
+    });
+  }
+}
+
+function giveSoundBack() {
+  document.querySelectorAll("video").forEach((v) => {
+    if (v._wantsSound) {
+      v.muted = false;
+      v._wantsSound = false;
+      v.play().catch(() => {});
+    }
+  });
+}
+document.addEventListener("touchend", giveSoundBack, { passive: true });
+document.addEventListener("click", giveSoundBack);
+
+// Re-attach a stream to every <video> showing it (used when a video track is
+// added to a stream that is already on screen, e.g. the sound came first).
+function refreshStreamVideos(stream) {
+  document.querySelectorAll("video").forEach((v) => {
+    if (v.srcObject !== stream) return;
+    v.srcObject = null;
+    v.srcObject = stream;
+    startPlayback(v);
+  });
+}
+
+// A new video track starts "muted" (no frames yet). Phones sometimes do not
+// paint it once frames start, so re-attach at that moment.
+function watchVideoTrack(track, stream) {
+  if (!track || track.kind !== "video" || track._watched) return;
+  track._watched = true;
+  track.addEventListener("unmute", () => refreshStreamVideos(stream));
+}
+
 function renderSpotlightStream(stream, name, isSelf) {
   const tile = document.getElementById("spotlight-tile");
   const existingVideo = tile.querySelector("video");
-  if (existingVideo) existingVideo.remove();
   const avatar = document.getElementById("spotlight-avatar");
   if (avatar) avatar.style.display = "none";
+
+  const label = document.getElementById("spotlight-label");
+  label.innerHTML = `<span class="host-badge">Host</span> ${name}${isSelf ? " (you)" : ""}`;
+
+  // Same stream already showing: keep the element (re-creating it for every
+  // track is what makes phones lose the picture).
+  if (existingVideo && existingVideo.srcObject === stream) return;
+  if (existingVideo) existingVideo.remove();
 
   const video = document.createElement("video");
   video.autoplay = true;
@@ -768,9 +855,7 @@ function renderSpotlightStream(stream, name, isSelf) {
   video.muted = isSelf;
   video.srcObject = stream;
   tile.insertBefore(video, tile.firstChild);
-
-  const label = document.getElementById("spotlight-label");
-  label.innerHTML = `<span class="host-badge">Host</span> ${name}${isSelf ? " (you)" : ""}`;
+  startPlayback(video);
 }
 
 function clearSpotlight() {
@@ -804,6 +889,7 @@ function upsertFilmstripTile(key, stream, name, isRemote) {
   video.muted = !isRemote; // mute local self-view to avoid echo
   video.srcObject = stream;
   tile.appendChild(video);
+  startPlayback(video);
 
   const label = document.createElement("div");
   label.className = "tile-label";
