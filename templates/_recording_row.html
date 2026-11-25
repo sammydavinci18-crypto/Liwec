@@ -5,6 +5,7 @@
 {% set rec = m.recording %}
 <div class="appointment-row recording-row">
   <div>
+    {% if is_admin and rec and not rec.deleted_at and st in ('ready', 'failed', 'expired') %}<label class="rec-pick"><input type="checkbox" name="meeting_id" value="{{ m.id }}" form="bulk-delete-form" aria-label="Select {{ m.title }}"> Select</label>{% endif %}
     <strong>{{ m.title }}</strong>
     <span class="appt-time">{{ m.type_label() }}{% if m.school_class %} · <span class="class-pill">{{ m.school_class.name }}</span>{% endif %}{% if m.subject %} · {{ m.subject }}{% endif %} · {{ m.scheduled_time|dt }}</span>
     <span class="appt-time">{% if is_admin %}Host: {{ m.host.name }} · {% endif %}{% if came %}{{ came(m) }} attended{% endif %}{% if m.call_started_at and m.ended_at %}{% if came %} · {% endif %}{{ ((m.ended_at - m.call_started_at).total_seconds() // 60)|int }} min{% endif %}{% if rec and rec.size_bytes %} · {{ (rec.size_bytes / 1048576)|round(0)|int }} MB{% endif %}</span>
@@ -38,6 +39,9 @@
       {% else %}<small class="meta">Please tell the admin.</small>{% endif %}
     {% else %}
       <span class="status-pill status-cancelled" title="The session ended but no recording reached the server.">No recording</span>
+    {% endif %}
+    {% if is_admin and rec and not rec.deleted_at and st in ('ready', 'failed', 'expired') %}
+      <form method="POST" action="{{ url_for('admin.recordings_delete') }}" data-confirm="The video is removed from storage for good and its watch link stops working. The session and its attendance stay on record." data-confirm-title="Delete this recording?" data-confirm-action="Delete recording" data-confirm-tone="danger"><input type="hidden" name="meeting_id" value="{{ m.id }}"><button class="btn btn-ghost btn-sm" type="submit">Delete video</button></form>
     {% endif %}
     {% if is_admin %}<a class="btn btn-ghost btn-sm" href="{{ url_for('admin.meeting_detail', meeting_id=m.id) }}">Details</a>{% endif %}
   </div>

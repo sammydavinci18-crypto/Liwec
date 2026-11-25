@@ -341,8 +341,76 @@ def recordings():
         except Exception:  # noqa: BLE001
             return 0
 
+    used = 0
+    for m in ended:
+        rec = m.recording
+        if rec is not None and not rec.deleted_at and rec.size_bytes:
+            used += rec.size_bytes
     return render_template("admin/recordings.html", ended=ended, stuck=stuck, came=came,
+                           used_mb=round(used / 1048576),
                            state=recording_service.safe_recording_state)
+
+
+def _delete_recording_file(rec):
+    """Removes one recording's video from storage and marks it deleted. The session
+    itself (title, date, attendance) stays. Returns True when the space was freed."""
+    import storage
+    from flask import current_app
+    if rec.deleted_at:
+        return True
+    bucket = current_app.config["RECORDINGS_BUCKET"]
+    ok = storage.delete_object(bucket, rec.filename)
+    if not ok:
+        try:
+            ok = not storage.object_exists(bucket, rec.filename)   # already gone: fine
+        except Exception:  # noqa: BLE001
+            ok = False
+    if not ok:
+        return False
+    rec.deleted_at = datetime.utcnow()
+    rec.finalized = True
+    rec.share_enabled = False       # the watch link stops working
+    rec.save_note = f"Deleted by {current_user.name} on {rec.deleted_at:%Y-%m-%d}."
+    return True
+
+
+@admin_bp.route("/admin/recordings/delete", methods=["POST"])
+@login_required
+@admin_required
+def recordings_delete():
+    """Delete one or several recordings to free storage space (form field: meeting_id, repeated)."""
+    from extensions import db
+    ids = []
+    for raw in request.form.getlist("meeting_id"):
+        try:
+            ids.append(int(raw))
+        except ValueError:
+            continue
+    if not ids:
+        flash("Tick at least one recording to delete.", "info")
+        return redirect(url_for("admin.recordings"))
+    import recording_service
+    done, failed, freed = 0, 0, 0
+    for meeting in Meeting.query.filter(Meeting.id.in_(ids)).all():
+        rec = meeting.recording
+        if rec is None or rec.deleted_at or meeting.status != "ended":
+            continue
+        if recording_service.safe_recording_state(meeting) == "saving":
+            failed += 1          # still being written: not safe to remove yet
+            continue
+        size = rec.size_bytes or 0
+        if _delete_recording_file(rec):
+            done += 1
+            freed += size
+        else:
+            failed += 1
+    db.session.commit()
+    if done:
+        mb = round(freed / 1048576)
+        flash(f"Deleted {done} recording{'s' if done != 1 else ''}" + (f", freeing about {mb} MB." if mb else "."), "success")
+    if failed:
+        flash(f"{failed} could not be deleted (still saving, or storage did not respond). Try again in a minute.", "error")
+    return redirect(url_for("admin.recordings"))
 
 
 @admin_bp.route("/admin/recordings/<int:meeting_id>/retry", methods=["POST"])

@@ -3382,3 +3382,7 @@ body:has(.room-host) .ctrl-btn { height: 46px; min-width: 54px; padding: 4px 8px
 .vd-result small { opacity: .7; }
 
 .video-panel { z-index: 140; }
+
+/* Admin: deleting recordings to free space */
+.rec-bulk { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; }
+.rec-pick { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; margin-bottom: 4px; cursor: pointer; }

@@ -30,6 +30,10 @@
 
 <h3 class="section-heading">Finished sessions ({{ ended|length }})</h3>
 {% if ended %}
+<form method="POST" action="{{ url_for('admin.recordings_delete') }}" id="bulk-delete-form" class="rec-bulk" data-confirm="The selected videos are removed from storage for good and their watch links stop working. The sessions and attendance stay on record." data-confirm-title="Delete the selected recordings?" data-confirm-action="Delete selected" data-confirm-tone="danger">
+  <span class="meta">Storage used by the recordings listed here: about {{ used_mb }} MB. Tick the ones you no longer need, then delete them to free space.</span>
+  <button type="submit" class="btn btn-ghost btn-sm">Delete selected</button>
+</form>
 <div class="appointment-list">
   {% for m in ended %}{{ row(m, state(m), is_admin=True, came=came) }}{% endfor %}
 </div>
