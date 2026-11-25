@@ -154,6 +154,19 @@
 </div>
 
 {% if is_host %}
+<!-- Lesson start: the teacher chooses the window to record (screen capture needs one click). -->
+<div class="waiting-overlay" id="record-window-overlay">
+  <div class="waiting-box">
+    <h3>Start the lesson recording</h3>
+    <p>The recording films your window, so everything that happens in the lesson is saved: the whiteboard, slides, shared screens and the class. Press the button, then choose <strong>this tab</strong> (or the window you will teach from) and press <strong>Share</strong>.</p>
+    <p id="record-window-msg" class="meta" role="alert"></p>
+    <div class="consent-actions">
+      <button class="btn btn-primary btn-sm" id="record-window-start" type="button">Start recording</button>
+      <button class="btn btn-ghost btn-sm" id="record-window-skip" type="button" title="Records the whiteboard, slides and shared screen only">Record lesson content only</button>
+    </div>
+  </div>
+</div>
+
 <!-- Shown only if this browser can't record. The session can't go on unrecorded. -->
 <div class="waiting-overlay" id="record-failed-overlay">
   <div class="waiting-box">

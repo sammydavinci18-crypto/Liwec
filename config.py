@@ -243,6 +243,11 @@ class Config:
     # If a host's connection is gone this long (closed the tab, laptop died) and
     # they have not come back, the session is ended for them and its recording is
     # saved. 0 = never auto-end (the admin must press "Close & save").
+    # The recording is a film of the TEACHER'S OWN WINDOW (their browser captures it when the lesson
+    # starts). A media-server recorder cannot see that window, so while this is on (default) the
+    # teacher's browser records. Set RECORD_TEACHER_WINDOW=0 to let the server recorder film the lesson
+    # content (whiteboard, slides, shared screen) instead.
+    RECORD_TEACHER_WINDOW = os.environ.get("RECORD_TEACHER_WINDOW", "1").strip().lower() not in ("0", "false", "no", "off")
     HOST_GONE_AUTO_END_MINUTES = int(os.environ.get("HOST_GONE_AUTO_END_MINUTES", 10))
 
     # Recording is uploaded in ~30s chunks; keep the per-request limit generous.

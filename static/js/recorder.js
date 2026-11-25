@@ -7,8 +7,8 @@
   when the server tells the host's browser to (the "recording_mode" event in
   main.js): no media server, or the server recorder failed to start or died.
 
-  It composites the lesson screen (stage + students present + who is here) onto a canvas, mixes everyone's audio into one track, and
-  records that as a single video, so playback looks exactly like the lesson.
+  It draws the teacher's lesson window (whiteboard, slides or shared screen; never the teacher's face or the students) onto a
+  canvas, mixes everyone's audio into one track, and records that as a single video.
 
   Hardening, because this used to depend on one fragile browser tab:
     * Chunks are small (10 s, not 30 s) and numbered. The server accepts each
@@ -24,16 +24,14 @@
     * If the recorder itself stops unexpectedly, a new one is started.
 */
 
-// The recording is a picture of the whole lesson, like the teacher's own screen: a big STAGE
-// (whiteboard, slides, or the teacher's camera / shared screen), a column down the right with
-// the students present, and a bar along the bottom with the lesson and who is here.
-const CANVAS_W = 1280;
-const CANVAS_H = 720;
-const SIDE_W = 320;                      // student column
-const BAR_H = 52;                        // bottom bar
-const STAGE_W = CANVAS_W - SIDE_W;
-const STAGE_H = CANVAS_H - BAR_H;
-const MAX_TILES = 12;                    // students drawn as pictures; the bar names everyone
+// The recording is a film of the TEACHER'S OWN WINDOW, full frame, so it shows everything that happens
+// in the lesson as the teacher sees it: whiteboard, slides, shared screens, the class. The teacher is
+// asked once, when the lesson starts, to choose the window to film (screen capture, getDisplayMedia).
+// The capture is drawn onto a canvas that is recorded, so the video stays one continuous file even if
+// the teacher stops and re-chooses the window. If capture is unavailable or refused, the app's own
+// lesson content (whiteboard / slides / shared screen) is recorded instead, never the teacher's camera.
+const CANVAS_W = 1600;
+const CANVAS_H = 900;
 const CHUNK_MS = 10000;
 const ROOM = window.ROOM_CONFIG.roomCode;
 
@@ -56,16 +54,6 @@ const ctx = canvas.getContext("2d");
 
 /* ---------------------------------------------------------------- drawing */
 
-function drawCover(video, x, y, w, h) {
-  if (!video || !video.videoWidth) return;
-  const scale = Math.max(w / video.videoWidth, h / video.videoHeight);
-  const sw = w / scale;
-  const sh = h / scale;
-  const sx = (video.videoWidth - sw) / 2;
-  const sy = (video.videoHeight - sh) / 2;
-  ctx.drawImage(video, sx, sy, sw, sh, x, y, w, h);
-}
-
 function drawContain(video, x, y, w, h) {
   if (!video || !video.videoWidth) return false;
   const scale = Math.min(w / video.videoWidth, h / video.videoHeight);
@@ -74,145 +62,76 @@ function drawContain(video, x, y, w, h) {
   return true;
 }
 
-// The name on a tile, without the little icons/badges (hand, audio only, ...) the live page adds.
-function tileName(container, labelSel) {
-  const label = container && container.querySelector(labelSel);
-  if (!label) return "";
-  const c = label.cloneNode(true);
-  c.querySelectorAll(".hand-badge, .data-badge, .host-badge, .ico").forEach((n) => n.remove());
-  return (c.textContent || "").replace(/\s+/g, " ").trim();
-}
+// The teacher's captured window (null until they choose one, or after they stop sharing it).
+let displayVideo = null;
+let displayStream = null;
+const captureLive = () => !!(displayVideo && displayStream && displayStream.active && displayVideo.videoWidth);
 
-function drawLabel(text, x, y, maxW, size) {
-  if (!text) return;
-  ctx.font = `${size}px system-ui, Arial, sans-serif`;
-  let t = text;
-  while (t.length > 1 && ctx.measureText(t).width > maxW - 14) t = t.slice(0, -2);
-  if (t !== text) t += "…";
-  const w = ctx.measureText(t).width + 14;
-  ctx.fillStyle = "rgba(0,0,0,.55)";
-  ctx.fillRect(x, y - size - 4, w, size + 8);
-  ctx.fillStyle = "#fff";
-  ctx.textBaseline = "alphabetic";
-  ctx.fillText(t, x + 7, y);
-}
-
-// A student tile: their picture, or their initial when the camera is off (so they still show as present).
-function drawStudent(video, name, x, y, w, h) {
-  ctx.fillStyle = "#0A1318";
-  ctx.fillRect(x, y, w, h);
-  const hasPicture = video && video.videoWidth && !video.closest(".no-video");
-  if (hasPicture) {
-    drawCover(video, x, y, w, h);
-  } else {
-    const r = Math.min(w, h) * 0.22;
-    ctx.fillStyle = "#16262f";
-    ctx.fillRect(x, y, w, h);
-    ctx.fillStyle = "#2A3F6B";
-    ctx.beginPath(); ctx.arc(x + w / 2, y + h / 2 - 6, r, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#fff";
-    ctx.font = `700 ${Math.round(r * 1.1)}px system-ui, Arial, sans-serif`;
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText(((name || "?").trim()[0] || "?").toUpperCase(), x + w / 2, y + h / 2 - 5);
-    ctx.textAlign = "left";
-  }
-  ctx.strokeStyle = "#2B3E45";
-  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-  drawLabel(name, x + 6, y + h - 8, w - 12, 13);
+// What the lesson window is showing right now: "board" | "slides" | "screen" | "idle".
+function stageMode() {
+  const wb = window.Whiteboard;
+  if (wb && wb.isOpen()) return "board";
+  const sl = window.Slides;
+  if (sl && sl.currentImage && sl.currentImage()) return "slides";
+  const tile = document.querySelector("#spotlight-tile");
+  const video = tile && tile.classList.contains("is-screen") ? tile.querySelector("video") : null;
+  if (video && video.videoWidth) return "screen";
+  return "idle";
 }
 
 function drawFrame() {
+  ctx.fillStyle = "#05090c";
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  if (captureLive()) { drawContain(displayVideo, 0, 0, CANVAS_W, CANVAS_H); return; }
+  const mode = stageMode();
+  if (mode === "board") drawWhiteboard();
+  else if (mode === "slides") drawSlides();
+  else if (mode === "screen") drawContain(document.querySelector("#spotlight-tile video"), 0, 0, CANVAS_W, CANVAS_H);
+  else drawIdle();
+}
+
+// Nothing is being shown (the teacher is only on camera, or has not started yet): a plain card with
+// the lesson title. The teacher's face is deliberately never recorded.
+function drawIdle() {
+  const title = (window.ROOM_CONFIG && window.ROOM_CONFIG.title) || document.title.split(" \u00b7 ")[0] || "";
   ctx.fillStyle = "#0E1A22";
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-
-  // Stage: the teacher's camera or shared screen (the picture already on the big tile).
-  ctx.fillStyle = "#05090c";
-  ctx.fillRect(0, 0, STAGE_W, STAGE_H);
-  const spotlightTile = document.querySelector("#spotlight-tile");
-  const spotlightVideo = spotlightTile && spotlightTile.querySelector("video");
-  if (!drawContain(spotlightVideo, 0, 0, STAGE_W, STAGE_H)) {
-    ctx.fillStyle = "#8FA3AD";
-    ctx.font = "22px system-ui, Arial, sans-serif";
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText("Waiting for the teacher…", STAGE_W / 2, STAGE_H / 2);
-    ctx.textAlign = "left";
-  }
-  const stageName = tileName(document, "#spotlight-label");
-  if (stageName) drawLabel(stageName + (spotlightTile && spotlightTile.classList.contains("is-screen") ? " is sharing their screen" : ""), 12, STAGE_H - 14, STAGE_W - 24, 16);
-  drawWhiteboard();
-  drawSlides();
-
-  // Student column. Selecting by class (not "#filmstrip .mini-tile") so this keeps working
-  // when gallery view has moved the tiles into #gallery-grid.
-  ctx.fillStyle = "#0E1A22";
-  ctx.fillRect(STAGE_W, 0, SIDE_W, STAGE_H);
-  ctx.strokeStyle = "#2B3E45";
-  ctx.beginPath(); ctx.moveTo(STAGE_W + 0.5, 0); ctx.lineTo(STAGE_W + 0.5, STAGE_H); ctx.stroke();
-  const all = Array.from(document.querySelectorAll(".mini-tile")).map((t) => ({
-    video: t.querySelector("video"), name: tileName(t, ".tile-label"),
-  }));
-  all.sort((a, b) => a.name.localeCompare(b.name));
-  const shown = all.slice(0, MAX_TILES);
-  const pad = 6, cols = shown.length <= 1 ? 1 : 2;
-  const rows = Math.max(1, Math.ceil(shown.length / cols));
-  const cellW = (SIDE_W - pad * (cols + 1)) / cols;
-  const cellH = Math.min(cellW * 9 / 16 * 1.0, (STAGE_H - pad * (rows + 1)) / rows);
-  shown.forEach((st, i) => {
-    drawStudent(st.video, st.name, STAGE_W + pad + (i % cols) * (cellW + pad), pad + Math.floor(i / cols) * (cellH + pad), cellW, cellH);
-  });
-
-  // Bottom bar: the lesson, how many are here, and their names.
-  ctx.fillStyle = "#0A1318";
-  ctx.fillRect(0, STAGE_H, CANVAS_W, BAR_H);
-  ctx.strokeStyle = "#2B3E45";
-  ctx.beginPath(); ctx.moveTo(0, STAGE_H + 0.5); ctx.lineTo(CANVAS_W, STAGE_H + 0.5); ctx.stroke();
-  const title = (window.ROOM_CONFIG && window.ROOM_CONFIG.title) || document.title.split(" · ")[0] || "";
-  ctx.textBaseline = "middle";
-  ctx.font = "700 15px system-ui, Arial, sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.fillStyle = "#fff";
-  let x = 16;
-  const tw = Math.min(ctx.measureText(title).width, 380);
-  if (title) { ctx.save(); ctx.beginPath(); ctx.rect(x, STAGE_H, 380, BAR_H); ctx.clip(); ctx.fillText(title, x, STAGE_H + BAR_H / 2); ctx.restore(); }
-  x += tw + 16;
-  const count = all.length === 1 ? "1 student present" : all.length + " students present";
-  ctx.font = "600 15px system-ui, Arial, sans-serif";
-  ctx.fillStyle = "#E8C65A";
-  ctx.fillText(count, x, STAGE_H + BAR_H / 2);
-  x += ctx.measureText(count).width + 16;
-  ctx.font = "13px system-ui, Arial, sans-serif";
-  ctx.fillStyle = "#C9D6DC";
-  let roster = all.map((st) => st.name).filter(Boolean).join("  ·  ");
-  const maxW = CANVAS_W - x - 16;
-  while (roster.length > 3 && ctx.measureText(roster).width > maxW) roster = roster.slice(0, -4) + "…";
-  ctx.fillText(roster, x, STAGE_H + BAR_H / 2);
-  ctx.textBaseline = "alphabetic";
+  ctx.font = "700 40px system-ui, Arial, sans-serif";
+  let t = title;
+  while (t.length > 1 && ctx.measureText(t).width > CANVAS_W - 120) t = t.slice(0, -2);
+  if (t !== title) t += "\u2026";
+  ctx.fillText(t, CANVAS_W / 2, CANVAS_H / 2 - 18);
+  ctx.fillStyle = "#8FA3AD";
+  ctx.font = "22px system-ui, Arial, sans-serif";
+  ctx.fillText("The lesson is in progress", CANVAS_W / 2, CANVAS_H / 2 + 28);
+  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
 }
 
-// While the whiteboard is open it replaces the stage (everyone's screen shows it); the students stay visible.
+// The whiteboard fills the frame while it is open.
 function drawWhiteboard() {
   const wb = window.Whiteboard;
-  if (!wb || !wb.isOpen()) return;
-  const scale = Math.min(STAGE_W / wb.canvas.width, STAGE_H / wb.canvas.height);
+  const scale = Math.min(CANVAS_W / wb.canvas.width, CANVAS_H / wb.canvas.height);
   const w = wb.canvas.width * scale, h = wb.canvas.height * scale;
   ctx.fillStyle = "#0E1A22";
-  ctx.fillRect(0, 0, STAGE_W, STAGE_H);
-  ctx.drawImage(wb.canvas, (STAGE_W - w) / 2, (STAGE_H - h) / 2, w, h);
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.drawImage(wb.canvas, (CANVAS_W - w) / 2, (CANVAS_H - h) / 2, w, h);
 }
 
-// Likewise a presentation takes over the stage. The picture is same-origin (served by our own
-// server), so painting it here can't taint the canvas and break the recording.
+// Likewise a presentation. The picture is same-origin (served by our own server), so painting it
+// here can't taint the canvas and break the recording.
 function drawSlides() {
-  const sl = window.Slides;
-  const im = sl && sl.currentImage && sl.currentImage();
-  if (!im) return;
-  const scale = Math.min(STAGE_W / im.naturalWidth, STAGE_H / im.naturalHeight);
+  const im = window.Slides.currentImage();
+  if (!im.naturalWidth) return;
+  const scale = Math.min(CANVAS_W / im.naturalWidth, CANVAS_H / im.naturalHeight);
   const w = im.naturalWidth * scale, h = im.naturalHeight * scale;
   ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, STAGE_W, STAGE_H);
-  ctx.drawImage(im, (STAGE_W - w) / 2, (STAGE_H - h) / 2, w, h);
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+  ctx.drawImage(im, (CANVAS_W - w) / 2, (CANVAS_H - h) / 2, w, h);
   // The teacher's drawing and laser pointer sit on the slide the same way.
   const layers = window.SlideInk && window.SlideInk.layers ? window.SlideInk.layers() : [];
-  layers.forEach((layer) => ctx.drawImage(layer, (STAGE_W - w) / 2, (STAGE_H - h) / 2, w, h));
+  layers.forEach((layer) => ctx.drawImage(layer, (CANVAS_W - w) / 2, (CANVAS_H - h) / 2, w, h));
 }
 
 /* ------------------------------------------------------------------ timer */
@@ -410,7 +329,7 @@ async function resume() {
 function startRecorder(combined) {
   const mimeType = pickMimeType();
   recorder = new MediaRecorder(combined, Object.assign(
-    { videoBitsPerSecond: 1200000, audioBitsPerSecond: 64000 },
+    { videoBitsPerSecond: 2000000, audioBitsPerSecond: 64000 },
     mimeType ? { mimeType } : {}
   ));
   recorder.onerror = () => recoverRecorder(combined);
@@ -432,9 +351,10 @@ function recoverRecorder(combined) {
   try { startRecorder(combined); } catch (err) { window.dispatchEvent(new CustomEvent("recording-failed")); }
 }
 
-async function startRecording() {
+async function startRecording(display) {
   if (recordingActive) return;
   await resume();
+  if (display) attachDisplay(display);
 
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   // Browsers start an AudioContext "suspended" until the person has interacted
@@ -444,6 +364,15 @@ async function startRecording() {
   wake();
   ["click", "keydown", "touchstart"].forEach((ev) => document.addEventListener(ev, wake, { passive: true }));
   audioDest = audioCtx.createMediaStreamDestination();
+  // A silent source keeps the audio track producing samples. Without it, a lesson with no microphone
+  // connected yet (muted, denied, or nobody speaking) gives the recorder no data and the video stalls.
+  try {
+    const keep = audioCtx.createConstantSource();
+    const quiet = audioCtx.createGain();
+    quiet.gain.value = 0;
+    keep.connect(quiet).connect(audioDest);
+    keep.start();
+  } catch (e) { /* older browsers: the real audio sources still work */ }
 
   const canvasStream = canvas.captureStream(fps);
   const combined = new MediaStream([
@@ -499,30 +428,95 @@ window.stopRecordingAndWait = function () {
 // ending the session (stopRecordingAndWait, called from "End lesson"). If this
 // browser can't record, "recording-failed" blocks the room rather than letting
 // a session run unrecorded.
+let starting = false;
+
+// Film this window: remember the stream, draw it each frame, and ask again if the teacher stops sharing.
+function attachDisplay(stream) {
+  displayStream = stream;
+  if (!displayVideo) {
+    displayVideo = document.createElement("video");
+    displayVideo.muted = true;
+    displayVideo.playsInline = true;
+    displayVideo.style.cssText = "position:fixed;left:0;top:0;width:2px;height:2px;opacity:0;pointer-events:none";
+    document.body.appendChild(displayVideo);
+  }
+  displayVideo.srcObject = stream;
+  displayVideo.play().catch(() => {});
+  const track = stream.getVideoTracks()[0];
+  if (track) track.addEventListener("ended", () => {
+    if (displayStream === stream) { displayStream = null; if (!stopping) showOverlay(true); }
+  });
+}
+
+function overlayEls() {
+  return {
+    box: document.getElementById("record-window-overlay"),
+    start: document.getElementById("record-window-start"),
+    skip: document.getElementById("record-window-skip"),
+    msg: document.getElementById("record-window-msg"),
+  };
+}
+
+function showOverlay(lost) {
+  const o = overlayEls();
+  if (!o.box) return;
+  if (o.msg) o.msg.textContent = lost
+    ? "Sharing of your window stopped, so the recording is only keeping the lesson board and slides. Choose your window again to keep filming it."
+    : "";
+  o.box.classList.add("show");
+}
+
+async function chooseWindow() {
+  const o = overlayEls();
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: { ideal: 15, max: 24 }, displaySurface: "browser" },
+      audio: false,
+      preferCurrentTab: true,
+      selfBrowserSurface: "include",
+      surfaceSwitching: "include",
+    });
+    if (o.box) o.box.classList.remove("show");
+    if (recordingActive) attachDisplay(stream);
+    else await beginRecording(stream);
+  } catch (err) {
+    if (o.msg) o.msg.textContent = "The window was not shared. Please press the button again and choose this tab (or your window) to start the lesson recording.";
+  }
+}
+
+async function beginRecording(display) {
+  try {
+    await startRecording(display);
+  } catch (err) {
+    console.error("Recording failed to start:", err);
+    window.dispatchEvent(new CustomEvent("recording-failed"));
+  } finally {
+    starting = false;
+  }
+}
+
+// Camera/mic stream is set by webrtc.js; wait for it if it isn't ready yet.
+function whenMediaReady(fn) {
+  if (window._localStreamRef) { fn(); return; }
+  const wait = () => (window._localStreamRef ? fn() : setTimeout(wait, 300));
+  wait();
+}
+
 window.RecordingControl = {
   start() {
+    if (recordingActive || starting) return;
     if (typeof MediaRecorder === "undefined" || !canvas.captureStream) {
       window.dispatchEvent(new CustomEvent("recording-failed"));
       return;
     }
-    const go = async () => {
-      try {
-        await startRecording();
-      } catch (err) {
-        console.error("Recording failed to start:", err);
-        window.dispatchEvent(new CustomEvent("recording-failed"));
-      }
-    };
-    // Camera/mic stream is set by webrtc.js; wait for it if it isn't ready yet.
-    if (window._localStreamRef) {
-      go();
-    } else {
-      const wait = () => {
-        if (window._localStreamRef) go();
-        else setTimeout(wait, 300);
-      };
-      wait();
-    }
+    starting = true;
+    const o = overlayEls();
+    const canCapture = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) && o.box && o.start;
+    if (!canCapture) { whenMediaReady(() => beginRecording(null)); return; }  // e.g. a phone: record the lesson content
+    // Screen capture needs a click, so the teacher starts the lesson recording with one button.
+    o.start.onclick = () => whenMediaReady(chooseWindow);
+    if (o.skip) o.skip.onclick = () => { o.box.classList.remove("show"); whenMediaReady(() => beginRecording(null)); };
+    showOverlay(false);
   },
   isActive() {
     return recordingActive;

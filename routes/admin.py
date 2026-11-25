@@ -323,24 +323,26 @@ def recordings():
     import sockets
     import recording_service
     from flask import current_app
-    # Safety net: sessions abandoned long ago are closed and their recording saved.
-    recording_service.close_abandoned(current_app._get_current_object())
 
-    ended = (
-        Meeting.query.filter(Meeting.status == "ended")
-        .order_by(Meeting.ended_at.desc(), Meeting.id.desc()).limit(100).all()
+    # Safety net: sessions abandoned long ago are closed and their recording saved.
+    ended = recording_service.prepare_recordings_page(
+        current_app._get_current_object(),
+        lambda: Meeting.query.filter(Meeting.status == "ended")
+        .order_by(Meeting.ended_at.desc(), Meeting.id.desc()).limit(100),
     )
-    recording_service.ensure_share_tokens(ended)
     live = Meeting.query.filter(Meeting.status == "live").all()
     # "Live" in the database but nobody is hosting it any more (the teacher
     # closed the tab / lost connection without pressing End).
     stuck = [m for m in live if not sockets._host_sid_for_room(m.room_code)]
 
     def came(m):
-        return len([g for g in m.guests if g.entered_at]) + len(m.participants)
+        try:
+            return len([g for g in m.guests if g.entered_at]) + len(m.participants)
+        except Exception:  # noqa: BLE001
+            return 0
 
     return render_template("admin/recordings.html", ended=ended, stuck=stuck, came=came,
-                           state=recording_service.recording_state)
+                           state=recording_service.safe_recording_state)
 
 
 @admin_bp.route("/admin/recordings/<int:meeting_id>/retry", methods=["POST"])

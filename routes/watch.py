@@ -23,6 +23,7 @@ def _closed(reason, status=200):
 
 def _check(token):
     """(recording, None) if the link works, else (None-or-recording, reason)."""
+    recording_service.ensure_schema()
     rec = Recording.query.filter_by(share_token=token).first() if token else None
     if rec is None:
         return None, "invalid"

@@ -40,7 +40,9 @@ def begin(app, meeting_id, host_sid):
             return
         mode, reason = "browser", "not configured"
 
-        if rtc.egress_enabled():
+        if app.config.get("RECORD_TEACHER_WINDOW", True):
+            reason = "recording the teacher's window"
+        elif rtc.egress_enabled():
             try:
                 rec = Recording.query.filter_by(meeting_id=meeting.id).first()
                 # The host reloaded: the server recorder is still running.
@@ -260,18 +262,97 @@ def _mark_saved(app, rec, note, size):
 
 def open_recording_response(recording, bucket, local_dir_unused=None):
     """A response that plays this recording: from the server's disk if the file
-    is there (supports seeking), otherwise a redirect to a signed cloud URL."""
-    from flask import abort, redirect, send_file
+    is there (supports seeking), otherwise a redirect to a signed cloud URL.
+    Never raises: a storage hiccup is a 404/503 for the video, not a crashed page."""
+    import requests
+    from flask import abort, current_app, redirect, send_file
     local = storage.local_path_if_exists(bucket, recording.filename)
     if local is not None:
-        return send_file(str(local), mimetype=content_type_for(recording.filename), conditional=True)
+        try:
+            return send_file(os.path.abspath(str(local)), mimetype=content_type_for(recording.filename), conditional=True)
+        except OSError:
+            current_app.logger.exception("Could not read local recording file %s", local)
+            if not (current_app.config.get("SUPABASE_URL") and current_app.config.get("SUPABASE_SERVICE_KEY")):
+                abort(404)
     try:
         url = storage.signed_url(bucket, recording.filename, expires_in=6 * 3600)
     except storage.StorageError:
+        current_app.logger.warning("No signed URL for recording %s", recording.filename)
         abort(404)
+    except requests.RequestException:
+        current_app.logger.exception("Storage unreachable while opening recording %s", recording.filename)
+        abort(503)
     if url:
         return redirect(url)
     abort(404)
+
+
+_SCHEMA_OK = False
+
+
+def ensure_schema():
+    """The recordings table must have every column the model expects. A database
+    that missed a migration used to make EVERY recordings page return error 500
+    (the query itself fails). This adds any missing column (additive only, never
+    drops or changes data) once per server start, and never raises."""
+    global _SCHEMA_OK
+    if _SCHEMA_OK:
+        return
+    try:
+        from sqlalchemy import inspect, text
+        engine = db.engine
+        if "recordings" not in inspect(engine).get_table_names():
+            db.create_all()
+            _SCHEMA_OK = True
+            return
+        have = {c["name"] for c in inspect(engine).get_columns("recordings")}
+        quote = engine.dialect.identifier_preparer.quote
+        for col in Recording.__table__.columns:
+            if col.name in have:
+                continue
+            ddl = f"ALTER TABLE recordings ADD COLUMN {quote(col.name)} {col.type.compile(dialect=engine.dialect)}"
+            default = {"source": "'browser'", "chunks_received": "0", "share_enabled": "true"}.get(col.name)
+            if default is not None:
+                ddl += f" DEFAULT {default}" + ("" if col.nullable else " NOT NULL")
+            with engine.begin() as conn:
+                conn.execute(text(ddl))
+            from flask import current_app
+            current_app.logger.warning("Added missing column recordings.%s", col.name)
+        _SCHEMA_OK = True
+    except Exception:  # noqa: BLE001
+        db.session.rollback()
+        from flask import current_app
+        current_app.logger.exception("Could not verify the recordings table")
+
+
+def safe_recording_state(meeting):
+    """recording_state() that can never break a page."""
+    try:
+        return recording_state(meeting)
+    except Exception:  # noqa: BLE001
+        db.session.rollback()
+        return "none"
+
+
+def prepare_recordings_page(app, meetings_query):
+    """Shared by the admin's and the teacher's Recordings pages: make sure the
+    table is healthy, close abandoned sessions, run the query, and give older
+    recordings a watch link. Each step is isolated so one bad record cannot
+    turn the whole page into an error 500."""
+    ensure_schema()
+    try:
+        close_abandoned(app)
+    except Exception:  # noqa: BLE001
+        db.session.rollback()
+        app.logger.exception("close_abandoned failed (page still shown)")
+    ended = meetings_query().all()
+    try:
+        ensure_share_tokens(ended)
+    except Exception:  # noqa: BLE001
+        db.session.rollback()
+        app.logger.exception("ensure_share_tokens failed (page still shown)")
+        ended = meetings_query().all()
+    return ended
 
 
 # ---------------------------------------------------------------------------
@@ -318,10 +399,13 @@ def close_abandoned(app):
     for m in Meeting.query.filter(Meeting.status == "live").all():
         if sockets._host_sid_for_room(m.room_code):
             continue
-        end = m.ends_at() or ((m.call_started_at or m.created_at) + timedelta(hours=4))
-        if now > end + timedelta(minutes=20):
-            finish_meeting(m)
-            closed += 1
+        try:
+            end = m.ends_at() or ((m.call_started_at or m.created_at or now) + timedelta(hours=4))
+            if now > end + timedelta(minutes=20):
+                finish_meeting(m)
+                closed += 1
+        except Exception:  # noqa: BLE001 - one odd session must not stop the rest
+            db.session.rollback()
     return closed
 
 

@@ -6,32 +6,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- Opened by the media server's recorder (LiveKit Egress), never by a person. See routes/egress.py. -->
 <style>
-  /* The recording is a picture of the whole lesson, like the teacher's own screen:
-     a big STAGE on the left (whiteboard, slides, the teacher's shared screen or the
-     teacher's camera, whichever is in use), a column on the right with the teacher and
-     every student present, and a bar along the bottom with the lesson and who is here. */
-  html, body { margin: 0; height: 100%; background: #0E1A22; overflow: hidden; font-family: system-ui, "Segoe UI", Arial, sans-serif; color: #fff; }
-  #app { position: fixed; inset: 0; display: grid; grid-template-columns: 1fr 320px; grid-template-rows: 1fr 52px; }
-  #main { position: relative; background: #05090c; overflow: hidden; grid-column: 1; grid-row: 1; }
-  #side { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; gap: 6px; padding: 6px; background: #0E1A22; border-left: 1px solid #2B3E45; min-height: 0; }
-  #bar { grid-column: 1 / span 2; grid-row: 2; display: flex; align-items: center; gap: 14px; padding: 0 16px; background: #0A1318; border-top: 1px solid #2B3E45; font-size: 15px; min-width: 0; }
-  #bar b { white-space: nowrap; max-width: 34%; overflow: hidden; text-overflow: ellipsis; }
-  #count { white-space: nowrap; color: #E8C65A; font-weight: 600; }
-  #roster { flex: 1; min-width: 0; color: #C9D6DC; font-size: 13px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .tile { position: relative; background: #0A1318; border: 1px solid #2B3E45; border-radius: 6px; overflow: hidden; min-height: 0; }
-  .tile video { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .tile .name { position: absolute; left: 6px; bottom: 6px; max-width: calc(100% - 12px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; text-shadow: 0 1px 3px #000; background: rgba(0,0,0,.5); padding: 1px 7px; border-radius: 4px; }
-  .tile .avatar { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: #16262f; }
-  .tile .avatar span { width: 54px; height: 54px; border-radius: 50%; background: #2A3F6B; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; text-transform: uppercase; }
-  .tile.novideo video { visibility: hidden; }
-  .tile.novideo .avatar { display: flex; }
-  #hostcam { flex: 0 0 auto; aspect-ratio: 16 / 9; }
-  #hostcam[hidden] { display: none; }
-  #grid { flex: 1; min-height: 0; display: grid; gap: 6px; align-content: start; grid-template-columns: repeat(2, 1fr); grid-auto-rows: 1fr; }
-  #stagevid { position: absolute; inset: 0; border: 0; border-radius: 0; }
-  #stagevid video { object-fit: contain; }
-  #stagevid .name { left: 12px; bottom: 12px; font-size: 16px; }
-  #wait { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #8FA3AD; font-size: 22px; }
+  /* The recording is the teacher's LESSON WINDOW, full frame: the whiteboard, the slides with their
+     drawing, or the teacher's shared screen, whichever is on show. It never shows the teacher's
+     face or the students. When nothing is being shown it is a plain card with the lesson title. */
+  html, body { margin: 0; height: 100%; background: #05090c; overflow: hidden; font-family: system-ui, "Segoe UI", Arial, sans-serif; color: #fff; }
+  #main { position: fixed; inset: 0; background: #05090c; overflow: hidden; }
+  #stagevid { position: absolute; inset: 0; }
+  #stagevid video { width: 100%; height: 100%; object-fit: contain; display: block; }
+  #idle { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: #0E1A22; text-align: center; padding: 0 60px; }
+  #idle b { font-size: 40px; }
+  #idle span { font-size: 22px; color: #8FA3AD; }
+  #idle.show { display: flex; }
   #slide, #wb, #slideink { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: none; }
   #slide { background: #000; }
   #wb { background: #fff; }
@@ -40,16 +25,12 @@
 </style>
 </head>
 <body>
-<div id="app">
-  <div id="main">
-    <div id="stagevid" class="tile"><video autoplay playsinline muted></video><div class="name" id="stagename" hidden></div></div>
-    <div id="wait">Waiting for the teacher&hellip;</div>
-    <img id="slide" alt="">
-    <canvas id="wb" width="1600" height="900"></canvas>
-    <canvas id="slideink" width="1600" height="900"></canvas>
-  </div>
-  <aside id="side"><div id="hostcam" class="tile" hidden></div><div id="grid"></div></aside>
-  <footer id="bar"><b id="title"></b><span id="count"></span><span id="roster"></span></footer>
+<div id="main">
+  <div id="stagevid"><video autoplay playsinline muted></video></div>
+  <div id="idle" class="show"><b id="title"></b><span>The lesson is in progress</span></div>
+  <img id="slide" alt="">
+  <canvas id="wb" width="1600" height="900"></canvas>
+  <canvas id="slideink" width="1600" height="900"></canvas>
 </div>
 <script src="{{ url_for('static', filename='js/ink.js') }}"></script>
 {% if local_livekit %}
@@ -61,15 +42,11 @@
 (function () {
   const BASE = "/egress/{{ room_code }}/{{ token }}";
   const LESSON_TITLE = {{ (meeting.title if meeting else "")|tojson }};
-  const MAX_TILES = 12;               // students drawn as pictures; everyone still appears in the bottom bar
   const params = new URLSearchParams(location.search);
   const LK = window.LivekitClient;
-  const tiles = new Map(); // identity -> { el, video, name, avatar, initial }
   const audioEls = new Map(); // track sid -> element
   const stageVideo = document.querySelector("#stagevid video");
-  const stageName = document.getElementById("stagename");
-  const waitEl = document.getElementById("wait");
-  const hostcam = document.getElementById("hostcam");
+  const idleEl = document.getElementById("idle");
   let stageTrack = null;
   let room = null;
   let boardOpen = false, slideOn = false;   // set by poll() below
@@ -78,109 +55,38 @@
 
   function meta(p) { try { return JSON.parse(p.metadata || "{}"); } catch (e) { return {}; } }
 
-  function tileFor(p) {
-    let t = tiles.get(p.identity);
-    if (t) return t;
-    const el = document.createElement("div");
-    el.className = "tile novideo";
-    const video = document.createElement("video");
-    video.autoplay = true; video.playsInline = true; video.muted = true; // audio is played separately
-    const avatar = document.createElement("div");
-    avatar.className = "avatar";
-    const initial = document.createElement("span");
-    avatar.appendChild(initial);
-    const name = document.createElement("div");
-    name.className = "name";
-    el.append(video, avatar, name);
-    t = { el, video, name, avatar, initial, track: null };
-    tiles.set(p.identity, t);
-    return t;
-  }
-
-  const camPub = (p) => p.getTrackPublication(LK.Track.Source.Camera);
   const sharePub = (p) => p.getTrackPublication(LK.Track.Source.ScreenShare);
   const live = (pub) => !!(pub && pub.track && !pub.isMuted);
 
-  // Fill one tile: the camera picture if it is on, otherwise the person's initial, so a student
-  // whose camera is off still shows as present.
-  function paintTile(t, p, label) {
-    const pub = camPub(p);
-    const on = live(pub);
-    const track = on ? pub.track : null;
-    if (t.track !== track) {
-      if (t.track) { try { t.track.detach(t.video); } catch (e) {} }
-      if (track) track.attach(t.video);
-      t.track = track;
-    }
-    t.el.classList.toggle("novideo", !on);
-    const nm = label || p.name || p.identity || "";
-    t.name.textContent = nm;
-    t.initial.textContent = (nm.trim()[0] || "?");
-  }
-
-  function setStage(track, label) {
+  function setStage(track) {
     if (stageTrack !== track) {
       if (stageTrack) { try { stageTrack.detach(stageVideo); } catch (e) {} }
       if (track) track.attach(stageVideo);
       stageTrack = track;
     }
     stageVideo.style.visibility = track ? "visible" : "hidden";
-    stageName.hidden = !(track && label);
-    stageName.textContent = label || "";
   }
 
+  // What is on the lesson window? The whiteboard and slides cover everything (poll() below);
+  // beneath them it is the teacher's shared screen, else a plain card. Cameras are never shown.
   function layout() {
     if (!room) return;
     const people = Array.from(room.remoteParticipants.values());
     const host = people.find((p) => meta(p).host);
-    const others = people.filter((p) => p !== host).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-
-    const here = new Set(people.map((p) => p.identity));
-    for (const [id, t] of tiles) if (!here.has(id)) { if (t.track) { try { t.track.detach(t.video); } catch (e) {} } t.el.remove(); tiles.delete(id); }
-
-    // What is the stage showing? The whiteboard and slides cover it (poll() below);
-    // beneath them it is the teacher's shared screen if there is one, else the teacher's camera.
     let share = null;
-    for (const p of (host ? [host] : []).concat(others)) { const pub = sharePub(p); if (live(pub)) { share = { p, track: pub.track }; break; } }
-    const hostCam = host && live(camPub(host)) ? camPub(host).track : null;
-    if (share) setStage(share.track, (share.p.name || "Screen") + " is sharing their screen");
-    else if (hostCam && !boardOpen && !slideOn) setStage(hostCam, null);
-    else setStage(null, null);
-    waitEl.style.display = (!share && !host) ? "flex" : "none";
-
-    // The teacher always appears: large when their camera is the stage, in the side column otherwise.
-    const stageIsHostCam = !!hostCam && !share && !boardOpen && !slideOn;
-    hostcam.hidden = !host || stageIsHostCam;
-    if (host && !stageIsHostCam) {
-      const t = tileFor(host);
-      paintTile(t, host, (host.name || "Teacher") + " (teacher)");
-      if (t.el.parentNode !== hostcam) { hostcam.innerHTML = ""; hostcam.appendChild(t.el); }
-      t.el.style.height = "100%";
-    }
-
-    const grid = document.getElementById("grid");
-    const shown = others.slice(0, MAX_TILES);
-    const cols = shown.length <= 1 ? 1 : 2;
-    grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-    // Keep tiles in order with the least DOM churn.
-    shown.forEach((p, i) => {
-      const t = tileFor(p);
-      paintTile(t, p);
-      if (grid.children[i] !== t.el) grid.insertBefore(t.el, grid.children[i] || null);
-    });
-    while (grid.children.length > shown.length) grid.lastChild.remove();
-
-    // The bottom bar names everyone, however many there are.
-    const n = others.length;
-    document.getElementById("count").textContent = n === 1 ? "1 student present" : n + " students present";
-    document.getElementById("roster").textContent = others.map((p) => p.name || "").filter(Boolean).join("  ·  ");
+    if (host && live(sharePub(host))) share = sharePub(host).track;
+    setStage(share);
+    idleEl.classList.toggle("show", !share && !boardOpen && !slideOn);
   }
-  window._relayout = layout;           // poll() calls this when slides/board change what the stage shows
+  window._relayout = layout;           // poll() calls this when slides/board change what is shown
 
   function onTrack(track, pub, p) {
     if (track.kind === "video") {
-      // Screen shares and the teacher at full quality; the small student tiles at low quality.
-      try { pub.setVideoQuality(pub.source === LK.Track.Source.ScreenShare || meta(p).host ? LK.VideoQuality.HIGH : LK.VideoQuality.LOW); } catch (e) {}
+      // Only the teacher's screen is used; every other picture (cameras) is switched off to save bandwidth.
+      try {
+        if (pub.source === LK.Track.Source.ScreenShare && meta(p).host) pub.setVideoQuality(LK.VideoQuality.HIGH);
+        else pub.setSubscribed(false);
+      } catch (e) {}
     } else if (track.kind === "audio") {
       const el = track.attach();
       el.style.display = "none";

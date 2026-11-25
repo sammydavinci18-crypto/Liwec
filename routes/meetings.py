@@ -59,6 +59,7 @@ def room(room_code):
 
     # A meeting the admin has already ended: show playback instead of a live room.
     if meeting.status == "ended":
+        recording_service.ensure_schema()
         if meeting.recording and meeting.recording.finalized:
             if meeting.recording.is_expired or meeting.recording.deleted_at:
                 return render_template("meeting_ended.html", meeting=meeting, expired=True)
@@ -390,6 +391,7 @@ def guest_link_settings(room_code):
 @meetings_bp.route("/recordings/<int:meeting_id>/file")
 @login_required
 def stream_recording(meeting_id):
+    recording_service.ensure_schema()
     meeting = Meeting.query.get_or_404(meeting_id)
     recording = meeting.recording
 
