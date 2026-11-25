@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Start a paid lesson · Liwec{% endblock %}
+{% block page_class %}auth-page{% endblock %}
+
+{% block content %}
+<div class="auth-card auth-card-wide">
+  <span class="auth-eyebrow">Teach on your own</span>
+  <h1>Start a lesson</h1>
+  <p class="sub">
+    One lesson costs <strong>UGX {{ '{:,}'.format(price_ugx) }}</strong> (about ${{ '%g'|format(usd) }}).
+    The recording is included and kept in your lessons for {{ config.LESSON_RETENTION_DAYS }} days.
+    You pay with MTN or Airtel mobile money (or a card) on a secure Pesapal page; you approve it with your PIN on your phone.
+  </p>
+  <form method="POST">
+    <div class="field">
+      <label for="title">Lesson name</label>
+      <input type="text" id="title" name="title" maxlength="200" required value="{{ form.get('title', '') }}" placeholder="e.g. Primary 6 Mathematics: Fractions">
+    </div>
+    <button type="submit" class="btn btn-primary btn-block">Pay UGX {{ '{:,}'.format(price_ugx) }} and get my code</button>
+  </form>
+  <p class="doc-list-note">After payment you get an activation code and a student link, here and by email. The code works for {{ config.ACTIVATION_CODE_HOURS }} hours.</p>
+</div>
+{% endblock %}

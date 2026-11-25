@@ -229,6 +229,27 @@ class Config:
     EGRESS_S3_SECRET = os.environ.get("EGRESS_S3_SECRET", "")
     PUBLIC_BASE_URL = (os.environ.get("PUBLIC_BASE_URL") or os.environ.get("RENDER_EXTERNAL_URL", "")).rstrip("/")
 
+    # --- Pay-per-lesson (independent teachers) — see payments.py ---
+    # Pesapal API 3.0 (mobile money + cards in Uganda). Set the key and secret in
+    # the hosting dashboard ONLY, never in code. PESAPAL_ENV: "live" or "sandbox".
+    PESAPAL_CONSUMER_KEY = os.environ.get("PESAPAL_CONSUMER_KEY", "").strip()
+    PESAPAL_CONSUMER_SECRET = os.environ.get("PESAPAL_CONSUMER_SECRET", "").strip()
+    PESAPAL_ENV = os.environ.get("PESAPAL_ENV", "live").strip().lower()
+    LESSON_PRICE_USD = float(os.environ.get("LESSON_PRICE_USD", 1))
+    # Used until the admin sets a rate on the Payments page.
+    DEFAULT_USD_UGX_RATE = float(os.environ.get("DEFAULT_USD_UGX_RATE", 3700))
+    # Hours an unused activation code stays valid after payment.
+    ACTIVATION_CODE_HOURS = int(os.environ.get("ACTIVATION_CODE_HOURS", 24))
+    # Paid (independent) lessons' recordings are deleted automatically after this many days.
+    LESSON_RETENTION_DAYS = int(os.environ.get("LESSON_RETENTION_DAYS", 30))
+    # Optional email (activation code + student link). Without SMTP_HOST nothing is
+    # emailed; the code is still shown on the teacher's lessons page.
+    SMTP_HOST = os.environ.get("SMTP_HOST", "").strip()
+    SMTP_PORT = int(os.environ.get("SMTP_PORT", 587))
+    SMTP_USER = os.environ.get("SMTP_USER", "").strip()
+    SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+    MAIL_FROM = os.environ.get("MAIL_FROM", "").strip()
+
     # Slide presentations (PowerPoint / PDF the teacher shows the class).
     # Each deck is turned into one picture per slide and kept in the same
     # storage bucket as recordings, under "slides/<deck id>/", until the

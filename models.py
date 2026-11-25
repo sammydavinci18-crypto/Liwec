@@ -158,6 +158,11 @@ class Meeting(db.Model):
     guest_link_open = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
     guest_auto_admit = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
 
+    # A lesson a teacher paid for themselves ($1 per lesson, see payments.py), as
+    # opposed to a Liwec lesson the admin set up. The paying user is the host
+    # whether or not the admin ever approved them as a teacher.
+    is_independent = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+
     # Set when the host actually joins (not when the row is created) — this
     # is what the server-side call-length limit counts from. See sockets.py.
     call_started_at = db.Column(db.DateTime, nullable=True)
@@ -176,7 +181,21 @@ class Meeting(db.Model):
     def is_hosted_by(self, user):
         # The recorded host AND still allowed to host (a teacher whose approval
         # has been withdrawn loses the room).
-        return bool(user and user.is_authenticated and user.id == self.host_id and user.can_host)
+        if not (user and user.is_authenticated and user.id == self.host_id):
+            return False
+        if self.is_independent:
+            return self.paid_lesson_ok()
+        return user.can_host
+
+    def paid_lesson_ok(self):
+        """An independent lesson may be hosted only while its payment is confirmed,
+        and an unused one stops working when its activation code expires."""
+        pay = self.lesson_payment
+        if not pay or pay.status != "paid":
+            return False
+        if self.status == "scheduled" and not self.call_started_at and pay.is_expired():
+            return False
+        return True
 
     def length_minutes(self):
         return self.duration_minutes or DEFAULT_SESSION_MINUTES
@@ -197,7 +216,7 @@ class Meeting(db.Model):
     def attendance_required(self):
         """Lessons and teacher sessions are compulsory: students can't leave,
         must keep their camera on and stay on the lesson screen."""
-        return self.led_by_teacher()
+        return self.led_by_teacher() and not self.is_independent
 
     def is_invited(self, user):
         return bool(user and user.is_authenticated and any(i.user_id == user.id for i in self.invites))
@@ -679,3 +698,47 @@ class ProgressReport(db.Model):
 
     student = db.relationship("User", foreign_keys=[student_id])
     teacher = db.relationship("User", foreign_keys=[teacher_id])
+
+
+# =============================================================================
+# Pay-per-lesson (independent teaching). One row per attempt to buy a lesson.
+# =============================================================================
+
+class LessonPayment(db.Model):
+    """A $1 lesson bought through Pesapal (mobile money or card). Once Pesapal
+    confirms it, a Meeting is created for the buyer and an activation code is
+    issued; the code and the student link are shown on screen and emailed."""
+    __tablename__ = "lesson_payments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    merchant_reference = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    title = db.Column(db.String(200), nullable=False)
+    amount_ugx = db.Column(db.Integer, nullable=False)
+    rate_used = db.Column(db.Float, nullable=True)           # UGX per USD at the time
+    order_tracking_id = db.Column(db.String(80), nullable=True, index=True)
+    checkout_url = db.Column(db.Text, nullable=True)
+    # pending | paid | failed
+    status = db.Column(db.String(12), nullable=False, default="pending", server_default="pending")
+    payment_method = db.Column(db.String(60), nullable=True)
+    confirmation_code = db.Column(db.String(80), nullable=True)
+    activation_code = db.Column(db.String(20), unique=True, nullable=True, index=True)
+    code_expires_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    paid_at = db.Column(db.DateTime, nullable=True)
+    meeting_id = db.Column(db.Integer, db.ForeignKey("meetings.id"), nullable=True, index=True)
+
+    user = db.relationship("User", backref=db.backref("lesson_payments", lazy=True))
+    meeting = db.relationship("Meeting", backref=db.backref("lesson_payment", uselist=False))
+
+    def is_expired(self):
+        return bool(self.code_expires_at and datetime.utcnow() >= self.code_expires_at)
+
+
+class SiteSetting(db.Model):
+    """Small admin-editable settings (e.g. the dollar-to-shilling rate)."""
+    __tablename__ = "site_settings"
+
+    key = db.Column(db.String(120), primary_key=True)
+    value = db.Column(db.Text, nullable=False, default="")
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

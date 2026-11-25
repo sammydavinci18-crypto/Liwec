@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% from "_recording_row.html" import row %}
+{% block title %}My paid lessons · Liwec{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Teach on your own</span>
+    <h1>My paid lessons</h1>
+    <p>Each lesson costs UGX {{ '{:,}'.format(price_ugx) }} and includes the recording. Recordings are deleted automatically after {{ config.LESSON_RETENTION_DAYS }} days.</p>
+  </div>
+  <div class="dash-actions">
+    <a class="btn btn-primary" href="{{ url_for('lessons.new') }}">Start a new lesson</a>
+  </div>
+</div>
+
+<form method="POST" action="{{ url_for('lessons.activate') }}" class="field" style="max-width:26rem">
+  <label for="code">Have an activation code?</label>
+  <div style="display:flex;gap:.5rem">
+    <input type="text" id="code" name="code" placeholder="LW-XXXX-XXXX" autocomplete="off" required>
+    <button type="submit" class="btn btn-ghost">Open room</button>
+  </div>
+</form>
+
+{% if waiting %}
+<h3 class="section-heading">Waiting for payment ({{ waiting|length }})</h3>
+<div class="appointment-list">
+  {% for p in waiting %}
+  <div class="appointment-row">
+    <div><strong>{{ p.title }}</strong><span class="appt-time">UGX {{ '{:,}'.format(p.amount_ugx) }} · {{ p.created_at|dt }}</span></div>
+    <div class="appt-actions">
+      <a class="btn btn-primary btn-sm" href="{{ p.checkout_url }}">Complete payment</a>
+      <a class="btn btn-ghost btn-sm" href="{{ url_for('lessons.index') }}">Refresh</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<h3 class="section-heading">Ready to teach ({{ ready|length }})</h3>
+{% if ready %}
+<div class="appointment-list">
+  {% for p in ready %}{% set m = p.meeting %}
+  <div class="appointment-row">
+    <div>
+      <strong>{{ m.title }}</strong>
+      <span class="appt-time">Activation code: <strong>{{ p.activation_code }}</strong>{% if m.status == 'live' %} · <strong>Live now</strong>{% elif p.is_expired() %} · <strong>Code expired</strong>{% else %} · valid until {{ p.code_expires_at|dt }}{% endif %}</span>
+      <span class="appt-time">Student link: {{ student_link(m) }}</span>
+    </div>
+    <div class="appt-actions">
+      <button type="button" class="btn btn-amber btn-sm" data-copy="{{ student_link(m) }}" data-share data-share-title="{{ m.title }}">Copy student link</button>
+      {% if m.status == 'live' or not p.is_expired() %}
+      <a class="btn btn-primary btn-sm" href="{{ url_for('meetings.room', room_code=m.room_code) }}">{{ 'Return to room' if m.status == 'live' else 'Start lesson' }}</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">No lessons ready. Press <strong>Start a new lesson</strong> to buy one.</div>
+{% endif %}
+
+<h3 class="section-heading">Finished lessons &amp; recordings ({{ ended|length }})</h3>
+{% if ended %}
+<div class="appointment-list">{% for m in ended %}{{ row(m, state(m)) }}{% endfor %}</div>
+{% else %}
+<div class="empty-state">Finished lessons appear here with their recordings.</div>
+{% endif %}
+{% endblock %}

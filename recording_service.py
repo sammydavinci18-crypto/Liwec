@@ -123,7 +123,7 @@ def stop_and_finalize(app, meeting_id):
         rec = Recording.query.filter_by(meeting_id=meeting_id).first()
         if done and storage.object_exists(bucket, rec.filename):
             rec.finalized = True
-            days = app.config["RECORDING_RETENTION_DAYS"]
+            days = retention_days_for(app, rec)
             rec.expires_at = datetime.utcnow() + timedelta(days=days) if days > 0 else None
             rec.ensure_share_token()
             db.session.commit()
@@ -250,11 +250,20 @@ def _finalize_browser(app, meeting_id):
     app.logger.error("Meeting %s: cloud upload failed, kept locally: %s", meeting_id, last_error)
 
 
+def retention_days_for(app, rec):
+    """Paid (independent) lessons are kept 30 days; Liwec's own lessons keep the
+    school-wide setting."""
+    meeting = rec.meeting
+    if meeting is not None and meeting.is_independent:
+        return app.config["LESSON_RETENTION_DAYS"]
+    return app.config["RECORDING_RETENTION_DAYS"]
+
+
 def _mark_saved(app, rec, note, size):
     rec.finalized = True
     rec.save_note = note
     rec.size_bytes = size
-    days = app.config["RECORDING_RETENTION_DAYS"]
+    days = retention_days_for(app, rec)
     rec.expires_at = datetime.utcnow() + timedelta(days=days) if days > 0 else None
     rec.ensure_share_token()
     db.session.commit()

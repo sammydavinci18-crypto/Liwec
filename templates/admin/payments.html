@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Payments · Liwec{% endblock %}
+
+{% block content %}
+<div class="dash-head">
+  <div>
+    <span class="eyebrow eyebrow-dark">Admin</span>
+    <h1>Lesson payments</h1>
+    <p>{{ paid_count }} paid lesson(s) in the last 100 attempts, UGX {{ '{:,}'.format(paid_total) }} in total. Pesapal mode: <strong>{{ env }}</strong>{% if not configured %} · <strong>keys not set</strong>{% endif %}.</p>
+    <p class="doc-list-note">Pesapal notification address: {{ ipn_url }}</p>
+  </div>
+</div>
+
+<form method="POST" class="field" style="max-width:30rem">
+  <label for="rate">Shillings per US dollar (a lesson now costs UGX {{ '{:,}'.format(price_ugx) }})</label>
+  <div style="display:flex;gap:.5rem">
+    <input type="number" id="rate" name="rate" step="1" min="500" value="{{ rate|int }}" required>
+    <button type="submit" class="btn btn-primary">Save rate</button>
+  </div>
+</form>
+
+<h3 class="section-heading">Recent payments</h3>
+{% if rows %}
+<div class="appointment-list">
+  {% for r in rows %}
+  <div class="appointment-row">
+    <div>
+      <strong>{{ r.title }}</strong>
+      <span class="appt-time">{{ r.user.name }} · {{ r.user.email }} · {{ r.created_at|dt }}</span>
+      <span class="appt-time">UGX {{ '{:,}'.format(r.amount_ugx) }} · {{ r.payment_method or 'not paid' }}{% if r.confirmation_code %} · ref {{ r.confirmation_code }}{% endif %} · {{ r.merchant_reference }}</span>
+    </div>
+    <div class="appt-actions"><span class="status-pill status-{{ 'approved' if r.status == 'paid' else ('rejected' if r.status == 'failed' else 'pending') }}">{{ r.status|capitalize }}</span></div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">No payments yet.</div>
+{% endif %}
+{% endblock %}

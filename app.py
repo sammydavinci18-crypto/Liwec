@@ -11,7 +11,7 @@ from models import (
     Announcement, ProgressReport,
     TeacherProfile, TeacherVerificationDocument, ParentStudentLink,
     StudentProfile, StudentVerificationDocument, StudentTeacherAssignment, SchoolClass,
-    MeetingGuest, SlideDeck,
+    MeetingGuest, SlideDeck, LessonPayment, SiteSetting,
 )  # noqa: F401
 # ^ every model is imported explicitly (not just User) so db.create_all()
 #   below actually knows about every table, not just whichever one
@@ -325,6 +325,7 @@ def create_app():
     from routes.slides import slides_bp
     from routes.egress import egress_bp
     from routes.watch import watch_bp
+    from routes.lessons import lessons_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
@@ -341,6 +342,7 @@ def create_app():
     app.register_blueprint(slides_bp)
     app.register_blueprint(egress_bp)
     app.register_blueprint(watch_bp)
+    app.register_blueprint(lessons_bp)
 
     # Registers the Socket.IO event handlers defined in sockets.py
     import sockets  # noqa: F401

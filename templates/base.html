@@ -44,11 +44,13 @@
           <a href="{{ url_for('family.registrar_dashboard') }}"{% if ep == 'family.registrar_dashboard' %} class="is-current"{% endif %}>Parent links</a>
           <a href="{{ url_for('teachers.directory') }}"{% if ep == 'teachers.directory' %} class="is-current"{% endif %}>Teacher directory</a>
           <a href="{{ url_for('admin.announcements') }}"{% if ep == 'admin.announcements' %} class="is-current"{% endif %}>Announcements</a>
+          <a href="{{ url_for('lessons.admin_payments') }}"{% if ep == 'lessons.admin_payments' %} class="is-current"{% endif %}>Lesson payments</a>
         </div>
       </details>
       {% elif current_user.is_approved_teacher %}
       <a class="topnav-link{{ ' is-current' if ep == 'teachers.my_sessions' }}" href="{{ url_for('teachers.my_sessions') }}"{% if ep == 'teachers.my_sessions' %} aria-current="page"{% endif %}>My lessons</a>
       <a class="topnav-link{{ ' is-current' if ep == 'teachers.my_recordings' }}" href="{{ url_for('teachers.my_recordings') }}"{% if ep == 'teachers.my_recordings' %} aria-current="page"{% endif %}>Recordings</a>
+      <a class="topnav-link{{ ' is-current' if ep in ['lessons.index', 'lessons.new'] }}" href="{{ url_for('lessons.index') }}">Teach on my own</a>
       <a class="topnav-link{{ ' is-current' if ep == 'portal.timetable' }}" href="{{ url_for('portal.timetable') }}"{% if ep == 'portal.timetable' %} aria-current="page"{% endif %}>Timetable</a>
       <details class="nav-menu">
         <summary class="topnav-link{{ ' is-current' if ep in ['main.dashboard', 'portal.index', 'consult.new', 'consult.mine', 'teachers.directory', 'teachers.profile', 'teachers.my_students', 'teachers.my_profile'] }}">More</summary>
@@ -62,6 +64,7 @@
       </details>
       {% else %}
       <a class="topnav-link{{ ' is-current' if ep == 'main.dashboard' }}" href="{{ url_for('main.dashboard') }}"{% if ep == 'main.dashboard' %} aria-current="page"{% endif %}>My sessions</a>
+      <a class="topnav-link{{ ' is-current' if ep in ['lessons.index', 'lessons.new'] }}" href="{{ url_for('lessons.index') }}">Teach on my own</a>
       <a class="topnav-link{{ ' is-current' if ep == 'portal.timetable' }}" href="{{ url_for('portal.timetable') }}"{% if ep == 'portal.timetable' %} aria-current="page"{% endif %}>Timetable</a>
       <a class="topnav-link{{ ' is-current' if ep == 'portal.index' }}" href="{{ url_for('portal.index') }}"{% if ep == 'portal.index' %} aria-current="page"{% endif %}>My school</a>
       <a class="topnav-link{{ ' is-current' if ep in ['consult.new', 'consult.mine'] }}" href="{{ url_for('consult.new') }}"{% if ep in ['consult.new', 'consult.mine'] %} aria-current="page"{% endif %}>Request a consultation</a>
