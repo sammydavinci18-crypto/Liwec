@@ -84,6 +84,9 @@
   <button class="ctrl-btn" id="btn-slides" title="Present a PowerPoint or PDF to the class">
     <span class="icon" data-icon="slides"></span><span class="ctrl-label">Slides</span>
   </button>
+  <button class="ctrl-btn" id="btn-video" title="Search YouTube and play a video for the class">
+    <span class="icon" data-icon="video"></span><span class="ctrl-label">Video</span>
+  </button>
   <button class="ctrl-btn" id="btn-tools" data-open-tools title="Quick poll, breakout rooms, timer">
     <span class="icon" data-icon="tools"></span><span class="ctrl-label">Tools</span>
   </button>
@@ -408,6 +411,27 @@
     <div class="slides-list" id="slides-list"></div>
   </div>
 </div>
+
+<!-- YouTube: search (or paste a link), tap a video, and it plays for the whole class. -->
+<div class="notes-panel video-panel" id="video-panel" data-search="{{ 1 if config.YOUTUBE_API_KEY else 0 }}" data-url="{{ url_for('video.search', room_code=meeting.room_code) }}">
+  <div class="notes-header">
+    <h3>Video</h3>
+    <button class="notes-close" id="vd-panel-close" data-icon="close" aria-label="Close"></button>
+  </div>
+  <div class="slides-body">
+    <div class="vd-row">
+      <input type="search" id="vd-q" placeholder="Search YouTube, e.g. photosynthesis for kids" maxlength="100" autocomplete="off">
+      <button type="button" class="wb-btn sl-primary" id="vd-search-go">Search</button>
+    </div>
+    <div class="vd-row">
+      <input type="text" id="vd-link" placeholder="Or paste a YouTube link here" autocomplete="off">
+      <button type="button" class="wb-btn" id="vd-link-go">Play</button>
+    </div>
+    <p class="slides-note" id="vd-note" role="status"></p>
+    <div class="vd-results" id="vd-results"></div>
+    <p class="slides-note">Your class sees the video full screen and follows your play, pause and speed. Videos use your students' data.</p>
+  </div>
+</div>
 {% endif %}
 
 <!-- Shared screen viewer: video fills the entire display; the bar floats over it and auto-hides -->
@@ -537,6 +561,37 @@
 <!-- Run `python tools/fetch_vendor.py` once to serve this library from your own server instead. -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
 {% endif %}
+<!-- YouTube video: covers the screen for everyone while the teacher plays one.
+     Only the teacher gets controls; everyone else just watches and follows. -->
+<div class="vd-overlay {{ 'is-host' if is_host else 'is-viewer' }}" id="vd-overlay" role="dialog" aria-label="Video">
+  <div class="vd-top">
+    <strong id="vd-title"></strong>
+    {% if is_host %}
+    <div class="vd-top-actions">
+      <button type="button" class="wb-btn" id="vd-change">Choose another</button>
+      <button type="button" class="wb-btn" id="vd-hide" title="Hide the video on your screen only, to see your class. Everyone else keeps watching.">Hide on my screen</button>
+      <button type="button" class="wb-btn" id="vd-stop">Stop video</button>
+    </div>
+    {% endif %}
+  </div>
+  <div class="vd-stage">
+    <div id="vd-player"></div>
+    <div class="vd-shield"></div>
+    <button type="button" class="btn btn-primary vd-tap" id="vd-tap" hidden>Tap to play the video</button>
+  </div>
+  {% if is_host %}
+  <div class="vd-bar">
+    <button type="button" class="wb-btn" id="vd-back" title="Back 10 seconds">&minus;10s</button>
+    <button type="button" class="wb-btn sl-primary" id="vd-play">Pause</button>
+    <button type="button" class="wb-btn" id="vd-fwd" title="Forward 10 seconds">+10s</button>
+    <input type="range" id="vd-seek" min="0" max="1" value="0" step="1" aria-label="Position in the video">
+    <span class="vd-time" id="vd-time">0:00 / 0:00</span>
+    <select id="vd-rate" aria-label="Playback speed"></select>
+  </div>
+  {% endif %}
+</div>
+{% if is_host %}<button type="button" class="wb-btn sl-primary vd-peek-btn" id="vd-peek-btn" hidden>Show video</button>{% endif %}
+
 <script>
   window.ROOM_CONFIG = {
     roomCode: {{ meeting.room_code|tojson }},
@@ -577,6 +632,7 @@
 <script src="{{ url_for('static', filename='js/whiteboard.js') }}"></script>
 <script src="{{ url_for('static', filename='js/slideink.js') }}"></script>
 <script src="{{ url_for('static', filename='js/slides.js') }}"></script>
+<script src="{{ url_for('static', filename='js/video.js') }}"></script>
 <script src="{{ url_for('static', filename='js/classview.js') }}"></script>
 <script src="{{ url_for('static', filename='js/teachtools.js') }}"></script>
 <script src="{{ url_for('static', filename='js/polls.js') }}"></script>

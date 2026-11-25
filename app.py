@@ -326,6 +326,7 @@ def create_app():
     from routes.egress import egress_bp
     from routes.watch import watch_bp
     from routes.lessons import lessons_bp
+    from routes.video import video_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
@@ -343,6 +344,7 @@ def create_app():
     app.register_blueprint(egress_bp)
     app.register_blueprint(watch_bp)
     app.register_blueprint(lessons_bp)
+    app.register_blueprint(video_bp)
 
     # Registers the Socket.IO event handlers defined in sockets.py
     import sockets  # noqa: F401

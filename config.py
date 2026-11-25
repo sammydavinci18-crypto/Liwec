@@ -250,6 +250,10 @@ class Config:
     SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
     MAIL_FROM = os.environ.get("MAIL_FROM", "").strip()
 
+    # YouTube search inside a lesson (optional). Without a key the teacher can still
+    # paste a YouTube link. Create a "YouTube Data API v3" key in Google Cloud.
+    YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "").strip()
+
     # Slide presentations (PowerPoint / PDF the teacher shows the class).
     # Each deck is turned into one picture per slide and kept in the same
     # storage bucket as recordings, under "slides/<deck id>/", until the

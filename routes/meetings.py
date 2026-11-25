@@ -310,6 +310,7 @@ def finish_meeting(meeting):
     sockets.ADMITTED.pop(meeting.room_code, None)
     sockets.OBSERVERS.pop(meeting.room_code, None)
     sockets.clear_slides(meeting.room_code)
+    sockets.clear_video(meeting.room_code)
     sockets.sockets_tools.on_session_end(meeting.room_code)   # whiteboard, drawing, poll, groups, timer
     sockets.RECORDING.pop(meeting.room_code, None)
     sockets.CALLON.pop(meeting.room_code, None)

@@ -344,6 +344,7 @@ def handle_join(data):
     # (or that there isn't one: after a dropped connection, a browser may still be
     # showing slides that have since ended)...
     emit("slides_state", _slides_payload(room_code))
+    emit("video_state", _video_payload(room_code))
     # ...and the rest of the room as it is now: the whiteboard, drawing on the slide,
     # a poll in progress, breakout groups, the timer.
     sockets_tools.on_join(sid, room_code)
@@ -666,6 +667,83 @@ def handle_slides_stop(data):
     info = _host_info(request.sid)
     if info and info["room_code"] in SLIDES:
         stop_slides(info["room_code"])
+
+
+# ---------------------------------------------------------------------------
+# YouTube video. The host picks a video and plays it for the whole session. The
+# host's player is the master: every play / pause / seek / speed change (and a
+# heartbeat every few seconds) goes to the server, which remembers it so people
+# who join or reload mid-video start in the right place, and relays it so every
+# student's player follows. Only the host can start, drive or stop it.
+# ---------------------------------------------------------------------------
+
+import re as _re
+import time as _time
+
+VIDEOS = {}   # room_code -> {"id", "title", "t", "playing", "rate", "at"}
+VIDEO_RATES = (0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0)
+_VIDEO_ID_RE = _re.compile(r"^[A-Za-z0-9_-]{11}$")
+
+
+def _video_payload(room_code):
+    v = VIDEOS.get(room_code)
+    if not v:
+        return {"active": False}
+    t = v["t"]
+    if v["playing"]:
+        t += (_time.time() - v["at"]) * v["rate"]
+    return {"active": True, "id": v["id"], "title": v["title"], "t": round(t, 2),
+            "playing": v["playing"], "rate": v["rate"]}
+
+
+def clear_video(room_code):
+    VIDEOS.pop(room_code, None)
+
+
+@socketio.on("video_play")
+def handle_video_play(data):
+    info = _host_info(request.sid)
+    if not info:
+        return
+    room_code = info["room_code"]
+    meeting = Meeting.query.filter_by(room_code=room_code).first()
+    video_id = str((data or {}).get("id") or "")
+    if not meeting or meeting.status != "live" or not _VIDEO_ID_RE.match(video_id):
+        emit("video_error", {"message": "That video link is not valid."})
+        return
+    title = str((data or {}).get("title") or "")[:120]
+    VIDEOS[room_code] = {"id": video_id, "title": title, "t": 0.0, "playing": True,
+                         "rate": 1.0, "at": _time.time()}
+    emit("video_state", _video_payload(room_code), room=room_code)   # everyone, the host too
+
+
+@socketio.on("video_ctrl")
+def handle_video_ctrl(data):
+    info = _host_info(request.sid)
+    v = VIDEOS.get(info["room_code"]) if info else None
+    if not v:
+        return
+    data = data or {}
+    try:
+        t = min(max(float(data.get("t", v["t"])), 0.0), 86400.0)
+    except (TypeError, ValueError):
+        return
+    try:
+        rate = float(data.get("rate", v["rate"]))
+    except (TypeError, ValueError):
+        rate = v["rate"]
+    if rate not in VIDEO_RATES:
+        rate = v["rate"]
+    v.update({"t": t, "playing": bool(data.get("playing")), "rate": rate, "at": _time.time()})
+    emit("video_state", _video_payload(info["room_code"]), room=info["room_code"], include_self=False)
+
+
+@socketio.on("video_stop")
+def handle_video_stop(data):
+    info = _host_info(request.sid)
+    if info and info["room_code"] in VIDEOS:
+        clear_video(info["room_code"])
+        emit("video_state", {"active": False}, room=info["room_code"])
 
 
 # ---------------------------------------------------------------------------

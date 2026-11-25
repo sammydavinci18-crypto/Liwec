@@ -3330,3 +3330,49 @@ body:has(.room-host) .ctrl-btn { height: 46px; min-width: 54px; padding: 4px 8px
 
 .recording-notice.rec-behind { background: #7A1F1F; border-color: #E06A6A; color: #fff; }
 .recording-notice .rec-warn { font-weight: 700; }
+
+
+/* =========================================================
+   YouTube video in a lesson (video.js)
+   Covers the screen for everyone; the teacher has the controls.
+   ========================================================= */
+.vd-overlay {
+  position: fixed; inset: 0; z-index: 136; display: none; flex-direction: column; color: #fff;
+  width: 100%; height: 100%; height: 100dvh; background: #000; overflow: hidden;
+}
+.vd-overlay.show { display: flex; }
+.vd-overlay.peeked { display: none; }
+.vd-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 8px 12px; background: rgba(0, 0, 0, .75);
+}
+.vd-top strong { font-size: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 200px; }
+.vd-top-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.vd-stage { position: relative; flex: 1 1 auto; min-height: 0; background: #000; }
+.vd-stage iframe, .vd-stage #vd-player { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+/* Blocks taps and clicks on the video, so only the teacher's own buttons drive it. */
+.vd-shield { position: absolute; inset: 0; z-index: 2; background: transparent; }
+.vd-tap { position: absolute; z-index: 3; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 1.1rem; padding: 14px 22px; }
+.vd-tap[hidden], .vd-peek-btn[hidden] { display: none; }
+.vd-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px;
+  background: rgba(0, 0, 0, .85);
+}
+.vd-bar input[type=range] { flex: 1 1 160px; min-width: 120px; }
+.vd-time { font-variant-numeric: tabular-nums; font-size: .85rem; opacity: .85; }
+.vd-bar select { background: #14232c; color: #fff; border: 1px solid #2d4452; border-radius: 8px; padding: 6px 8px; }
+.vd-peek-btn { position: fixed; z-index: 137; right: 14px; bottom: 90px; }
+.vd-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.vd-row input { flex: 1 1 auto; min-width: 0; }
+.vd-results { display: flex; flex-direction: column; gap: 8px; }
+.vd-result {
+  display: flex; gap: 10px; align-items: flex-start; text-align: left; width: 100%; padding: 6px;
+  background: transparent; border: 1px solid var(--border, #2d4452); border-radius: 10px; color: inherit; cursor: pointer;
+}
+.vd-result:hover, .vd-result:focus-visible { border-color: var(--amber, #f2b705); }
+.vd-result img { width: 120px; height: 68px; object-fit: cover; border-radius: 6px; flex: none; background: #14232c; }
+.vd-result span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.vd-result strong { font-size: .88rem; line-height: 1.25; }
+.vd-result small { opacity: .7; }
+
+.video-panel { z-index: 140; }
